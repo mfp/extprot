@@ -1,8 +1,14 @@
 *.cmi
 *.cmo
 *.cmx
+*.cma
+*.cmxa
 *.annot
 *.o
 *.a
 *.s
 *.swp
+/.omakedb*
+/.omakedb.lock
+/OMakefile.omc
+/OMakeroot.omc

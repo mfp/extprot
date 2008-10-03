@@ -1,0 +1,22 @@
+USE_OCAMLFIND = true
+NATIVE_ENABLED = true
+BYTE_ENABLED = true
+
+OCAMLDEPFLAGS = -pp "camlp4orf"
+OCAMLFLAGS = -dtypes -pp "camlp4orf" -for-pack Extprot
+OCAMLOPTFLAGS = -inline 100 
+
+OCAMLPACKS[] =
+	camlp4
+
+EXTPROT_OBJS[] =
+	parser
+	ptypes
+
+
+section
+	OCAMLFLAGS =
+	OCamlPackage(extprot, $(EXTPROT_OBJS))
+	OCamlLibrary(extprot, extprot)
+
+.DEFAULT: extprot.cma extprot.cmxa
