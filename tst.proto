@@ -1,6 +1,10 @@
 
 type id = int
-type dim = A (int) | B (float)
+type dim =
+   A int
+ | B float
+ | C float int [string] (float * [|bool|] * [[string]])
+ | D
 
 message doc = { id : id; mutable dim : dim; name : string }
 

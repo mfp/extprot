@@ -29,8 +29,11 @@ EXTEND Gram
       [ t = type_expr_simple -> (t : base_type_expr :> type_expr) ] ];
 
   const_declarations :
-    [ [ n = a_UIDENT; t = tuple -> Non_constant (n, t)
+    [ [ n = a_UIDENT; t = const_params -> Non_constant (n, t)
       | n = a_UIDENT -> Constant n ] ];
+
+  const_params :
+    [ [ l = LIST1 [ type_expr_simple ] -> l ] ];
 
   type_expr_simple :
     [ "top"
