@@ -27,10 +27,10 @@ EXTEND Gram
 
   declaration :
     [ "message"
-        [ "message"; name = a_LIDENT; "="; e = msg_expr -> Message (name, e) ]
+        [ "message"; name = a_LIDENT; "="; e = msg_expr -> Message_decl (name, e) ]
     | "type"
         [ "type"; name = a_LIDENT; par = LIST0 [ a_LIDENT ];
-          "="; e = type_expr -> Type (name, par, e) ] ];
+          "="; e = type_expr -> Type_decl (name, par, e) ] ];
 
   type_expr :
     [ "top"
@@ -63,8 +63,7 @@ EXTEND Gram
         | "byte" -> `Byte
         | "int" -> `Int false;
         | "unsigned"; "int" -> `Int true
-        | "long" -> `Long_int false
-        | "unsigned"; "long" -> `Long_int true
+        | "long" -> `Long_int
         | "float" -> `Float
         | "string" -> `String ] ];
 

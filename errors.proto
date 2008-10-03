@@ -1,0 +1,16 @@
+
+type id = int
+type dim =
+   A int
+ | B float
+ | C float int [string] (float * [|bool|] * [[string]])
+ | D
+
+message doc = { id : id; mutable dim : dim; name : string }
+
+type dim = int
+
+type set_by = Serv1 | Serv2
+type meta a = (set_by * a)
+
+type unbound = meta< noo<int>, bar<baz, int> >

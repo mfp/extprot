@@ -5,28 +5,50 @@ open Syntax
 type tag = int
 
 type low_level =
-    Vint of tag
-  | Bitstring32 of tag
-  | Bitstring64 of tag
-  | Bytes of tag
+    Vint of vint_meaning
+  | Bitstring32
+  | Bitstring64 of b64_meaning
+  | Bytes
   | Sum of (tag * string) list * (tag * string * low_level list) list
-  | LLTuple of tag * low_level list
-  | LLHtuple of tag * int * low_level
+  | Tuple of low_level list
+  | Htuple of htuple_meaning * low_level
+  | Message of string
+
+and low_level_record =
+  | Record_single of (string * bool * low_level) list
+  | Record_sum of (string * (string * bool * low_level) list) list
+
+and vint_meaning =
+    Bool
+  | Positive_int
+  | Int
+
+and b64_meaning =
+    Long
+  | Float
+
+and htuple_meaning =
+    List
+  | Array
 
 type base_type_expr_simple = [
     `Bool
   | `Byte
-  | `Int of bool
-  | `Long_int of bool
+  | `Int of bool      (* true if positive *)
+  | `Long_int
   | `Float
   | `String
 ]
 
+type 'a base_type_expr_core = [
+    base_type_expr_simple
+  | `Tuple of 'a list
+  | `List of 'a
+  | `Array of 'a
+]
+
 type base_type_expr = [
-  base_type_expr_simple
-  | `Tuple of base_type_expr list
-  | `List of base_type_expr
-  | `Array of base_type_expr
+    base_type_expr base_type_expr_core
   | `App of string * base_type_expr list
 ]
 
@@ -34,6 +56,12 @@ type type_expr = [
     base_type_expr
   (* | `Record of (string * bool * base_type_expr) list *)
   | `Sum of base_type_expr sum_data_type
+]
+
+and reduced_type_expr = [
+    reduced_type_expr base_type_expr_core
+  | `Sum of reduced_type_expr sum_data_type
+  | `Message of string
 ]
 
 and 'a sum_data_type = {
@@ -46,14 +74,17 @@ type base_message_expr = [ `Record of (string * bool * base_type_expr) list ]
 type message_expr = [ base_message_expr | `Sum of (string * base_message_expr) list ]
 
 type declaration =
-    Message of string * message_expr
-  | Type of string * string list * type_expr
+    Message_decl of string * message_expr
+  | Type_decl of string * string list * type_expr
 
-let declaration_name = function Message (n, _) | Type (n, _, _) -> n
+let type_expr e = (e :> type_expr)
+let reduced_type_expr e = (e :> reduced_type_expr)
+
+let declaration_name = function Message_decl (n, _) | Type_decl (n, _, _) -> n
 
 let declaration_arity = function
-    Message _ -> 0
-  | Type (_, l, _) -> List.length l
+    Message_decl _ -> 0
+  | Type_decl (_, l, _) -> List.length l
 
 module SSet = Set.Make(struct type t = string let compare = String.compare end)
 module SMap = Map.Make(struct type t = string let compare = String.compare end)
@@ -90,8 +121,8 @@ let free_type_variables decl : string list =
         concat_map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l in
 
   match decl with
-      Message (name, m) -> msg_free_vars [name] m
-    | Type (name, tvars, e) -> type_free_vars (name :: tvars) e
+      Message_decl (name, m) -> msg_free_vars [name] m
+    | Type_decl (name, tvars, e) -> type_free_vars (name :: tvars) e
 
 let check_declarations decls =
 
@@ -111,18 +142,13 @@ let check_declarations decls =
         [] -> errs
       | decl :: tl ->
           let name = declaration_name decl in
-            (* add current decl to bindings to allow recursive type defs  *)
-          let bindings = match decl with
-              (* only recursive types, not messages = (sums of) records *)
-              Type _ -> SSet.add name bindings
-            | Message _ -> bindings in
           let errs = List.fold_right
                        (fun n l ->
                           if SSet.mem n bindings then l
                           else (Unbound_type_variable (name, n) :: l))
                        (free_type_variables decl)
                        errs
-          in loop errs bindings tl
+          in loop errs (SSet.add (declaration_name decl) bindings) tl
     in loop [] SSet.empty l in
 
   let wrong_type_arities l =
@@ -160,8 +186,8 @@ let check_declarations decls =
                   acc sum.non_constant
 
           in match decl with
-              Message (_, msg) -> loop (fold_msg errs msg) arities tl
-            | Type (_, _, ty) -> loop (fold_ty errs ty) arities tl
+              Message_decl (_, msg) -> loop (fold_msg errs msg) arities tl
+            | Type_decl (_, _, ty) -> loop (fold_ty errs ty) arities tl
     in loop [] SMap.empty l
 
   in dup_errors decls @ unbound_type_vars decls @ wrong_type_arities decls

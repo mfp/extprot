@@ -1,16 +1,30 @@
 
 type id = int
-type dim =
+type dim x =
    A int
  | B float
  | C float int [string] (float * [|bool|] * [[string]])
- | D
+ | D x
 
-message doc = { id : id; mutable dim : dim; name : string }
+type source = One | Some_other
 
-type dim = int
+type meta a = Unset | Set source a
 
-type set_by = Serv1 | Serv2
-type meta a = (set_by * a)
+message metadata = {
+  author : meta<string>;
+  pages : meta<int>
+}
 
-type unbound = meta< noo<int>, bar<baz, int> >
+message doc =
+   Normal {
+     id : id;
+     mutable dim : dim<int>;
+     name : string;
+     metadata : metadata
+   }
+ | Simple {
+     id : id;
+     name : string
+ }
+
+
