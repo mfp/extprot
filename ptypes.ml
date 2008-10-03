@@ -173,5 +173,12 @@ let check_declarations decls =
 
   in dup_errors decls @ unbound_type_vars decls @ wrong_type_arities decls
 
-
-
+let print_errors ch =
+  List.iter
+    (function
+         Repeated_binding s -> fprintf ch "Type binding %S is duplicated.\n" s
+       | Unbound_type_variable (where, which) ->
+           fprintf ch "Type variable %S is unbound in %S.\n" which where
+       | Wrong_arity (which, wrong, where, correct) ->
+           fprintf ch "Type variable %S used with wrong arity (%d instead of %d) in %S.\n"
+             which wrong correct where)
