@@ -8,6 +8,7 @@ OCAMLOPTFLAGS = -inline 100
 
 OCAMLPACKS[] =
 	camlp4
+	extlib
 
 EXTPROT_OBJS[] =
 	parser

@@ -2,8 +2,20 @@ open Camlp4.PreCast
 open Printf
 open Syntax
 open Ptypes
+open ExtList
 
 let declarations = Gram.Entry.mk "type_expr"
+
+type constructor =
+    Constant of string
+  | Non_constant of string * base_type_expr list
+
+let sum_of_constructor_list l =
+  {
+    constant = List.filter_map (function Constant s -> Some s | _ -> None) l;
+    non_constant =
+      List.filter_map (function Non_constant (s, l) -> Some (s, l) | _ -> None) l;
+  }
 
 EXTEND Gram
   GLOBAL: declarations;
@@ -22,7 +34,7 @@ EXTEND Gram
 
   type_expr :
     [ "top"
-      [ l = LIST1 [ const_declarations ] SEP "|" -> `Sum l
+      [ l = LIST1 [ const_declarations ] SEP "|" -> `Sum (sum_of_constructor_list l)
       (* | r = record -> r  *)
       ]
     | "simple"

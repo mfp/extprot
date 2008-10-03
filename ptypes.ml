@@ -9,6 +9,7 @@ type low_level =
   | Bitstring32 of tag
   | Bitstring64 of tag
   | Bytes of tag
+  | Sum of (tag * string) list * (tag * string * low_level list) list
   | LLTuple of tag * low_level list
   | LLHtuple of tag * int * low_level
 
@@ -32,12 +33,13 @@ type base_type_expr = [
 type type_expr = [
     base_type_expr
   (* | `Record of (string * bool * base_type_expr) list *)
-  | `Sum of sum_data_type list
+  | `Sum of base_type_expr sum_data_type
 ]
 
-and sum_data_type =
-  Constant of string
-  | Non_constant of string * base_type_expr list
+and 'a sum_data_type = {
+  constant : string list;
+  non_constant : (string * 'a list) list
+}
 
 type base_message_expr = [ `Record of (string * bool * base_type_expr) list ]
 
@@ -76,14 +78,12 @@ let free_type_variables decl : string list =
 
   let rec type_free_vars known : type_expr -> string list = function
       #base_type_expr as x -> free_vars known x
-    | `Sum l ->
+    | `Sum sum ->
         concat_map
-          (function Constant _ -> []
-             | Non_constant (_, l) ->
-                 concat_map (type_free_vars known) (l :> type_expr list))
-          l in
+          (fun (_, l) -> concat_map (type_free_vars known) (l :> type_expr list))
+          sum.non_constant in
 
-  let rec msg_free_vars known : message_expr -> string list = function
+  let rec msg_free_vars known = function
       `Record l ->
         concat_map (fun (_, _, e) -> type_free_vars known (e :> type_expr)) l
     | `Sum l ->
@@ -154,11 +154,10 @@ let check_declarations decls =
 
           let fold_ty acc : type_expr -> error list = function
               #base_type_expr as bty -> fold_base_ty acc bty
-            | `Sum l -> List.fold_left
-                          (fun s const -> match const with
-                               Constant _ -> s
-                             | Non_constant (_, l) -> List.fold_left fold_base_ty s l)
-                          acc l
+            | `Sum sum ->
+                List.fold_left
+                  (fun acc (_, l) -> List.fold_left fold_base_ty acc l)
+                  acc sum.non_constant
 
           in match decl with
               Message (_, msg) -> loop (fold_msg errs msg) arities tl
