@@ -101,7 +101,7 @@ let check_declarations decls =
       | decl :: tl ->
           let name = declaration_name decl in
             if SSet.mem name bindings then
-              loop (Repeated_binding "name" :: errs) bindings tl
+              loop (Repeated_binding name :: errs) bindings tl
             else
               loop errs (SSet.add name bindings) tl
     in loop [] SSet.empty l in
