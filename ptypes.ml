@@ -26,7 +26,6 @@ type base_type_expr = [
   | `Tuple of base_type_expr list
   | `List of base_type_expr
   | `Array of base_type_expr
-  | `Alias of string
   | `App of string * base_type_expr list
 ]
 
@@ -68,10 +67,9 @@ let concat_map f l = List.concat (List.map f l)
 
 let free_type_variables decl : string list =
   let rec free_vars known : base_type_expr -> string list = function
-      `Alias s when List.mem s known -> []
-    | `Alias s -> [s]
     | `App (n, tys) ->
-        free_vars known (`Alias n) @ concat_map (free_vars known) tys
+        let l = concat_map (free_vars known) tys in
+          if List.mem n known then l else n :: l
     | `Tuple l -> concat_map (free_vars known) l
     | `List t | `Array t -> free_vars known t
     | #base_type_expr_simple -> [] in
@@ -138,10 +136,6 @@ let check_declarations decls =
               #base_type_expr_simple -> acc
             | `Tuple l -> List.fold_left fold_base_ty acc l
             | `List t | `Array t -> fold_base_ty acc t
-            | `Alias s -> begin match smap_find s arities with
-                  Some 0 | None -> acc
-                | Some n -> Wrong_arity (s, n, name, 0) :: acc
-              end
             | `App (s, params) ->
                 let expected = List.length params in
                   begin match smap_find s arities with

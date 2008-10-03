@@ -40,7 +40,7 @@ EXTEND Gram
         | tup = tuple -> `Tuple tup
         | n = a_LIDENT; "<"; targs = LIST1 [ type_expr_simple ] SEP ","; ">" ->
             `App (n, targs)
-        | n = a_LIDENT -> `Alias n
+        | n = a_LIDENT -> `App (n, [])
         ]
 
     | "simple"
