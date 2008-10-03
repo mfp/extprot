@@ -12,13 +12,17 @@ type low_level =
   | LLTuple of tag * low_level list
   | LLHtuple of tag * int * low_level
 
-type base_type_expr = [
+type base_type_expr_simple = [
     `Bool
   | `Byte
   | `Int of bool
   | `Long_int of bool
   | `Float
   | `String
+]
+
+type base_type_expr = [
+  base_type_expr_simple
   | `Tuple of base_type_expr list
   | `List of base_type_expr
   | `Array of base_type_expr
@@ -46,40 +50,46 @@ type declaration =
 
 let declaration_name = function Message (n, _) | Type (n, _, _) -> n
 
+let declaration_arity = function
+    Message _ -> 0
+  | Type (_, l, _) -> List.length l
 
 module SSet = Set.Make(struct type t = string let compare = String.compare end)
+module SMap = Map.Make(struct type t = string let compare = String.compare end)
+
+let smap_find k m = try Some (SMap.find k m) with Not_found -> None
 
 type error =
     Repeated_binding of string
   | Unbound_type_variable of string * string
+  | Wrong_arity of string * int * string * int
+
+let concat_map f l = List.concat (List.map f l)
 
 let free_type_variables decl : string list =
   let rec free_vars known : base_type_expr -> string list = function
       `Alias s when List.mem s known -> []
     | `Alias s -> [s]
     | `App (n, tys) ->
-        free_vars known (`Alias n) @ List.concat (List.map (free_vars known) tys)
-    | `Tuple l -> List.concat (List.map (free_vars known) l)
+        free_vars known (`Alias n) @ concat_map (free_vars known) tys
+    | `Tuple l -> concat_map (free_vars known) l
     | `List t | `Array t -> free_vars known t
-    | `Bool | `Byte | `Int _ | `Long_int _ | `Float | `String -> [] in
+    | #base_type_expr_simple -> [] in
 
   let rec type_free_vars known : type_expr -> string list = function
       #base_type_expr as x -> free_vars known x
     | `Sum l ->
-        List.concat
-          (List.map
-             (function Constant _ -> []
-                | Non_constant (_, l) ->
-                    List.concat
-                      (List.map (type_free_vars known) (l :> type_expr list)))
-             l) in
+        concat_map
+          (function Constant _ -> []
+             | Non_constant (_, l) ->
+                 concat_map (type_free_vars known) (l :> type_expr list))
+          l in
 
   let rec msg_free_vars known : message_expr -> string list = function
       `Record l ->
-        List.concat
-          (List.map (fun (_, _, e) -> type_free_vars known (e :> type_expr)) l)
-    | `Sum l -> List.concat
-                  (List.map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l) in
+        concat_map (fun (_, _, e) -> type_free_vars known (e :> type_expr)) l
+    | `Sum l ->
+        concat_map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l in
 
   match decl with
       Message (name, m) -> msg_free_vars [name] m
@@ -103,18 +113,63 @@ let check_declarations decls =
         [] -> errs
       | decl :: tl ->
           let name = declaration_name decl in
+            (* add current decl to bindings to allow recursive type defs  *)
+          let bindings = match decl with
+              (* only recursive types, not messages = (sums of) records *)
+              Type _ -> SSet.add name bindings
+            | Message _ -> bindings in
           let errs = List.fold_right
                        (fun n l ->
                           if SSet.mem n bindings then l
                           else (Unbound_type_variable (name, n) :: l))
                        (free_type_variables decl)
                        errs
-          in loop errs (SSet.add name bindings) tl
+          in loop errs bindings tl
     in loop [] SSet.empty l in
 
   let wrong_type_arities l =
-    (* TODO *)
-    []
+    let rec loop errs arities = function
+        [] -> errs
+      | decl :: tl ->
+          let name = declaration_name decl in
+          let arities = SMap.add name (declaration_arity decl) arities in
+
+          let rec fold_base_ty acc : base_type_expr -> error list = function
+              #base_type_expr_simple -> acc
+            | `Tuple l -> List.fold_left fold_base_ty acc l
+            | `List t | `Array t -> fold_base_ty acc t
+            | `Alias s -> begin match smap_find s arities with
+                  Some 0 | None -> acc
+                | Some n -> Wrong_arity (s, n, name, 0) :: acc
+              end
+            | `App (s, params) ->
+                let expected = List.length params in
+                  begin match smap_find s arities with
+                      None -> acc
+                    | Some n when n = expected -> acc
+                    | Some n -> Wrong_arity (s, n, name, expected) :: acc
+                  end in
+
+          let rec fold_msg acc : message_expr -> error list = function
+              `Record l ->
+                List.fold_left (fun errs (_, _, ty) -> fold_base_ty errs ty) acc l
+            | `Sum l ->
+                List.fold_left
+                  (fun errs (_, msg) -> fold_msg errs (msg :> message_expr))
+                  acc l in
+
+          let fold_ty acc : type_expr -> error list = function
+              #base_type_expr as bty -> fold_base_ty acc bty
+            | `Sum l -> List.fold_left
+                          (fun s const -> match const with
+                               Constant _ -> s
+                             | Non_constant (_, l) -> List.fold_left fold_base_ty s l)
+                          acc l
+
+          in match decl with
+              Message (_, msg) -> loop (fold_msg errs msg) arities tl
+            | Type (_, _, ty) -> loop (fold_ty errs ty) arities tl
+    in loop [] SMap.empty l
 
   in dup_errors decls @ unbound_type_vars decls @ wrong_type_arities decls
 
