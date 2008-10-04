@@ -21,7 +21,7 @@ let low_level_msg_def bindings (msg : message_expr) =
             (fun (const, tys) ->
                (const, List.map (beta_reduction bindings) (tys :> type_expr list)))
             s.non_constant
-        in `Sum { constant = s.constant; non_constant = non_const }
+        in `Sum { s with non_constant = non_const }
     | `Tuple l -> `Tuple (List.map (beta_reduction bindings) (l :> type_expr list))
     | `List t -> `List (beta_reduction bindings (type_expr t))
     | `Array t -> `Array (beta_reduction bindings (type_expr t))
@@ -48,10 +48,15 @@ let low_level_msg_def bindings (msg : message_expr) =
     | `Array ty -> Htuple (Array, low_level_of_rtexp (reduced_type_expr ty))
     | `Message s -> Message s
     | `Sum sum ->
-        let constant = List.mapi (fun i s -> (i,s)) sum.constant in
+        let constant =
+          List.mapi
+            (fun i s -> { const_tag = i; const_name = s; const_type = sum.type_name })
+            sum.constant in
         let non_constant =
           List.mapi
-            (fun i (const, tys) -> (i, const, List.map low_level_of_rtexp tys))
+            (fun i (const, tys) ->
+               ({ const_tag = i; const_name = const; const_type = sum.type_name},
+                List.map low_level_of_rtexp tys))
             sum.non_constant
         in Sum (constant, non_constant) in
 

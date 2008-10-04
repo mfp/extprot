@@ -9,10 +9,16 @@ type low_level =
   | Bitstring32
   | Bitstring64 of b64_meaning
   | Bytes
-  | Sum of (tag * string) list * (tag * string * low_level list) list
+  | Sum of constructor list * (constructor * low_level list) list
   | Tuple of low_level list
   | Htuple of htuple_meaning * low_level
   | Message of string
+
+and constructor = {
+  const_tag : tag;
+  const_name : string;
+  const_type : string;
+}
 
 and low_level_record =
   | Record_single of (string * bool * low_level) list
@@ -65,6 +71,7 @@ and reduced_type_expr = [
 ]
 
 and 'a sum_data_type = {
+  type_name : string;
   constant : string list;
   non_constant : (string * 'a list) list
 }

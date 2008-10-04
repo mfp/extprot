@@ -12,6 +12,7 @@ type constructor =
 
 let sum_of_constructor_list l =
   {
+    type_name = "bogus";
     constant = List.filter_map (function Constant s -> Some s | _ -> None) l;
     non_constant =
       List.filter_map (function Non_constant (s, l) -> Some (s, l) | _ -> None) l;
@@ -30,7 +31,11 @@ EXTEND Gram
         [ "message"; name = a_LIDENT; "="; e = msg_expr -> Message_decl (name, e) ]
     | "type"
         [ "type"; name = a_LIDENT; par = LIST0 [ a_LIDENT ];
-          "="; e = type_expr -> Type_decl (name, par, e) ] ];
+          "="; e = type_expr ->
+            let e = match e with
+                `Sum s -> `Sum { s with type_name = name }
+              | e -> e
+            in Type_decl (name, par, e) ] ];
 
   type_expr :
     [ "top"
