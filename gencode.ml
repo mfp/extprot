@@ -40,35 +40,33 @@ and htuple_meaning =
 
 let failwithfmt fmt = kprintf (fun s -> if true then failwith s) fmt
 
+let update_bindings bindings params args =
+  List.fold_right2 SMap.add params args bindings
+
+let rec beta_reduce_texpr bindings : type_expr -> reduced_type_expr = function
+  | #base_type_expr_simple as x -> x
+  | `Sum s ->
+      let non_const =
+        List.map
+          (fun (const, tys) ->
+             (const, List.map (beta_reduce_texpr bindings) (tys :> type_expr list)))
+          s.non_constant
+      in `Sum { s with non_constant = non_const }
+  | `Tuple l -> `Tuple (List.map (beta_reduce_texpr bindings) (l :> type_expr list))
+  | `List t -> `List (beta_reduce_texpr bindings (type_expr t))
+  | `Array t -> `Array (beta_reduce_texpr bindings (type_expr t))
+  | `App (name, args) -> begin match smap_find name bindings with
+        Some (Message_decl _) -> `Message name
+      | Some (Type_decl (name, params, exp)) ->
+          let bindings =
+            update_bindings bindings params
+              (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
+          in beta_reduce_texpr bindings exp
+      | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
+                assert false
+    end
+
 let low_level_msg_def bindings (msg : message_expr) =
-
-  let update_bindings bindings params args =
-    List.fold_right2 SMap.add params args bindings in
-
-  let unbound_tvar s =
-    failwithfmt "expand_type_defs: unbound type variable %S" s; assert false in
-
-  let rec beta_reduction bindings : type_expr -> reduced_type_expr = function
-    | #base_type_expr_simple as x -> x
-    | `Sum s ->
-        let non_const =
-          List.map
-            (fun (const, tys) ->
-               (const, List.map (beta_reduction bindings) (tys :> type_expr list)))
-            s.non_constant
-        in `Sum { s with non_constant = non_const }
-    | `Tuple l -> `Tuple (List.map (beta_reduction bindings) (l :> type_expr list))
-    | `List t -> `List (beta_reduction bindings (type_expr t))
-    | `Array t -> `Array (beta_reduction bindings (type_expr t))
-    | `App (name, args) -> begin match smap_find name bindings with
-          Some (Message_decl _) -> `Message name
-        | Some (Type_decl (name, params, exp)) ->
-            let bindings =
-              update_bindings bindings params
-                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
-            in beta_reduction bindings exp
-        | None -> unbound_tvar name
-      end in
 
   let rec low_level_of_rtexp : [reduced_type_expr] -> low_level = function
       `Bool -> Vint Bool
@@ -97,7 +95,7 @@ let low_level_msg_def bindings (msg : message_expr) =
 
   let rec low_level_of_mexpr : message_expr -> low_level_record =
     let low_level_field (const, mutabl, ty) =
-      (const, mutabl, low_level_of_rtexp (beta_reduction bindings (type_expr ty)))
+      (const, mutabl, low_level_of_rtexp (beta_reduce_texpr bindings (type_expr ty)))
 
     in function
       `Sum cases  ->
@@ -116,7 +114,7 @@ module type GENCODE =
 sig
   type container
 
-  val generate_container : declaration -> container
+  val generate_container : declaration -> container option
   val add_message_reader : string -> message_expr -> container -> container
   val add_message_writer : string -> message_expr -> container -> container
   val generate_code : container list -> string
@@ -129,13 +127,16 @@ struct
   open Gen
 
   let generate_code (decls : declaration list) =
-    List.map
+    List.filter_map
       (fun decl ->
-         let cont = generate_container decl in
-           match decl with
-               Type_decl _ -> cont
-             | Message_decl (name, expr) ->
-                 add_message_reader name expr cont |> add_message_writer name expr )
+         match generate_container decl with
+             None -> None
+           | Some cont ->
+               match decl with
+                   Type_decl _ -> Some cont
+                 | Message_decl (name, expr) ->
+                     Some (add_message_reader name expr cont |>
+                             add_message_writer name expr))
       decls
     |> generate_code
 end
