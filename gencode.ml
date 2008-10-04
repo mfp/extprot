@@ -38,24 +38,31 @@ and htuple_meaning =
     List
   | Array
 
+type bindings = declaration SMap.t
+
 let failwithfmt fmt = kprintf (fun s -> if true then failwith s) fmt
 
 let update_bindings bindings params args =
   List.fold_right2 SMap.add params args bindings
 
-let rec beta_reduce_texpr bindings : type_expr -> reduced_type_expr = function
+let rec beta_reduce_aux sumf appf self (bindings : bindings) = function
   | #base_type_expr_simple as x -> x
-  | `Sum s ->
+  | `Sum s -> sumf s
+  | `Tuple l -> `Tuple (List.map (self bindings) (l :> type_expr list))
+  | `List t -> `List (self bindings (type_expr t))
+  | `Array t -> `Array (self bindings (type_expr t))
+  | `App _ as app -> appf app
+
+let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
+  let handle_sum s =
       let non_const =
         List.map
           (fun (const, tys) ->
              (const, List.map (beta_reduce_texpr bindings) (tys :> type_expr list)))
           s.non_constant
-      in `Sum { s with non_constant = non_const }
-  | `Tuple l -> `Tuple (List.map (beta_reduce_texpr bindings) (l :> type_expr list))
-  | `List t -> `List (beta_reduce_texpr bindings (type_expr t))
-  | `Array t -> `Array (beta_reduce_texpr bindings (type_expr t))
-  | `App (name, args) -> begin match smap_find name bindings with
+      in `Sum { s with non_constant = non_const } in
+
+  let handle_app (`App (name, args)) = match smap_find name bindings with
         Some (Message_decl _) -> `Message name
       | Some (Type_decl (name, params, exp)) ->
           let bindings =
@@ -64,7 +71,9 @@ let rec beta_reduce_texpr bindings : type_expr -> reduced_type_expr = function
           in beta_reduce_texpr bindings exp
       | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
                 assert false
-    end
+
+  in
+    beta_reduce_aux handle_sum handle_app beta_reduce_texpr bindings texpr
 
 let low_level_msg_def bindings (msg : message_expr) =
 
