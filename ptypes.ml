@@ -29,12 +29,6 @@ type type_expr = [
   | `Sum of base_type_expr sum_data_type
 ]
 
-and reduced_type_expr = [
-    reduced_type_expr base_type_expr_core
-  | `Sum of reduced_type_expr sum_data_type
-  | `Message of string
-]
-
 and 'a sum_data_type = {
   type_name : string;
   constant : string list;
@@ -50,7 +44,6 @@ type declaration =
   | Type_decl of string * string list * type_expr
 
 let type_expr e = (e :> type_expr)
-let reduced_type_expr e = (e :> reduced_type_expr)
 
 let declaration_name = function Message_decl (n, _) | Type_decl (n, _, _) -> n
 

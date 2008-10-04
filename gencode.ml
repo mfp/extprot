@@ -38,6 +38,21 @@ and htuple_meaning =
     List
   | Array
 
+type reduced_type_expr = [
+    reduced_type_expr base_type_expr_core
+  | `Sum of reduced_type_expr sum_data_type
+  | `Message of string
+]
+
+and poly_type_expr = [
+    poly_type_expr base_type_expr_core
+  | `Sum of poly_type_expr sum_data_type
+  | `Type_arg of string
+  | `Message of string
+]
+
+let reduced_type_expr e = (e :> reduced_type_expr)
+
 type bindings = declaration SMap.t
 
 let failwithfmt fmt = kprintf (fun s -> if true then failwith s) fmt
