@@ -20,4 +20,9 @@ section
 	OCamlPackage(extprot, $(EXTPROT_OBJS))
 	OCamlLibrary(extprot, extprot)
 
+%.sig: %.ml %.cmo
+	$(OCAMLFIND) $(OCAMLC) -package $(concat \,, $(OCAMLPACKS)) \
+	    $(mapprefix -I, $(OCAMLINCLUDES)) \
+	    $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
+
 .DEFAULT: extprot.cma extprot.cmxa
