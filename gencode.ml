@@ -3,6 +3,41 @@ open Ptypes
 open ExtList
 open Printf
 
+type tag = int
+
+type low_level =
+    Vint of vint_meaning
+  | Bitstring32
+  | Bitstring64 of b64_meaning
+  | Bytes
+  | Sum of constructor list * (constructor * low_level list) list
+  | Tuple of low_level list
+  | Htuple of htuple_meaning * low_level
+  | Message of string
+
+and constructor = {
+  const_tag : tag;
+  const_name : string;
+  const_type : string;
+}
+
+and low_level_record =
+  | Record_single of (string * bool * low_level) list
+  | Record_sum of (string * (string * bool * low_level) list) list
+
+and vint_meaning =
+    Bool
+  | Positive_int
+  | Int
+
+and b64_meaning =
+    Long
+  | Float
+
+and htuple_meaning =
+    List
+  | Array
+
 let failwithfmt fmt = kprintf (fun s -> if true then failwith s) fmt
 
 let low_level_msg_def bindings (msg : message_expr) =
@@ -77,3 +112,30 @@ let low_level_msg_def bindings (msg : message_expr) =
 let collect_bindings =
   List.fold_left (fun m decl -> SMap.add (declaration_name decl) decl m) SMap.empty
 
+module type GENCODE =
+sig
+  type container
+
+  val generate_container : declaration -> container
+  val add_message_reader : string -> message_expr -> container -> container
+  val add_message_writer : string -> message_expr -> container -> container
+  val generate_code : container list -> string
+end
+
+let (|>) x f = f x
+
+module Make(Gen : GENCODE) =
+struct
+  open Gen
+
+  let generate_code (decls : declaration list) =
+    List.map
+      (fun decl ->
+         let cont = generate_container decl in
+           match decl with
+               Type_decl _ -> cont
+             | Message_decl (name, expr) ->
+                 add_message_reader name expr cont |> add_message_writer name expr )
+      decls
+    |> generate_code
+end

@@ -2,41 +2,6 @@ open Camlp4.PreCast
 open Printf
 open Syntax
 
-type tag = int
-
-type low_level =
-    Vint of vint_meaning
-  | Bitstring32
-  | Bitstring64 of b64_meaning
-  | Bytes
-  | Sum of constructor list * (constructor * low_level list) list
-  | Tuple of low_level list
-  | Htuple of htuple_meaning * low_level
-  | Message of string
-
-and constructor = {
-  const_tag : tag;
-  const_name : string;
-  const_type : string;
-}
-
-and low_level_record =
-  | Record_single of (string * bool * low_level) list
-  | Record_sum of (string * (string * bool * low_level) list) list
-
-and vint_meaning =
-    Bool
-  | Positive_int
-  | Int
-
-and b64_meaning =
-    Long
-  | Float
-
-and htuple_meaning =
-    List
-  | Array
-
 type base_type_expr_simple = [
     `Bool
   | `Byte
