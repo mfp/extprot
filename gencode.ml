@@ -81,7 +81,7 @@ let beta_reduce_sum self bindings s =
   in `Sum { s with non_constant = non_const }
 
 let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
-  let reduce_app _ (`App (name, args)) = match smap_find name bindings with
+  let reduce_app bindings (`App (name, args)) = match smap_find name bindings with
         Some (Message_decl _) -> `Message name
       | Some (Type_decl (name, params, exp)) ->
           let bindings =
