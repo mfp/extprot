@@ -14,6 +14,7 @@ EXTPROT_OBJS[] =
 	parser
 	ptypes
 	gencode
+	gen_OCaml
 
 section
 	OCAMLFLAGS =
