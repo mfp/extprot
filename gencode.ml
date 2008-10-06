@@ -94,33 +94,33 @@ let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
        (beta_reduce_sum beta_reduce_texpr) reduce_app beta_reduce_texpr
        bindings texpr
 
-let poly_beta_reduce_texpr bindings (texpr : type_expr) : poly_type_expr =
-  let rec reduce bindings (texpr : type_expr) : poly_type_expr_core =
+let rec reduce_to_poly_texpr_core bindings (texpr : type_expr) : poly_type_expr_core =
+  let self = reduce_to_poly_texpr_core in
 
-    let reduce_sum bindings s =
-      (* `Type (s.type_name, []) in *)
-      (* there shouldn't be any of these left *)
-      assert false in
+  let reduce_sum bindings s =
+    (* `Type (s.type_name, []) in *)
+    (* there shouldn't be any of these left *)
+    assert false in
 
-    let reduce_app bindings (`App (name, args)) : poly_type_expr_core =
-      match smap_find name bindings with
-          Some (Message_decl _) -> `Type (name, [])
-        | Some (Type_decl (name, params, `Sum _)) ->
-            `Type (name, List.map (reduce bindings) (args :> type_expr list))
-        | Some (Type_decl (name, params, exp)) ->
-            let bindings =
-              update_bindings bindings params
-                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
-            in reduce bindings exp
-        | None -> `Type_arg name
+  let reduce_app bindings (`App (name, args)) : poly_type_expr_core =
+    match smap_find name bindings with
+        Some (Message_decl _) -> `Type (name, [])
+      | Some (Type_decl (name, params, `Sum _)) ->
+          `Type (name, List.map (self bindings) (args :> type_expr list))
+      | Some (Type_decl (name, params, exp)) ->
+          let bindings =
+            update_bindings bindings params
+              (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
+          in self bindings exp
+      | None -> `Type_arg name
 
-    in beta_reduce_aux reduce_sum reduce_app reduce bindings texpr
+  in beta_reduce_aux reduce_sum reduce_app self bindings texpr
 
-   (* must expand top-level `Sum!
+let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
+  (* must expand top-level `Sum!
     * otherwise the expr for type foo = A | B becomes `Type foo *)
-  in match texpr with
-        `Sum s -> beta_reduce_sum reduce bindings s
-      | s -> (reduce bindings s :> poly_type_expr)
+    `Sum s -> beta_reduce_sum reduce_to_poly_texpr_core bindings s
+  | s -> (reduce_to_poly_texpr_core bindings s :> poly_type_expr)
 
 
 let low_level_msg_def bindings (msg : message_expr) =
@@ -171,9 +171,9 @@ module type GENCODE =
 sig
   type container
 
-  val generate_container : declaration -> container option
-  val add_message_reader : string -> message_expr -> container -> container
-  val add_message_writer : string -> message_expr -> container -> container
+  val generate_container : bindings -> declaration -> container option
+  val add_message_reader : bindings -> string -> message_expr -> container -> container
+  val add_message_writer : bindings -> string -> message_expr -> container -> container
   val generate_code : container list -> string
 end
 
@@ -184,16 +184,17 @@ struct
   open Gen
 
   let generate_code (decls : declaration list) =
-    List.filter_map
-      (fun decl ->
-         match generate_container decl with
-             None -> None
-           | Some cont ->
-               match decl with
-                   Type_decl _ -> Some cont
-                 | Message_decl (name, expr) ->
-                     Some (add_message_reader name expr cont |>
-                             add_message_writer name expr))
-      decls
+    let bindings = collect_bindings decls in
+      List.filter_map
+        (fun decl ->
+           match generate_container bindings decl with
+               None -> None
+             | Some cont ->
+                 match decl with
+                     Type_decl _ -> Some cont
+                   | Message_decl (name, expr) ->
+                       Some (add_message_reader bindings name expr cont |>
+                               add_message_writer bindings name expr))
+        decls
     |> generate_code
 end
