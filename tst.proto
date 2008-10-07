@@ -1,14 +1,16 @@
 
 type id = int
-type dim x =
+type dim 'x =
    A int
  | B float
  | C float int [string] (float * [|bool|] * [[string]])
- | D x
+ | D 'x
 
 type source = One | Some_other
 
-type meta a = Unset | Set source a
+type a = (int * int)
+
+type meta 'a = Unset | Set source 'a
 
 message metadata = {
   author : meta<string>;

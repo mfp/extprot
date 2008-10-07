@@ -64,13 +64,12 @@ let failwithfmt fmt = kprintf (fun s -> if true then failwith s) fmt
 let update_bindings bindings params args =
   List.fold_right2 SMap.add params args bindings
 
-let rec beta_reduce_aux sumf appf self (bindings : bindings) = function
+let rec beta_reduce_aux f self (bindings : bindings) = function
   | #base_type_expr_simple as x -> x
-  | `Sum s -> sumf bindings s
   | `Tuple l -> `Tuple (List.map (self bindings) (l :> type_expr list))
   | `List t -> `List (self bindings (type_expr t))
   | `Array t -> `Array (self bindings (type_expr t))
-  | `App _ as app -> appf bindings app
+  | (`Sum _ | `App _ | `Type_param _) as x -> f bindings x
 
 let beta_reduce_sum self bindings s =
   let non_const =
@@ -81,40 +80,51 @@ let beta_reduce_sum self bindings s =
   in `Sum { s with non_constant = non_const }
 
 let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
-  let reduce_app bindings (`App (name, args)) = match smap_find name bindings with
-        Some (Message_decl _) -> `Message name
-      | Some (Type_decl (name, params, exp)) ->
-          let bindings =
-            update_bindings bindings params
-              (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
-          in beta_reduce_texpr bindings exp
-      | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
-                assert false
-  in beta_reduce_aux
-       (beta_reduce_sum beta_reduce_texpr) reduce_app beta_reduce_texpr
-       bindings texpr
+  let aux bindings x : reduced_type_expr = match x with
+      `Sum s -> beta_reduce_sum beta_reduce_texpr bindings s
+    | `Type_param p ->
+        let name = string_of_type_param p in begin match smap_find name bindings with
+            Some (Message_decl (name, _)) -> `Message name
+          | Some (Type_decl (name, [], exp)) -> beta_reduce_texpr bindings exp
+          | Some (Type_decl (_, _, _)) ->
+              failwithfmt "beta_reduce_texpr: wrong arity for higher-order type %S" name;
+              assert false
+          | _ -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
+                 assert false
+        end
+
+    | `App (name, args) -> match smap_find name bindings with
+          Some (Message_decl _) -> `Message name
+        | Some (Type_decl (name, params, exp)) ->
+            let bindings =
+              update_bindings bindings (List.map string_of_type_param params)
+                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
+            in beta_reduce_texpr bindings exp
+        | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
+                  assert false
+  in beta_reduce_aux aux beta_reduce_texpr bindings texpr
 
 let rec reduce_to_poly_texpr_core bindings (texpr : type_expr) : poly_type_expr_core =
   let self = reduce_to_poly_texpr_core in
 
-  let reduce_sum bindings s =
-    (* `Type (s.type_name, []) in *)
-    (* there shouldn't be any of these left *)
-    assert false in
+  let aux bindings x : poly_type_expr_core = match x with
+      `Sum _ ->
+        (* `Type (s.type_name, []) in *)
+        (* there shouldn't be any of these left *)
+        assert false
+    | `Type_param p -> `Type_arg (type_param_name p)
+    | `App (name, args) -> match smap_find name bindings with
+          Some (Message_decl _) -> `Type (name, [])
+        | Some (Type_decl (name, params, `Sum _)) ->
+            `Type (name, List.map (self bindings) (args :> type_expr list))
+        | Some (Type_decl (name, params, exp)) ->
+            let bindings =
+              update_bindings bindings (List.map string_of_type_param params)
+                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
+            in self bindings exp
+        | None -> `Type_arg name
 
-  let reduce_app bindings (`App (name, args)) : poly_type_expr_core =
-    match smap_find name bindings with
-        Some (Message_decl _) -> `Type (name, [])
-      | Some (Type_decl (name, params, `Sum _)) ->
-          `Type (name, List.map (self bindings) (args :> type_expr list))
-      | Some (Type_decl (name, params, exp)) ->
-          let bindings =
-            update_bindings bindings params
-              (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
-          in self bindings exp
-      | None -> `Type_arg name
-
-  in beta_reduce_aux reduce_sum reduce_app self bindings texpr
+  in beta_reduce_aux aux self bindings texpr
 
 let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
   (* must expand top-level `Sum!

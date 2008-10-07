@@ -91,21 +91,6 @@ let generate_container bindings =
           c_code = None;
         }
     | Type_decl (name, params, texpr) ->
-        (* declare type params as bogus sum types, so they are not expanded in
-         * the beta reduction phase *)
-        let bogus_sum name =
-          {
-            type_name = name;
-            constant = [];
-            non_constant = []
-          } in
-        let bogus_decls =
-          List.map
-            (fun name -> (name, Type_decl ("bogus", [], `Sum (bogus_sum name))))
-            params in
-        let bindings =
-          update_bindings bindings
-            (List.map fst bogus_decls) (List.map snd bogus_decls) in
         let ty = match poly_beta_reduce_texpr bindings texpr with
             `Sum s -> begin
               let ty_of_const_texprs (const, ptexprs) =
@@ -130,7 +115,9 @@ let generate_container bindings =
             end
           | #poly_type_expr_core ->
               reduce_to_poly_texpr_core bindings texpr |> ctyp_of_poly_texpr_core in
-        let params = List.map (fun n -> <:ctyp< '$lid:n$ >>) params in
+        let params =
+          List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params
+        in
           Some {
             c_name = name;
             c_types = Some <:str_item< type $typedecl name ~params ty$ >>;

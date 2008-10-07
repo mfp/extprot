@@ -30,7 +30,8 @@ EXTEND Gram
     [ "message"
         [ "message"; name = a_LIDENT; "="; e = msg_expr -> Message_decl (name, e) ]
     | "type"
-        [ "type"; name = a_LIDENT; par = LIST0 [ a_LIDENT ];
+        [ "type"; name = a_LIDENT;
+          par = LIST0 [ "'"; n = a_LIDENT -> type_param_of_string n];
           "="; e = type_expr ->
             let e = match e with
                 `Sum s -> `Sum { s with type_name = name }
@@ -60,6 +61,7 @@ EXTEND Gram
         | tup = tuple -> `Tuple tup
         | n = a_LIDENT; "<"; targs = LIST1 [ type_expr_simple ] SEP ","; ">" ->
             `App (n, targs)
+        | "'"; n = a_LIDENT -> `Type_param (type_param_of_string n)
         | n = a_LIDENT -> `App (n, [])
         ]
 

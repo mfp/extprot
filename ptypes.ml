@@ -18,9 +18,25 @@ type 'a base_type_expr_core = [
   | `Array of 'a
 ]
 
+module Type_param : sig
+  type type_param
+  val type_param_of_string : string -> type_param
+  val string_of_type_param : type_param -> string
+  val type_param_name : type_param -> string
+end =
+struct
+  type type_param = string
+  let type_param_of_string x = x
+  let string_of_type_param x = "'" ^ x
+  let type_param_name x = x
+end
+
+include Type_param
+
 type base_type_expr = [
     base_type_expr base_type_expr_core
   | `App of string * base_type_expr list
+  | `Type_param of type_param
 ]
 
 type type_expr = [
@@ -41,8 +57,9 @@ type message_expr = [ base_message_expr | `Sum of (string * base_message_expr) l
 
 type declaration =
     Message_decl of string * message_expr
-  | Type_decl of string * string list * type_expr
+  | Type_decl of string * type_param list * type_expr
 
+let base_type_expr e = (e :> base_type_expr)
 let type_expr e = (e :> type_expr)
 
 let declaration_name = function Message_decl (n, _) | Type_decl (n, _, _) -> n
@@ -65,6 +82,9 @@ let concat_map f l = List.concat (List.map f l)
 
 let free_type_variables decl : string list =
   let rec free_vars known : base_type_expr -> string list = function
+    | `Type_param n ->
+        let s = string_of_type_param n in
+          if List.mem s known then [] else [s]
     | `App (n, tys) ->
         let l = concat_map (free_vars known) tys in
           if List.mem n known then l else n :: l
@@ -87,7 +107,8 @@ let free_type_variables decl : string list =
 
   match decl with
       Message_decl (name, m) -> msg_free_vars [name] m
-    | Type_decl (name, tvars, e) -> type_free_vars (name :: tvars) e
+    | Type_decl (name, tvars, e) ->
+        type_free_vars (name :: List.map string_of_type_param tvars) e
 
 let check_declarations decls =
 
@@ -124,7 +145,7 @@ let check_declarations decls =
           let arities = SMap.add name (declaration_arity decl) arities in
 
           let rec fold_base_ty acc : base_type_expr -> error list = function
-              #base_type_expr_simple -> acc
+              #base_type_expr_simple | `Type_param _ -> acc
             | `Tuple l -> List.fold_left fold_base_ty acc l
             | `List t | `Array t -> fold_base_ty acc t
             | `App (s, params) ->
