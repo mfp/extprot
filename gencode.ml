@@ -208,3 +208,51 @@ struct
         decls
     |> generate_code
 end
+
+module Prettyprint =
+struct
+  open Format
+  let pp = fprintf
+  let pp' fmt ppf = pp ppf fmt
+
+  let list elt sep ppf =
+    let rec loop = function
+        [] -> ()
+      | x::xs -> pp ppf sep; elt ppf x; loop xs
+    in function
+        [] -> ()
+      | [x] -> elt ppf x
+      | x::xs -> elt ppf x; loop xs
+
+  let pp_base_expr_simple ppf : base_type_expr_simple -> unit = function
+      `Bool -> pp ppf "Bool"
+    | `Byte -> pp ppf "Byte"
+    | `Int b -> pp ppf "Int %s" (string_of_bool b)
+    | `Long_int -> pp ppf "Long_int"
+    | `Float -> pp ppf "Float"
+    | `String -> pp ppf "String"
+
+  let pp_base_type_expr_core f ppf : 'a base_type_expr_core -> unit = function
+      `Tuple l -> pp ppf "@[<1>(%a)@]" (list f " *@ ") l
+    | `List t -> pp ppf "@[<1>[%a]@]" f t
+    | `Array t -> pp ppf "@[<1>[|%a|]@]" f t
+    | #base_type_expr_simple as x -> pp_base_expr_simple ppf x
+
+  let rec pp_reduced_type_expr ppf : reduced_type_expr -> unit = function
+      `Sum s ->
+        pp ppf "@[<1>%a%a]"
+          (list (pp' "%s") "@ | ")
+          s.constant
+          (fun ppf l -> match l with
+               [] -> ()
+             | l ->
+                 let elt ppf (const, l) =
+                   pp ppf "%s @[<1>(%a)@]"
+                     const (list pp_reduced_type_expr "@ ") l
+                 in pp ppf "@ | %a" (list elt "@ | %a") l)
+          s.non_constant
+    | `Message s -> pp ppf "msg:%S" s
+    | #base_type_expr_core as x ->
+        pp_base_type_expr_core pp_reduced_type_expr ppf x
+
+end
