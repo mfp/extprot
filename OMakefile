@@ -5,6 +5,7 @@ BYTE_ENABLED = true
 OCAMLDEPFLAGS = -pp "camlp4orf"
 OCAMLFLAGS = -dtypes -pp "camlp4orf" -for-pack Extprot
 OCAMLOPTFLAGS = -inline 100 
+OCAMLCFLAGS += -g
 
 OCAMLPACKS[] =
 	camlp4
@@ -20,6 +21,11 @@ section
 	OCAMLFLAGS =
 	OCamlPackage(extprot, $(EXTPROT_OBJS))
 	OCamlLibrary(extprot, extprot)
+
+section
+	OCAML_LIBS = extprot
+	OCAMLPACKS += camlp4.lib
+	OCamlProgram(sample, sample)
 
 %.sig: %.ml %.cmo
 	$(OCAMLFIND) $(OCAMLC) -package $(concat \,, $(OCAMLPACKS)) \

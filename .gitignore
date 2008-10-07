@@ -12,3 +12,5 @@
 /.omakedb.lock
 /OMakefile.omc
 /OMakeroot.omc
+/sample.opt
+/sample
