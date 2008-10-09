@@ -238,7 +238,8 @@ struct
   let pp_base_expr_simple ppf : base_type_expr_simple -> unit = function
       `Bool -> pp ppf "Bool"
     | `Byte -> pp ppf "Byte"
-    | `Int b -> pp ppf "Int %s" (string_of_bool b)
+    | `Int b -> pp ppf "%s"
+                  (match b with true -> "Int_positive" | false -> "Int_relative")
     | `Long_int -> pp ppf "Long_int"
     | `Float -> pp ppf "Float"
     | `String -> pp ppf "String"
@@ -250,18 +251,18 @@ struct
     | #base_type_expr_simple as x -> pp_base_expr_simple ppf x
 
   let rec pp_reduced_type_expr ppf : reduced_type_expr -> unit = function
-      `Sum s ->
-        pp ppf "@[<1>%a%a]"
-          (list (pp' "%s") "@ | ")
-          s.constant
-          (fun ppf l -> match l with
-               [] -> ()
-             | l ->
-                 let elt ppf (const, l) =
-                   pp ppf "%s @[<1>(%a)@]"
-                     const (list pp_reduced_type_expr "@ ") l
-                 in pp ppf "@ | %a" (list elt "@ | %a") l)
-          s.non_constant
+      `Sum s -> begin match s.non_constant with
+          [] -> pp ppf "@[<1>%a@]" (list (pp' "%s") "@ | ") s.constant
+        | non_const ->
+            let pp_non_constant ppf cases =
+              let elt ppf (const, l) =
+                pp ppf "%s @[<1>(%a)@]" const (list pp_reduced_type_expr "@ ") l
+              in list elt "@ | " ppf cases
+            in match s.constant with
+                [] -> pp ppf "@[<1>%a@]" pp_non_constant non_const
+              | l -> pp ppf "@[<1>%a@ | %a@]" (list (pp' "%s") "@ | ") s.constant
+                       pp_non_constant non_const
+      end
     | `Message s -> pp ppf "msg:%S" s
     | #base_type_expr_core as x ->
         pp_base_type_expr_core pp_reduced_type_expr ppf x
