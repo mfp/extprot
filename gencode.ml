@@ -3,6 +3,8 @@ open Ptypes
 open ExtList
 open Printf
 
+let (|>) x f = f x
+
 type tag = int
 
 type low_level =
@@ -21,9 +23,11 @@ and constructor = {
   const_type : string;
 }
 
-and low_level_record =
-  | Record_single of (string * bool * low_level) list
-  | Record_sum of (string * (string * bool * low_level) list) list
+and 'a record =
+  | Record_single of (string * bool * 'a) list
+  | Record_sum of (string * (string * bool * 'a) list) list
+
+and low_level_record = low_level record
 
 and vint_meaning =
     Bool
@@ -132,10 +136,26 @@ let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
     `Sum s -> beta_reduce_sum reduce_to_poly_texpr_core bindings s
   | s -> (reduce_to_poly_texpr_core bindings s :> poly_type_expr)
 
+let rec map_message f =
+  let map_field (fname, mutabl, ty) = (fname, mutabl, f ty) in function
+    `Sum cases  ->
+      Record_sum
+        (List.map
+           (fun (const, `Record fields) -> (const, List.map map_field fields))
+           cases)
+  | `Record fields -> Record_single (List.map map_field fields)
+
+let rec iter_message f =
+  let proc_field const (fname, mutabl, ty) = f const fname mutabl ty in function
+    `Sum cases  ->
+        List.iter
+          (fun (const, `Record fields) -> List.iter (proc_field const) fields)
+          cases
+  | `Record fields -> List.iter (proc_field "") fields
 
 let low_level_msg_def bindings (msg : message_expr) =
 
-  let rec low_level_of_rtexp : [reduced_type_expr] -> low_level = function
+  let rec low_level_of_rtexp : reduced_type_expr -> low_level = function
       `Bool -> Vint Bool
     | `Byte -> Vint Positive_int
     | `Int true -> Vint Positive_int
@@ -160,19 +180,10 @@ let low_level_msg_def bindings (msg : message_expr) =
             sum.non_constant
         in Sum (constant, non_constant) in
 
-  let rec low_level_of_mexpr : message_expr -> low_level_record =
-    let low_level_field (const, mutabl, ty) =
-      (const, mutabl, low_level_of_rtexp (beta_reduce_texpr bindings (type_expr ty)))
-
-    in function
-      `Sum cases  ->
-        Record_sum
-          (List.map
-             (fun (const, `Record fields) -> (const, List.map low_level_field fields))
-             cases)
-    | `Record fields -> Record_single (List.map low_level_field fields)
-
-  in low_level_of_mexpr msg
+  let low_level_field ty =
+    type_expr ty |> beta_reduce_texpr bindings |> low_level_of_rtexp
+  in
+    map_message low_level_field msg
 
 let collect_bindings =
   List.fold_left (fun m decl -> SMap.add (declaration_name decl) decl m) SMap.empty
