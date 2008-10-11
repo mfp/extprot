@@ -123,3 +123,140 @@ let generate_container bindings =
             c_types = Some <:str_item< type $typedecl name ~params ty$ >>;
             c_code = None;
           }
+
+let loc = Camlp4.PreCast.Loc.mk
+
+let maybe_str_item =
+  let _loc = loc "<generated code>" in
+    Option.default <:str_item< >>
+
+module PrOCaml =Camlp4.Printers.OCaml.Make(Camlp4.PreCast.Syntax)
+
+let string_of_ast f ast =
+  let b = Buffer.create 256 in
+  let fmt = Format.formatter_of_buffer b in
+  let o = new PrOCaml.printer () in
+    Format.fprintf fmt "@[<v0>%a@]@." (f o) ast;
+    Buffer.contents b
+
+let generate_code containers =
+  let _loc = loc "<generated code>" in
+  let container_of_str_item c =
+    <:str_item<
+       module $String.capitalize c.c_name$ = struct
+         $maybe_str_item c.c_types$;
+         $maybe_str_item c.c_code$
+       end >>
+  in string_of_ast (fun o -> o#implem)
+       (List.fold_left
+          (fun s c -> <:str_item< $s$; $container_of_str_item c$ >>)
+          <:str_item< >>
+          containers)
+
+  (* val add_message_reader : bindings -> string -> message_expr -> container -> container *)
+  (* val add_message_writer : bindings -> string -> message_expr -> container -> container *)
+
+let list_mapi f l =
+  let i = ref (-1) in
+    List.map (fun x -> incr i; f !i x) l
+
+let field_match_cases msgname constr_name ?default name =
+  let _loc = loc "<generated code @ field_match_cases>" in
+  let default = match default with
+      Some e -> e
+    | None -> <:expr< Extprot.Codec.bad_format
+                        $str:msgname$ $str:constr_name$ $str:name$ >> in
+
+  let read_simple = function
+      Vint Bool ->
+        <:expr<
+          match Extprot.Codec.read_vint s with [
+              0 -> False
+            | _ -> True
+          ]
+        >>
+    | Vint Int -> <:expr< Extprot.Codec.read_rel_vint s >>
+    | Vint Positive_int -> <:expr< Extprot.Codec.read_vint s>>
+    | Bitstring32 -> <:expr< Extprot.Codec.read_i32 s >>
+    | Bitstring64 Long -> <:expr< Extprot.Codec.read_i64 s >>
+    | Bitstring64 Float -> <:expr< Extprot.Codec.read_float s >>
+    | Bytes -> <:expr< Extprot.Codec.read_string s >>
+    | _ -> assert false in
+
+  let expected_type = function
+      Vint _ -> <:expr< Extprot.Codec.Vint >>
+    | Bitstring32 -> <:expr< Extprot.Codec.Bitstring32 >>
+    | Bitstring64 _ -> <:expr< Extprot.Codec.Bitstring64 >>
+    | Bytes -> <:expr< Extprot.Codec.Bytes >>
+    | _ -> assert false
+
+  in function
+
+    Vint _ | Bitstring32 | Bitstring64 _ | Bytes as ty ->
+      <:match_case< 0 ->
+         if Extprot.ll_type t = $expected_type ty$ then
+           $read_simple ty$
+         else $default$
+      >>
+  (* | Sum (constant, non_constant) -> failwith "TODO" *)
+  (* | _ -> failwith "TODO" *)
+
+
+
+let record_case msgname ?constr tag fields =
+  let _loc = Loc.mk "<generated code @ record_case>" in
+  let constr_name = Option.default "<default>" constr in
+
+  let read_field fieldno (name, mutabl, llty) ?default expr =
+    let rescue_match_case = match default with
+        None ->
+          <:match_case<
+            Extprot.Bad_format _ | Extprot.Unknown_tag _ as e -> raise e
+          >>
+      | Some expr ->
+          <:match_case< Extprot.Bad_format _ | Extprot.Unknown_tag _ -> $expr$ >> in
+    let default_value = match default with
+        Some expr -> expr
+      | None ->
+          <:expr< Extprot.Codec.missing_field
+                    $str:msgname$ $str:constr_name$ $str:name$ >>
+    in
+      <:expr<
+         let $lid:name$ =
+           if nelms >= $int:string_of_int fieldno$ then
+             try
+               let t = ExtProt.Codec.read_vint s in
+                 match Extprot.Codec.ll_tag t with
+                     [
+                       $field_match_cases msgname constr_name name llty$
+                     | n -> Extprot.Codec.unknown_tag
+                              $str:msgname$ $str:constr_name$ $str:name$ n
+                     ]
+             with [$rescue_match_case$]
+           else
+               $default_value$
+         in $expr$
+      >> in
+
+  let field_assigns =
+    List.map
+      (fun (name, _, _) -> <:rec_binding< $lid:name$ = $lid:name$ >>)
+      fields in
+  let e =
+    List.fold_right
+      (fun (i, fieldinfo) e -> read_field i fieldinfo e)
+      (list_mapi (fun i x -> (i, x)) fields)
+      <:expr< { $Ast.rbSem_of_list field_assigns$ } >>
+  in
+    <:match_case<
+      $int:tag$ ->
+        let len = Extprot.Codec.read_vint s in
+        let eom = Extprot.Codec.marker s len in
+        let nelms = Extprot.Codec.read_vint s in
+          $e$
+          >>
+(* let add_message_reader bindings msgname mexpr c = *)
+  (* <:match_case< $int:tag$ -> $record_expr$ >> *)
+
+
+  (* let llexpr = Gencode.low_level_msg_def bindings mexpr in *)
