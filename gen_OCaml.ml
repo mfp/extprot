@@ -154,9 +154,6 @@ let generate_code containers =
           <:str_item< >>
           containers)
 
-  (* val add_message_reader : bindings -> string -> message_expr -> container -> container *)
-  (* val add_message_writer : bindings -> string -> message_expr -> container -> container *)
-
 let list_mapi f l =
   let i = ref (-1) in
     List.map (fun x -> incr i; f !i x) l
@@ -318,14 +315,40 @@ let record_case msgname ?constr tag fields =
       <:expr< { $Ast.rbSem_of_list field_assigns$ } >>
   in
     <:match_case<
-      $int:tag$ ->
+      $int:string_of_int tag$ ->
         let len = Extprot.Codec.read_vint s in
         let eom = Extprot.Codec.marker s len in
         let nelms = Extprot.Codec.read_vint s in
           $e$
           >>
-(* let add_message_reader bindings msgname mexpr c = *)
-  (* <:match_case< $int:tag$ -> $record_expr$ >> *)
+
+let rec read_message msgname =
+  let _loc = Loc.mk "<generated code @ read_message>" in
+  let wrap match_cases =
+    <:expr<
+      let t = Extprot.Codec.read_vint s in do {
+        if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
+          Extprot.Codec.bad_format $str:msgname$
+        else ();
+        match Extprot.Codec.ll_tag t with [
+          $match_cases$
+        ]
+      }
+    >>
+  in
+    function
+      Record_single fields -> wrap (record_case msgname 0 fields)
+    | Record_sum l ->
+        list_mapi (fun tag (constr, fields) -> record_case msgname ~constr tag fields) l |>
+          Ast.mcOr_of_list |> wrap
 
 
-  (* let llexpr = Gencode.low_level_msg_def bindings mexpr in *)
+let add_message_reader bindings msgname mexpr c =
+  let _loc = Loc.mk "<generated code @ add_message_reader>" in
+  let llrec = Gencode.low_level_msg_def bindings mexpr in
+  let read_expr = read_message msgname llrec in
+  let reader = <:str_item< value $lid:"read_" ^ msgname$ = fun s -> $read_expr$>> in
+    { c with c_code = Some reader }
+
+
+let add_message_writer bindings msgname mexpr c = c (* TODO *)
