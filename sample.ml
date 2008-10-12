@@ -6,7 +6,7 @@ open ExtList
 let decls = Parser.print_synerr Parser.parse_file "tst.proto"
 let bindings = Gencode.collect_bindings decls
 
-module G = Gen_OCaml
+module G = Gencode.Make(Gen_OCaml)
 module PP = Gencode.Prettyprint
 
 let (|>) x f = f x
@@ -17,8 +17,7 @@ let print_field const fname mutabl ty =
       const fname (string_of_bool mutabl) PP.pp_reduced_type_expr reduced
 
 let () =
-  decls |> List.filter_map (fun decl -> G.generate_container bindings decl)
-    |> G.generate_code |> print_endline;
+  G.generate_code decls |> print_endline;
 
   print_newline ();
   print_endline (String.make 60 '*');
