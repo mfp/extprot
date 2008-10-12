@@ -1,21 +1,12 @@
 
 open Printf
 open Extprot
+open ExtList
 
 let decls = Parser.print_synerr Parser.parse_file "tst.proto"
-
 let bindings = Gencode.collect_bindings decls
 
 module G = Gen_OCaml
-
-let pr = Camlp4.PreCast.Printers.OCaml.print_implem
-
-let pr_cont decl = match G.generate_container bindings decl with
-    Some c -> (match c.G.c_types with
-                   Some stritem -> pr stritem
-                 | _ -> ())
-  | _ -> ()
-
 module PP = Gencode.Prettyprint
 
 let (|>) x f = f x
@@ -26,7 +17,9 @@ let print_field const fname mutabl ty =
       const fname (string_of_bool mutabl) PP.pp_reduced_type_expr reduced
 
 let () =
-  List.iter pr_cont decls;
+  decls |> List.filter_map (fun decl -> G.generate_container bindings decl)
+    |> G.generate_code |> print_endline;
+
   print_newline ();
   print_endline (String.make 60 '*');
   print_newline ();
