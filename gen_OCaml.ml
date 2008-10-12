@@ -225,7 +225,30 @@ let rec field_match_cases msgname constr_name ?default name =
           >>
     | Message name ->
         <:expr< $uid:String.capitalize name$.$lid:"read_" ^ name$ s >>
-    | Htuple _ -> assert false in
+    | Htuple (kind, llty) -> begin match kind with
+          List ->
+            <:expr<
+              let len = Extprot.Codec.read_vint s in
+              let nelms = Extprot.Codec.read_vint s in
+              let rec loop acc = fun [
+                  0 -> List.rev acc
+                | n -> let v = $read llty$ in loop [v :: acc] (n - 1)
+              ] in loop [] nelms
+            >>
+       |  Array ->
+           <:expr<
+              let len = Extprot.Codec.read_vint s in
+              let nelms = Extprot.Codec.read_vint s in match nelms with [
+                  0 -> [||]
+                | n ->
+                    let elm = $read llty$ in
+                    let a = Array.make nelms elm in
+                      for i = 1 to nelms - 1 do
+                        a.(i) := $read llty$
+                      done
+              ]
+            >>
+      end in
 
   let expected_type = function
       Vint _ -> <:expr< Extprot.Codec.Vint >>
