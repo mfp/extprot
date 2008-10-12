@@ -1,4 +1,5 @@
 
+open Printf
 open Ptypes
 open Gencode
 open Camlp4
@@ -160,14 +161,14 @@ let list_mapi f l =
   let i = ref (-1) in
     List.map (fun x -> incr i; f !i x) l
 
-let field_match_cases msgname constr_name ?default name =
+let rec field_match_cases msgname constr_name ?default name =
   let _loc = loc "<generated code @ field_match_cases>" in
   let default = match default with
       Some e -> e
     | None -> <:expr< Extprot.Codec.bad_format
                         $str:msgname$ $str:constr_name$ $str:name$ >> in
 
-  let read_simple = function
+  let rec read = function
       Vint Bool ->
         <:expr<
           match Extprot.Codec.read_vint s with [
@@ -181,27 +182,72 @@ let field_match_cases msgname constr_name ?default name =
     | Bitstring64 Long -> <:expr< Extprot.Codec.read_i64 s >>
     | Bitstring64 Float -> <:expr< Extprot.Codec.read_float s >>
     | Bytes -> <:expr< Extprot.Codec.read_string s >>
-    | _ -> assert false in
+    | Tuple lltys ->
+        (* TODO: handle missing elms *)
+        let vars = Array.to_list (Array.init (List.length lltys) (sprintf "v%d")) in
+        let tup = exCom_of_list (List.rev_map (fun v -> <:expr< $lid:v$ >>) vars) in
+        let v, _ =
+          List.fold_right
+            (fun llty (e, vs) -> match vs with
+                 v::vs -> (<:expr< let $lid:v$ = $read llty$ in $e$ >>, vs)
+               | [] -> assert false)
+            lltys
+            (tup, vars)
+        in v
+    | Sum (constant, non_constant) ->
+        let constant_match_cases =
+          List.map
+            (fun c ->
+               <:match_case<
+                 $int:string_of_int c.const_tag$ ->
+                   $uid:String.capitalize c.const_type$.$lid:c.const_name$
+               >>)
+            constant
+          @ [ <:match_case<
+                _ -> Extprot.Codec.bad_format
+                       $str:msgname$ $str:constr_name$ $str:name$ >> ] in
+        let nonconstant_match_cases =
+          let mc (c, lltys) =
+            <:match_case<
+               $int:string_of_int c.const_tag$ ->
+                 $uid:String.capitalize c.const_type$.$lid:c.const_name$ $read (Tuple lltys)$ >>
+          in List.map mc non_constant
+        in
+          <:expr< let t = Extprot.Codec.read_vint s in
+            match Extprot.Codec.ll_type t with [
+                Extprot.Codec.Vint ->
+                  match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list constant_match_cases$ ]
+              | Extprot.Codec.Tuple ->
+                  match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list nonconstant_match_cases$ ]
+              | _ -> Extprot.Codec.unknown_tag
+                       $str:msgname$ $str:constr_name$ $str:name$ tag
+            ]
+          >>
+    | Message name ->
+        <:expr< $uid:String.capitalize name$.$lid:"read_" ^ name$ s >>
+    | Htuple _ -> assert false in
 
   let expected_type = function
       Vint _ -> <:expr< Extprot.Codec.Vint >>
     | Bitstring32 -> <:expr< Extprot.Codec.Bitstring32 >>
     | Bitstring64 _ -> <:expr< Extprot.Codec.Bitstring64 >>
     | Bytes -> <:expr< Extprot.Codec.Bytes >>
-    | _ -> assert false
+    | Tuple _ -> <:expr< Extprot.Codec.Tuple >>
+    | Htuple _ -> <:expr< Extprot.Codec.HTuple >>
+    | Message _ -> <:expr< Extprot.Codec.Tuple >>
+    | Sum _ -> assert false
 
   in function
 
     Vint _ | Bitstring32 | Bitstring64 _ | Bytes as ty ->
       <:match_case< 0 ->
          if Extprot.ll_type t = $expected_type ty$ then
-           $read_simple ty$
+           $read ty$
          else $default$
       >>
-  (* | Sum (constant, non_constant) -> failwith "TODO" *)
-  (* | _ -> failwith "TODO" *)
-
-
+  | Tuple _ | Sum _ | Message _ as ty ->
+      <:match_case< tag -> try do { Extprot.Codec.pushback s; $read ty$ } with [_ -> $default$] >>
+  | Htuple _ -> failwith "TODO"
 
 let record_case msgname ?constr tag fields =
   let _loc = Loc.mk "<generated code @ record_case>" in
