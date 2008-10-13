@@ -280,7 +280,7 @@ let record_case msgname ?constr tag fields =
     in
       <:expr<
          let $lid:name$ =
-           if nelms >= $int:string_of_int fieldno$ then
+           if nelms >= $int:string_of_int (fieldno + 1)$ then
              let end_of_field = $end_of_field_expr$ in
              try
                $read_field msgname constr_name name llty$
