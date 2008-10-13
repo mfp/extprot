@@ -5,6 +5,7 @@ open Gencode
 open Camlp4
 open PreCast
 open Ast
+open ExtList
 
 type container = {
   c_name : string;
@@ -193,19 +194,29 @@ let read_field msgname constr_name name llty =
           @ [ <:match_case<
                 _ -> Extprot.Codec.bad_format
                        $str:msgname$ $str:constr_name$ $str:name$ >> ] in
+
         let nonconstant_match_cases =
           let mc (c, lltys) =
             <:match_case<
                $int:string_of_int c.const_tag$ ->
                  $uid:String.capitalize c.const_type$.$lid:c.const_name$ $read (Tuple lltys)$ >>
-          in List.map mc non_constant
+          in List.map mc non_constant in
+
+        let maybe_match_case (constr, l) = match l with
+            [] -> None
+          | l ->
+              Some <:match_case<
+                      Extprot.Codec.$uid:constr$ ->
+                        match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list l$ ] >> in
+
+        let match_cases =
+          List.filter_map maybe_match_case
+            ["Vint", constant_match_cases; "Tuple", nonconstant_match_cases]
         in
+
           <:expr< let t = Extprot.Codec.read_prefix s in
             match Extprot.Codec.ll_type t with [
-                Extprot.Codec.Vint ->
-                  match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list constant_match_cases$ ]
-              | Extprot.Codec.Tuple ->
-                  match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list nonconstant_match_cases$ ]
+              $Ast.mcOr_of_list match_cases$
               | _ -> Extprot.Codec.unknown_tag
                        $str:msgname$ $str:constr_name$ $str:name$ tag
             ]
