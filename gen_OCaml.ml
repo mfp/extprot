@@ -206,9 +206,15 @@ let read_field msgname constr_name name llty =
     | Bytes -> <:expr< Extprot.Codec.read_string s >>
     | Tuple lltys ->
         <:expr<
-          let len = Extprot.Codec.read_vint s in
-          let nelms = Extprot.Codec.read_vint s in
-            $read_tuple_elms (lltys_without_defaults lltys)$
+          let t = Extprot.Codec.read_prefix s in
+            match Extprot.Codec.ll_type with [
+                Extprot.Codec.Tuple ->
+                  let len = Extprot.Codec.read_vint s in
+                  let nelms = Extprot.Codec.read_vint s in
+                    $read_tuple_elms (lltys_without_defaults lltys)$
+              | _ -> Extprot.Codec.bad_format
+                       $str:msgname$ $str:constr_name$ $str:name$
+            ]
         >>
     | Sum (constant, non_constant) ->
         let constant_match_cases =
@@ -252,30 +258,38 @@ let read_field msgname constr_name name llty =
           >>
     | Message name ->
         <:expr< $uid:String.capitalize name$.$lid:"read_" ^ name$ s >>
-    | Htuple (kind, llty) -> begin match kind with
-          List ->
-            <:expr<
-              let len = Extprot.Codec.read_vint s in
-              let nelms = Extprot.Codec.read_vint s in
-              let rec loop acc = fun [
-                  0 -> List.rev acc
-                | n -> let v = $read llty$ in loop [v :: acc] (n - 1)
-              ] in loop [] nelms
+    | Htuple (kind, llty) ->
+        let e = match kind with
+            List ->
+              <:expr<
+                let rec loop acc = fun [
+                    0 -> List.rev acc
+                  | n -> let v = $read llty$ in loop [v :: acc] (n - 1)
+                ] in loop [] nelms
+              >>
+            | Array ->
+                <:expr<
+                  match nelms with [
+                      0 -> [||]
+                    | n ->
+                        let elm = $read llty$ in
+                        let a = Array.make nelms elm in
+                          for i = 1 to nelms - 1 do
+                            a.(i) := $read llty$
+                          done
+                  ]
+                >>
+        in <:expr<
+              let t = Extprot.Codec.read_prefix s in
+                match Extprot.Codec.ll_type with [
+                    Extprot.Codec.Htuple ->
+                      let len = Extprot.Codec.read_vint s in
+                      let nelms = Extprot.Codec.read_vint s in
+                        $e$
+                  | _ -> Extprot.Codec.bad_format
+                           $str:msgname$ $str:constr_name$ $str:name$
+                ]
             >>
-       |  Array ->
-           <:expr<
-              let len = Extprot.Codec.read_vint s in
-              let nelms = Extprot.Codec.read_vint s in match nelms with [
-                  0 -> [||]
-                | n ->
-                    let elm = $read llty$ in
-                    let a = Array.make nelms elm in
-                      for i = 1 to nelms - 1 do
-                        a.(i) := $read llty$
-                      done
-              ]
-            >>
-      end
   in
     read llty
 
