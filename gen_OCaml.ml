@@ -14,6 +14,7 @@ type container = {
 }
 
 let (|>) x f = f x
+let (@@) f x = f x
 
 let foldl1 msg f g = function
     [] -> invalid_arg ("foldl1: empty list -- " ^ msg)
@@ -172,8 +173,9 @@ let read_field msgname constr_name name llty =
     | Bytes -> <:expr< Extprot.Codec.read_string s >>
     | Tuple lltys ->
         (* TODO: handle missing elms *)
-        let vars = Array.to_list (Array.init (List.length lltys) (sprintf "v%d")) in
-        let tup = exCom_of_list (List.rev_map (fun v -> <:expr< $lid:v$ >>) vars) in
+        let vars = List.rev @@ Array.to_list @@
+                   Array.init (List.length lltys) (sprintf "v%d") in
+        let tup = exCom_of_list @@ List.rev_map (fun v -> <:expr< $lid:v$ >>) vars in
         let v, _ =
           List.fold_right
             (fun llty (e, vs) -> match vs with
