@@ -97,8 +97,8 @@ let generate_container bindings =
         let ty = match poly_beta_reduce_texpr bindings texpr with
             `Sum s -> begin
               let ty_of_const_texprs (const, ptexprs) =
-                let ty = ctyp_of_poly_texpr_core (`Tuple ptexprs) in
-                  <:ctyp< $uid:const$ of $ty$ >>
+                let tys = List.map ctyp_of_poly_texpr_core ptexprs in
+                  <:ctyp< $uid:const$ of $Ast.tyAnd_of_list tys$>>
 
               in match s.constant with
                   [] -> foldl1 "generate_container Type_decl `Sum"
