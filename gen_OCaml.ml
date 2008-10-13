@@ -163,7 +163,21 @@ let list_mapi f l =
 let read_field msgname constr_name name llty =
   let _loc = loc "<generated code @ field_match_cases>" in
 
-  let rec read = function
+  let rec read_tuple_elms lltys =
+    (* TODO: handle missing elms *)
+    let vars = List.rev @@ Array.to_list @@
+               Array.init (List.length lltys) (sprintf "v%d") in
+    let tup = exCom_of_list @@ List.rev_map (fun v -> <:expr< $lid:v$ >>) vars in
+    let v, _ =
+      List.fold_right
+        (fun llty (e, vs) -> match vs with
+             v::vs -> (<:expr< let $lid:v$ = $read llty$ in $e$ >>, vs)
+           | [] -> assert false)
+        lltys
+        (tup, vars)
+    in v
+
+  and read = function
       Vint Bool -> <:expr< Extprot.Codec.read_bool s >>
     | Vint Int -> <:expr< Extprot.Codec.read_rel_int s >>
     | Vint Positive_int -> <:expr< Extprot.Codec.read_positive_int s>>
@@ -172,18 +186,11 @@ let read_field msgname constr_name name llty =
     | Bitstring64 Float -> <:expr< Extprot.Codec.read_float s >>
     | Bytes -> <:expr< Extprot.Codec.read_string s >>
     | Tuple lltys ->
-        (* TODO: handle missing elms *)
-        let vars = List.rev @@ Array.to_list @@
-                   Array.init (List.length lltys) (sprintf "v%d") in
-        let tup = exCom_of_list @@ List.rev_map (fun v -> <:expr< $lid:v$ >>) vars in
-        let v, _ =
-          List.fold_right
-            (fun llty (e, vs) -> match vs with
-                 v::vs -> (<:expr< let $lid:v$ = $read llty$ in $e$ >>, vs)
-               | [] -> assert false)
-            lltys
-            (tup, vars)
-        in v
+        <:expr<
+          let len = Extprot.Codec.read_vint s in
+          let nelms = Extprot.Codec.read_vint s in
+            $read_tuple_elms lltys$
+        >>
     | Sum (constant, non_constant) ->
         let constant_match_cases =
           List.map
@@ -201,7 +208,7 @@ let read_field msgname constr_name name llty =
           let mc (c, lltys) =
             <:match_case<
                $int:string_of_int c.const_tag$ ->
-                 $uid:String.capitalize c.const_type$.$lid:c.const_name$ $read (Tuple lltys)$ >>
+                 $uid:String.capitalize c.const_type$.$lid:c.const_name$ $read_tuple_elms lltys$ >>
           in List.map mc non_constant in
 
         let maybe_match_case (constr, l) = match l with
