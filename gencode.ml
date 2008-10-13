@@ -122,10 +122,11 @@ let rec reduce_to_poly_texpr_core bindings (texpr : type_expr) : poly_type_expr_
         | Some (Type_decl (name, params, `Sum _)) ->
             `Type (name, List.map (self bindings) (args :> type_expr list))
         | Some (Type_decl (name, params, exp)) ->
-            let bindings =
-              update_bindings bindings (List.map string_of_type_param params)
-                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
-            in self bindings exp
+            `Type (name, List.map (self bindings) (args :> type_expr list))
+            (* let bindings = *)
+              (* update_bindings bindings (List.map string_of_type_param params) *)
+                (* (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args) *)
+            (* in self bindings exp *)
         | None -> `Type_arg name
 
   in beta_reduce_aux aux self bindings texpr
