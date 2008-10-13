@@ -200,7 +200,7 @@ let read_field msgname constr_name name llty =
                  $uid:String.capitalize c.const_type$.$lid:c.const_name$ $read (Tuple lltys)$ >>
           in List.map mc non_constant
         in
-          <:expr< let t = Extprot.Codec.read_vint s in
+          <:expr< let t = Extprot.Codec.read_prefix s in
             match Extprot.Codec.ll_type t with [
                 Extprot.Codec.Vint ->
                   match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list constant_match_cases$ ]
@@ -290,7 +290,7 @@ let rec read_message msgname =
   let _loc = Loc.mk "<generated code @ read_message>" in
   let wrap match_cases =
     <:expr<
-      let t = Extprot.Codec.read_vint s in do {
+      let t = Extprot.Codec.read_prefix s in do {
         if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
           Extprot.Codec.bad_format $str:msgname$
         else ();
