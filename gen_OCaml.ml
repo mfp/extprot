@@ -263,16 +263,25 @@ let record_case msgname ?constr tag fields =
             Extprot.Bad_format _ | Extprot.Unknown_tag _ as e -> raise e
           >>
       | Some expr ->
-          <:match_case< Extprot.Bad_format _ | Extprot.Unknown_tag _ -> $expr$ >> in
+          <:match_case<
+            Extprot.Bad_format _ | Extprot.Unknown_tag _ ->
+              do {
+                Extprot.Codec.skip_to s end_of_field;
+                $expr$
+              } >> in
     let default_value = match default with
         Some expr -> expr
       | None ->
           <:expr< Extprot.Codec.missing_field
-                    $str:msgname$ $str:constr_name$ $str:name$ >>
+                    $str:msgname$ $str:constr_name$ $str:name$ >> in
+    let end_of_field_expr = match default with
+        Some _ -> <:expr< Extprot.Codec.value_endpos s >>
+      | None -> <:expr< () >>
     in
       <:expr<
          let $lid:name$ =
            if nelms >= $int:string_of_int fieldno$ then
+             let end_of_field = $end_of_field_expr$ in
              try
                $read_field msgname constr_name name llty$
              with [$rescue_match_case$]
@@ -294,7 +303,6 @@ let record_case msgname ?constr tag fields =
     <:match_case<
       $int:string_of_int tag$ ->
         let len = Extprot.Codec.read_vint s in
-        let eom = Extprot.Codec.marker s len in
         let nelms = Extprot.Codec.read_vint s in
           $e$
           >>
