@@ -158,12 +158,8 @@ let list_mapi f l =
   let i = ref (-1) in
     List.map (fun x -> incr i; f !i x) l
 
-let rec field_match_cases msgname constr_name ?default name =
+let read_field msgname constr_name name llty =
   let _loc = loc "<generated code @ field_match_cases>" in
-  let default = match default with
-      Some e -> e
-    | None -> <:expr< Extprot.Codec.bad_format
-                        $str:msgname$ $str:constr_name$ $str:name$ >> in
 
   let rec read = function
       Vint Bool -> <:expr< Extprot.Codec.read_bool s >>
@@ -239,29 +235,9 @@ let rec field_match_cases msgname constr_name ?default name =
                       done
               ]
             >>
-      end in
-
-  let expected_type = function
-      Vint _ -> <:expr< Extprot.Codec.Vint >>
-    | Bitstring32 -> <:expr< Extprot.Codec.Bitstring32 >>
-    | Bitstring64 _ -> <:expr< Extprot.Codec.Bitstring64 >>
-    | Bytes -> <:expr< Extprot.Codec.Bytes >>
-    | Tuple _ -> <:expr< Extprot.Codec.Tuple >>
-    | Htuple _ -> <:expr< Extprot.Codec.HTuple >>
-    | Message _ -> <:expr< Extprot.Codec.Tuple >>
-    | Sum _ -> assert false
-
-  in function
-
-    Vint _ | Bitstring32 | Bitstring64 _ | Bytes as ty ->
-      <:match_case< 0 ->
-         if Extprot.ll_type t = $expected_type ty$ then
-           $read ty$
-         else $default$
-      >>
-  | Tuple _ | Sum _ | Message _ as ty ->
-      <:match_case< tag -> try do { Extprot.Codec.pushback s; $read ty$ } with [_ -> $default$] >>
-  | Htuple _ -> failwith "TODO"
+      end
+  in
+    read llty
 
 let record_case msgname ?constr tag fields =
   let _loc = Loc.mk "<generated code @ record_case>" in
@@ -285,13 +261,7 @@ let record_case msgname ?constr tag fields =
          let $lid:name$ =
            if nelms >= $int:string_of_int fieldno$ then
              try
-               let t = ExtProt.Codec.read_vint s in
-                 match Extprot.Codec.ll_tag t with
-                     [
-                       $field_match_cases msgname constr_name name llty$
-                     | n -> Extprot.Codec.unknown_tag
-                              $str:msgname$ $str:constr_name$ $str:name$ n
-                     ]
+               $read_field msgname constr_name name llty$
              with [$rescue_match_case$]
            else
                $default_value$
@@ -326,6 +296,7 @@ let rec read_message msgname =
         else ();
         match Extprot.Codec.ll_tag t with [
           $match_cases$
+        | tag -> Extprot.Codec.unknown_message_tag $str:msgname$ tag
         ]
       }
     >>
