@@ -235,10 +235,14 @@ let read_field msgname constr_name name llty =
                $int:string_of_int c.const_tag$ ->
                  $uid:String.capitalize c.const_type$.$lid:c.const_name$
                  $read_tuple_elms (lltys_without_defaults lltys)$ >>
-          in List.map mc non_constant in
+          in List.map mc non_constant @
+             [ <:match_case<
+                 _ -> Extprot.Codec.bad_format
+                        $str:msgname$ $str:constr_name$ $str:name$ >> ]
+        in
 
         let maybe_match_case (constr, l) = match l with
-            [] -> None
+            [] | [_] (* catch-all *)-> None
           | l ->
               Some <:match_case<
                       Extprot.Codec.$uid:constr$ ->
