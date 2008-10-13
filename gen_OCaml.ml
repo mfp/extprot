@@ -166,15 +166,9 @@ let rec field_match_cases msgname constr_name ?default name =
                         $str:msgname$ $str:constr_name$ $str:name$ >> in
 
   let rec read = function
-      Vint Bool ->
-        <:expr<
-          match Extprot.Codec.read_vint s with [
-              0 -> False
-            | _ -> True
-          ]
-        >>
-    | Vint Int -> <:expr< Extprot.Codec.read_rel_vint s >>
-    | Vint Positive_int -> <:expr< Extprot.Codec.read_vint s>>
+      Vint Bool -> <:expr< Extprot.Codec.read_bool s >>
+    | Vint Int -> <:expr< Extprot.Codec.read_rel_int s >>
+    | Vint Positive_int -> <:expr< Extprot.Codec.read_positive_int s>>
     | Bitstring32 -> <:expr< Extprot.Codec.read_i32 s >>
     | Bitstring64 Long -> <:expr< Extprot.Codec.read_i64 s >>
     | Bitstring64 Float -> <:expr< Extprot.Codec.read_float s >>
