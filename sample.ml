@@ -3,7 +3,11 @@ open Printf
 open Extprot
 open ExtList
 
-let decls = Parser.print_synerr Parser.parse_file "tst.proto"
+let file = match Array.length Sys.argv with
+    n when n > 1 -> Sys.argv.(1)
+  | _ -> "tst.proto"
+
+let decls = Parser.print_synerr Parser.parse_file file
 let bindings = Gencode.collect_bindings decls
 
 module G = Gencode.Make(Gen_OCaml)
