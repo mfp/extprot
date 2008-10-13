@@ -81,7 +81,7 @@ let generate_container bindings =
     | `Type (name, args) ->
         let t = List.fold_left (* apply *)
                   (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core ptexpr$ >>)
-                  <:ctyp< $lid:name$ >>
+                  <:ctyp< $uid:String.capitalize name$.$lid:name$ >>
                   args
         in (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
     | `Type_arg n -> <:ctyp< '$n$ >>
