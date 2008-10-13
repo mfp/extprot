@@ -252,8 +252,8 @@ let read_field msgname constr_name name llty =
           <:expr< let t = Extprot.Codec.read_prefix s in
             match Extprot.Codec.ll_type t with [
               $Ast.mcOr_of_list match_cases$
-              | _ -> Extprot.Codec.unknown_tag
-                       $str:msgname$ $str:constr_name$ $str:name$ tag
+              | _ -> Extprot.Codec.bad_format
+                       $str:msgname$ $str:constr_name$ $str:name$
             ]
           >>
     | Message name ->
