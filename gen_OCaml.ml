@@ -10,7 +10,8 @@ open ExtList
 type container = {
   c_name : string;
   c_types : Ast.str_item option;
-  c_code : Ast.str_item option;
+  c_reader : Ast.str_item option;
+  c_writer : Ast.str_item option;
 }
 
 let (|>) x f = f x
@@ -91,7 +92,8 @@ let generate_container bindings =
         Some {
           c_name = msgname;
           c_types = Some (message_types msgname mexpr);
-          c_code = None;
+          c_reader = None;
+          c_writer = None
         }
     | Type_decl (name, params, texpr) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
@@ -124,7 +126,8 @@ let generate_container bindings =
           Some {
             c_name = name;
             c_types = Some <:str_item< type $typedecl name ~params ty$ >>;
-            c_code = None;
+            c_reader = None;
+            c_writer = None
           }
 
 let loc = Camlp4.PreCast.Loc.mk
@@ -148,7 +151,8 @@ let generate_code containers =
     <:str_item<
        module $String.capitalize c.c_name$ = struct
          $maybe_str_item c.c_types$;
-         $maybe_str_item c.c_code$
+         $maybe_str_item c.c_reader$;
+         $maybe_str_item c.c_writer$
        end >>
   in string_of_ast (fun o -> o#implem)
        (List.fold_left
@@ -159,6 +163,8 @@ let generate_code containers =
 let list_mapi f l =
   let i = ref (-1) in
     List.map (fun x -> incr i; f !i x) l
+
+let make_list f n = Array.to_list (Array.init f n)
 
 let read_field msgname constr_name name llty =
   let _loc = loc "<generated code @ field_match_cases>" in
@@ -379,7 +385,132 @@ let add_message_reader bindings msgname mexpr c =
   let llrec = Gencode.low_level_msg_def bindings mexpr in
   let read_expr = read_message msgname llrec in
   let reader = <:str_item< value $lid:"read_" ^ msgname$ = fun s -> $read_expr$>> in
-    { c with c_code = Some reader }
+    { c with c_reader = Some reader }
 
+let vint_length = function
+    n when n < 128 -> 1
+  | n when n < 13384 -> 2
+  | n when n < 2097152 -> 3
+  | n when n < 268435456 -> 4
+  | _ -> 5 (* FIXME: checking for 64-bit and 32-bit archs *)
 
-let add_message_writer bindings msgname mexpr c = c (* TODO *)
+let rec write_field fname =
+  let _loc = Loc.mk "<generated code @ write>" in
+  let simple_write_func = function
+      Vint Bool -> "write_bool"
+    | Vint Int -> "write_rel_int"
+    | Vint Positive_int -> "write_positive_int"
+    | Bitstring32 -> "write_int32"
+    | Bitstring64 Long -> "write_int64"
+    | Bitstring64 Float -> "write_float"
+    | Bytes -> "write_string"
+    | Tuple _ | Sum _ | Htuple _ | Message _ -> assert false in
+
+  let rec write_tuple tag v lltys =
+    let nelms = List.length lltys in
+    let var_tys = list_mapi (fun i ty -> (sprintf "v%d" i, ty)) lltys in
+    let write_elms =
+      List.map (fun (v, ty) -> write <:expr< $lid:v$ >> ty) var_tys in
+    let patt =
+      Ast.paCom_of_list @@ List.map (fun (v, _) -> <:patt< $lid:v$ >>) var_tys
+    in
+      <:expr<
+        let $patt$ = $v$ in
+        let abuf =
+          let aux = Extprot.Msg_buffer.create () in do {
+            $Ast.exSem_of_list write_elms$;
+            aux
+          }
+        in do {
+          Extprot.Msg_buffer.add_tuple_prefix aux 0;
+          Extprot.Msg_buffer.add_vint aux
+            (Extprot.Msg_buffer.length abuf +
+             $int:string_of_int @@ vint_length nelms$);
+          Extprot.Msg_buffer.add_vint aux $int:string_of_int nelms$;
+          Extprot.Msg_buffer.add_buffer aux abuf
+        }
+      >>
+
+  and write v = function
+      Vint _ | Bitstring32 | Bitstring64 _ | Bytes as llty ->
+          <:expr< Extprot.Msg_buffer.$lid:simple_write_func llty$ aux $v$ >>
+    | Message name ->
+        <:expr< $uid:String.capitalize name$.$lid:"write_" ^ name$ aux $v$ >>
+    | Tuple lltys -> write_tuple 0 v lltys
+    | Htuple (kind, llty) ->
+        let iter_f = match kind with
+            Array -> <:expr< Array.iter >>
+          | List -> <:expr< List.iter >>
+        in
+          <:expr<
+            let write_elm aux v = $write <:expr< v >> llty$ in
+            let nelms = ref 0 in
+            let abuf = Extprot.Msg_buffer.create () in do {
+                $iter_f$ (fun v -> do { write_elm abuf v; incr nelms } ) $v$;
+                Extprot.Msg_buffer.add_htuple_prefix aux 0;
+                Extprot.Msg_buffer.add_vint aux
+                  (Extprot.Msg_buffer.length abuf +
+                   Extprot.Codec.vint_length nelms.contents);
+                Extprot.Msg_buffer.add_vint aux nelms.contents;
+                Extprot.Msg_buffer.add_buffer aux abuf
+              }
+         >>
+    | Sum (constant, non_constant) ->
+        let constant_match_cases =
+          List.map
+            (fun c ->
+               <:match_case<
+                 $uid:String.capitalize c.const_type$.$lid:c.const_name$ ->
+                   Extprot.Msg_buffer.add_const_prefix aux $int:string_of_int c.const_tag$
+               >>)
+            constant in
+        let non_constant_cases =
+          List.map
+            (fun (c, lltys) ->
+               <:match_case<
+                   $uid:String.capitalize c.const_type$.$uid:c.const_name$ v ->
+                     $write_tuple c.const_tag <:expr<v>> lltys$
+               >>)
+            non_constant in
+        let match_cases = constant_match_cases @ non_constant_cases in
+          <:expr< match $v$ with [ $Ast.mcOr_of_list match_cases$ ] >>
+
+  in write <:expr< msg.$lid:fname$ >>
+
+let write_fields fs =
+  Ast.exSem_of_list @@ List.map (fun (name, _, llty) -> write_field name llty) fs
+
+let rec write_message msgname =
+  let _loc = Loc.mk "<generated code @ write_message>" in
+  let dump_fields tag fields =
+    let nelms = List.length fields in
+      <:expr<
+         let aux = Extprot.Msg_buffer.create () in
+         let nelms = $int:string_of_int nelms$ in do {
+           Extprot.Msg_buffer.add_tuple_prefix b 0;
+           $write_fields fields$;
+           Extprot.Msg_buffer.add_vint b
+             (Extprot.Msg_buffer.length aux +
+              $int:string_of_int @@ vint_length nelms$);
+           Extprot.Msg_buffer.add_vint b $int:string_of_int nelms$;
+           Extprot.Msg_buffer.add_buffer b aux
+         }
+      >>
+
+  in function
+      Record_single fields -> dump_fields 0 fields
+    | Record_sum l ->
+        let match_case (tag, constr, fields) =
+          <:match_case< $uid:constr$ msg -> $dump_fields tag fields$ >> in
+        let match_cases =
+          Ast.mcOr_of_list @@ List.map match_case @@
+          List.mapi (fun i (c, fs) -> (i, c, fs)) l
+        in <:expr< match msg with [ $match_cases$ ] >>
+
+let add_message_writer bindings msgname mexpr c =
+  let _loc = Loc.mk "<generated code @ add_message_writer>" in
+  let llrec = Gencode.low_level_msg_def bindings mexpr in
+  let write_expr = write_message msgname llrec in
+  let writer = <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$ >> in
+    { c with c_writer = Some writer }
+
