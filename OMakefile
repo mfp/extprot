@@ -3,7 +3,7 @@ NATIVE_ENABLED = true
 BYTE_ENABLED = true
 
 OCAMLDEPFLAGS = -pp "camlp4orf"
-OCAMLFLAGS = -dtypes -pp "camlp4orf" -for-pack Extprot
+OCAMLFLAGS = -dtypes -pp "camlp4orf"
 OCAMLOPTFLAGS = -inline 100 
 OCAMLCFLAGS += -g
 
@@ -17,13 +17,19 @@ EXTPROT_OBJS[] =
 	gencode
 	gen_OCaml
 
-section
-	OCAMLFLAGS =
-	OCamlPackage(extprot, $(EXTPROT_OBJS))
-	OCamlLibrary(extprot, extprot)
+CamlSources(mods) =
+	foreach(mod, $(mods))
+		$(addsuffixes .cmo .cmi .cmx .sig $(EXT_OBJ), $(mod)):
 
 section
-	OCAML_LIBS = extprot
+	section
+		OCAMLFLAGS += -for-pack Extprot_gen
+		CamlSources($(EXTPROT_OBJS))
+	OCamlPackage(extprot_gen, $(EXTPROT_OBJS))
+	OCamlLibrary(extprot_gen, extprot_gen)
+
+section
+	OCAML_LIBS = extprot_gen
 	OCAMLPACKS += camlp4.lib
 	OCamlProgram(sample, sample)
 
@@ -32,4 +38,10 @@ section
 	    $(mapprefix -I, $(OCAMLINCLUDES)) \
 	    $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
 
-.DEFAULT: extprot.cma extprot.cmxa
+.DEFAULT: extprot_gen.cma extprot_gen.cmxa sample
+
+.PHONY: clean
+
+clean:
+	rm -f $(filter-proper-targets $(ls R, .))
+

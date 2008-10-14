@@ -1,6 +1,6 @@
 
 open Printf
-open Extprot
+open Extprot_gen
 open ExtList
 
 let file = match Array.length Sys.argv with
