@@ -184,7 +184,7 @@ let read_field msgname constr_name name llty =
                        if nelms >= $int:string_of_int (n+1)$ then
                          $read llty$
                        else
-                         Extprot.missing_element
+                         Extprot.Error.missing_element
                            $str:msgname$ $str:constr_name$ $str:name$
                            $int:string_of_int n$
                      in $e$
@@ -218,7 +218,7 @@ let read_field msgname constr_name name llty =
                   let len = Extprot.Codec.read_vint s in
                   let nelms = Extprot.Codec.read_vint s in
                     $read_tuple_elms (lltys_without_defaults lltys)$
-              | _ -> Extprot.bad_field_format
+              | _ -> Extprot.Error.bad_field_format
                        $str:msgname$ $str:constr_name$ $str:name$
             ]
         >>
@@ -232,7 +232,7 @@ let read_field msgname constr_name name llty =
                >>)
             constant
           @ [ <:match_case<
-                tag -> Extprot.unknown_field_tag
+                tag -> Extprot.Error.unknown_field_tag
                        $str:msgname$ $str:constr_name$ $str:name$ tag >> ] in
 
         let nonconstant_match_cases =
@@ -243,7 +243,7 @@ let read_field msgname constr_name name llty =
                  $read_tuple_elms (lltys_without_defaults lltys)$ >>
           in List.map mc non_constant @
              [ <:match_case<
-                 tag -> Extprot.unknown_field_tag
+                 tag -> Extprot.Error.unknown_field_tag
                         $str:msgname$ $str:constr_name$ $str:name$ tag >> ]
         in
 
@@ -262,7 +262,7 @@ let read_field msgname constr_name name llty =
           <:expr< let t = Extprot.Codec.read_prefix s in
             match Extprot.Codec.ll_type t with [
               $Ast.mcOr_of_list match_cases$
-              | _ -> Extprot.bad_field_format
+              | _ -> Extprot.Error.bad_field_format
                        $str:msgname$ $str:constr_name$ $str:name$
             ]
           >>
@@ -296,7 +296,7 @@ let read_field msgname constr_name name llty =
                       let len = Extprot.Codec.read_vint s in
                       let nelms = Extprot.Codec.read_vint s in
                         $e$
-                  | _ -> Extprot.bad_field_format
+                  | _ -> Extprot.Error.bad_field_format
                            $str:msgname$ $str:constr_name$ $str:name$
                 ]
             >>
@@ -311,11 +311,11 @@ let record_case msgname ?constr tag fields =
     let rescue_match_case = match default with
         None ->
           <:match_case<
-            Extprot.Bad_format _  e -> raise e
+            Extprot.Error.Bad_format _  e -> raise e
           >>
       | Some expr ->
           <:match_case<
-            Extprot.Bad_format _ ->
+            Extprot.Error.Bad_format _ ->
               do {
                 Extprot.Codec.skip_to s end_of_field;
                 $expr$
@@ -323,7 +323,7 @@ let record_case msgname ?constr tag fields =
     let default_value = match default with
         Some expr -> expr
       | None ->
-          <:expr< Extprot.missing_field
+          <:expr< Extprot.Error.missing_field
                     $str:msgname$ $str:constr_name$ $str:name$ >> in
     let end_of_field_expr = match default with
         Some _ -> <:expr< Extprot.Codec.value_endpos s >>
@@ -363,11 +363,11 @@ let rec read_message msgname =
   let wrap match_cases =
     <:expr<
       let t = Extprot.Codec.read_prefix s in begin
-        if Extprot.Codec.ll_type <> Extprot.Codec.Tuple then
-          Extprot.bad_message_type $str:msgname$ else ();
+        if Extprot.Codec.ll_type <> Extprot.Error.Tuple then
+          Extprot.Error.bad_message_type $str:msgname$ else ();
         match Extprot.Codec.ll_tag t with [
           $match_cases$
-          | tag -> Extprot.unknown_message_tag $str:msgname$ tag
+          | tag -> Extprot.Error.unknown_message_tag $str:msgname$ tag
         ]
       end
     >>
