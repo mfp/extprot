@@ -11,15 +11,17 @@ OCAMLPACKS[] =
 	camlp4
 	extlib
 
+CamlSources(mods) =
+	foreach(mod, $(mods))
+		$(addsuffixes .cmo .cmi .cmx .sig $(EXT_OBJ), $(mod)):
+
+.SUBDIRS: runtime
+
 EXTPROT_OBJS[] =
 	parser
 	ptypes
 	gencode
 	gen_OCaml
-
-CamlSources(mods) =
-	foreach(mod, $(mods))
-		$(addsuffixes .cmo .cmi .cmx .sig $(EXT_OBJ), $(mod)):
 
 section
 	section
@@ -41,7 +43,6 @@ section
 .DEFAULT: extprot_gen.cma extprot_gen.cmxa sample
 
 .PHONY: clean
-
 clean:
 	rm -f $(filter-proper-targets $(ls R, .))
 

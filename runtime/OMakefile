@@ -1,0 +1,17 @@
+
+EXTPROT_RUNTIME_OBJS[] =
+	codec
+	error
+
+section
+	OCAMLFLAGS += -for-pack Extprot
+	CamlSources($(EXTPROT_RUNTIME_OBJS))
+
+OCamlPackage(extprot, $(EXTPROT_RUNTIME_OBJS))
+OCamlLibrary(extprot, extprot)
+
+.DEFAULT: extprot.cma extprot.cmxa
+
+.PHONY: clean
+clean:
+	rm -f $(filter-proper-targets $(ls R, .))
