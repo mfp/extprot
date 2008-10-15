@@ -1,0 +1,31 @@
+
+type source = One | Some_other
+type meta 'a = Unset | Set source 'a
+
+type dim = (int * int)
+
+message metadata = 
+      Text {
+	author: meta<string>;
+	pages : meta<int>
+      }
+  | Image {
+      dims : meta<dim>;
+      colors : meta<int> 
+  }
+
+type tup 'a 'b = ('a * 'b)
+type sum = A tup<int, string> | B int string
+message tuple = {
+  tup : sum
+}
+
+
+message foo = { foo : int }
+
+type foo2 = A foo | B foo foo | C
+
+message foo2msg = { thefoo : foo2 }
+
+message minimal = { tup_array : [|(int * int)|]; list : [bool] }
+
