@@ -359,11 +359,16 @@ let record_case msgname ?constr tag fields =
     List.map
       (fun (name, _, _) -> <:rec_binding< $lid:name$ = $lid:name$ >>)
       fields in
+  (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
+  let record =
+    let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
+        None -> r
+      | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
   let e =
     List.fold_right
       (fun (i, fieldinfo) e -> read_field i fieldinfo e)
       (list_mapi (fun i x -> (i, x)) fields)
-      <:expr< { $Ast.rbSem_of_list field_assigns$ } >>
+      record
   in
     <:match_case<
       $int:string_of_int tag$ ->
