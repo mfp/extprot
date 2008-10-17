@@ -217,20 +217,20 @@ let read_field msgname constr_name name llty =
   and lltys_without_defaults = List.map (fun x -> (x, None))
 
   and read = function
-      Vint Bool -> <:expr< Extprot.Codec.read_bool s >>
-    | Vint Int -> <:expr< Extprot.Codec.read_rel_int s >>
-    | Vint Positive_int -> <:expr< Extprot.Codec.read_positive_int s>>
-    | Bitstring32 -> <:expr< Extprot.Codec.read_i32 s >>
-    | Bitstring64 Long -> <:expr< Extprot.Codec.read_i64 s >>
-    | Bitstring64 Float -> <:expr< Extprot.Codec.read_float s >>
-    | Bytes -> <:expr< Extprot.Codec.read_string s >>
+      Vint Bool -> <:expr< Extprot.Codec.Reader.read_bool s >>
+    | Vint Int -> <:expr< Extprot.Codec.Reader.read_rel_int s >>
+    | Vint Positive_int -> <:expr< Extprot.Codec.Reader.read_positive_int s>>
+    | Bitstring32 -> <:expr< Extprot.Codec.Reader.read_i32 s >>
+    | Bitstring64 Long -> <:expr< Extprot.Codec.Reader.read_i64 s >>
+    | Bitstring64 Float -> <:expr< Extprot.Codec.Reader.read_float s >>
+    | Bytes -> <:expr< Extprot.Codec.Reader.read_string s >>
     | Tuple lltys ->
         <:expr<
-          let t = Extprot.Codec.read_prefix s in
+          let t = Extprot.Codec.Reader.read_prefix s in
             match Extprot.Codec.ll_type t with [
                 Extprot.Codec.Tuple ->
-                  let len = Extprot.Codec.read_vint s in
-                  let nelms = Extprot.Codec.read_vint s in
+                  let len = Extprot.Codec.Reader.read_vint s in
+                  let nelms = Extprot.Codec.Reader.read_vint s in
                     $read_tuple_elms (lltys_without_defaults lltys)$
               | _ -> Extprot.Error.bad_field_format
                        $str:msgname$ $str:constr_name$ $str:name$
@@ -273,7 +273,7 @@ let read_field msgname constr_name name llty =
             ["Vint", constant_match_cases; "Tuple", nonconstant_match_cases]
         in
 
-          <:expr< let t = Extprot.Codec.read_prefix s in
+          <:expr< let t = Extprot.Codec.Reader.read_prefix s in
             match Extprot.Codec.ll_type t with [
               $Ast.mcOr_of_list match_cases$
               | _ -> Extprot.Error.bad_field_format
@@ -306,11 +306,11 @@ let read_field msgname constr_name name llty =
                   ]
                 >>
         in <:expr<
-              let t = Extprot.Codec.read_prefix s in
+              let t = Extprot.Codec.Reader.read_prefix s in
                 match Extprot.Codec.ll_type t with [
                     Extprot.Codec.Htuple ->
-                      let len = Extprot.Codec.read_vint s in
-                      let nelms = Extprot.Codec.read_vint s in
+                      let len = Extprot.Codec.Reader.read_vint s in
+                      let nelms = Extprot.Codec.Reader.read_vint s in
                         $e$
                   | _ -> Extprot.Error.bad_field_format
                            $str:msgname$ $str:constr_name$ $str:name$
@@ -374,8 +374,8 @@ let record_case msgname ?constr tag fields =
   in
     <:match_case<
       $int:string_of_int tag$ ->
-        let len = Extprot.Codec.read_vint s in
-        let nelms = Extprot.Codec.read_vint s in
+        let len = Extprot.Codec.Reader.read_vint s in
+        let nelms = Extprot.Codec.Reader.read_vint s in
           $e$
           >>
 
@@ -383,7 +383,7 @@ let rec read_message msgname =
   let _loc = Loc.mk "<generated code @ read_message>" in
   let wrap match_cases =
     <:expr<
-      let t = Extprot.Codec.read_prefix s in begin
+      let t = Extprot.Codec.Reader.read_prefix s in begin
         if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
           Extprot.Error.bad_message_type $str:msgname$ else ();
         match Extprot.Codec.ll_tag t with [
