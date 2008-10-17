@@ -23,17 +23,18 @@ let print_field const fname mutabl ty =
 let () =
   G.generate_code decls |> print_endline;
 
-  print_newline ();
-  print_endline (String.make 60 '*');
-  print_newline ();
-  List.iter
-    (function
-         Ptypes.Message_decl (name, mexpr) ->
-           Format.fprintf Format.std_formatter "Message %S:\n" name;
-           Gencode.iter_message print_field mexpr;
-           Format.fprintf Format.std_formatter "\n---\n\n"
-       | Ptypes.Type_decl (_, _, _) -> ())
-    decls;
-  ()
+  if false then begin
+    print_newline ();
+    print_endline (String.make 60 '*');
+    print_newline ();
+    List.iter
+      (function
+           Ptypes.Message_decl (name, mexpr) ->
+             Format.fprintf Format.std_formatter "Message %S:\n" name;
+             Gencode.iter_message print_field mexpr;
+             Format.fprintf Format.std_formatter "\n---\n\n"
+         | Ptypes.Type_decl (_, _, _) -> ())
+      decls;
+  end
 
 
