@@ -15,7 +15,7 @@ CamlSources(mods) =
 	foreach(mod, $(mods))
 		$(addsuffixes .cmo .cmi .cmx .sig $(EXT_OBJ), $(mod)):
 
-.SUBDIRS: runtime
+.SUBDIRS: runtime test
 
 EXTPROT_OBJS[] =
 	parser

@@ -1,0 +1,15 @@
+OCAMLPACKS [] += oUnit
+
+OCAML_LIBS[] +=
+    $(ROOT)/runtime/extprot
+
+TESTS[] =
+    unit_write
+
+OCamlProgram(test, register_test $(TESTS) test)
+
+.DEFAULT: test
+
+.PHONY: clean
+clean:
+	rm -f $(filter-proper-targets $(ls R, .)) *.annot
