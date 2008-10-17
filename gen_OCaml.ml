@@ -297,10 +297,12 @@ let read_field msgname constr_name name llty =
                       0 -> [||]
                     | n ->
                         let elm = $read llty$ in
-                        let a = Array.make nelms elm in
+                        let a = Array.make nelms elm in begin
                           for i = 1 to nelms - 1 do
                             a.(i) := $read llty$
-                          done
+                          done;
+                          a
+                        end
                   ]
                 >>
         in <:expr<
