@@ -307,7 +307,7 @@ let read_field msgname constr_name name llty =
                 >>
         in <:expr<
               let t = Extprot.Codec.read_prefix s in
-                match Extprot.Codec.ll_type with [
+                match Extprot.Codec.ll_type t with [
                     Extprot.Codec.Htuple ->
                       let len = Extprot.Codec.read_vint s in
                       let nelms = Extprot.Codec.read_vint s in
@@ -418,7 +418,7 @@ let rec write_field fname =
   let _loc = Loc.mk "<generated code @ write>" in
   let simple_write_func = function
       Vint Bool -> "write_bool"
-    | Vint Int -> "write_rel_int"
+    | Vint Int -> "write_relative_int"
     | Vint Positive_int -> "write_positive_int"
     | Bitstring32 -> "write_int32"
     | Bitstring64 Long -> "write_int64"
