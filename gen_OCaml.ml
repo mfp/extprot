@@ -169,11 +169,11 @@ let make_list f n = Array.to_list (Array.init f n)
 let read_field msgname constr_name name llty =
   let _loc = loc "<generated code @ field_match_cases>" in
 
-  let rec read_tuple_elms lltys_and_defs =
+  let rec read_elms f lltys_and_defs =
     (* TODO: handle missing elms *)
     let vars = List.rev @@ Array.to_list @@
-               Array.init (List.length lltys_and_defs) (sprintf "v%d") in
-    let tup = exCom_of_list @@ List.rev_map (fun v -> <:expr< $lid:v$ >>) vars in
+               Array.init (List.length lltys_and_defs) (sprintf "v%d")
+    in
       List.fold_right
         (fun (n, llty, default) e ->
            let varname = sprintf "v%d" n in
@@ -198,7 +198,21 @@ let read_field msgname constr_name name llty =
                      in $e$
                    >>)
         (list_mapi (fun i (ty, default) -> (i, ty, default)) lltys_and_defs)
-        tup
+        (f (List.rev vars))
+
+  and read_tuple_elms lltys_and_defs =
+    let mk_tup vars =
+      exCom_of_list @@ List.map (fun v -> <:expr< $lid:v$ >>) vars
+    in read_elms mk_tup lltys_and_defs
+
+  and read_sum_elms constr lltys =
+    let c = constr in
+    let mk_expr vars =
+      List.fold_left
+        (fun e var -> <:expr< $e$ $lid:var$ >>)
+        <:expr< $uid:String.capitalize c.const_type$.$uid:c.const_name$ >>
+        vars
+    in read_elms mk_expr lltys
 
   and lltys_without_defaults = List.map (fun x -> (x, None))
 
@@ -239,8 +253,8 @@ let read_field msgname constr_name name llty =
           let mc (c, lltys) =
             <:match_case<
                $int:string_of_int c.const_tag$ ->
-                 $uid:String.capitalize c.const_type$.$lid:c.const_name$
-                 $read_tuple_elms (lltys_without_defaults lltys)$ >>
+                    $read_sum_elms c (lltys_without_defaults lltys)$
+            >>
           in List.map mc non_constant @
              [ <:match_case<
                  tag -> Extprot.Error.unknown_field_tag
