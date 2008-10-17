@@ -424,16 +424,12 @@ let rec write_field fname =
     | Bytes -> "write_string"
     | Tuple _ | Sum _ | Htuple _ | Message _ -> assert false in
 
-  let rec write_tuple tag v lltys =
-    let nelms = List.length lltys in
-    let var_tys = list_mapi (fun i ty -> (sprintf "v%d" i, ty)) lltys in
+  let rec write_values tag var_tys =
+    let nelms = List.length var_tys in
     let write_elms =
-      List.map (fun (v, ty) -> write <:expr< $lid:v$ >> ty) var_tys in
-    let patt =
-      Ast.paCom_of_list @@ List.map (fun (v, _) -> <:patt< $lid:v$ >>) var_tys
+      List.map (fun (v, ty) -> write <:expr< $lid:v$ >> ty) var_tys
     in
       <:expr<
-        let $patt$ = $v$ in
         let abuf =
           let aux = Extprot.Msg_buffer.create () in do {
             $Ast.exSem_of_list write_elms$;
@@ -447,6 +443,16 @@ let rec write_field fname =
           Extprot.Msg_buffer.add_vint aux $int:string_of_int nelms$;
           Extprot.Msg_buffer.add_buffer aux abuf
         }
+      >>
+
+  and write_tuple tag v lltys =
+    let var_tys = list_mapi (fun i ty -> (sprintf "v%d" i, ty)) lltys in
+    let patt =
+      Ast.paCom_of_list @@ List.map (fun (v, _) -> <:patt< $lid:v$ >>) var_tys
+    in
+      <:expr<
+        let $patt$ = $v$ in
+          $write_values tag var_tys$
       >>
 
   and write v = function
@@ -485,10 +491,15 @@ let rec write_field fname =
         let non_constant_cases =
           List.map
             (fun (c, lltys) ->
-               <:match_case<
-                   $uid:String.capitalize c.const_type$.$uid:c.const_name$ v ->
-                     $write_tuple c.const_tag <:expr<v>> lltys$
-               >>)
+               let var_tys = list_mapi (fun i ty -> (sprintf "v%d" i, ty)) lltys in
+               let patt =
+                 List.map (fun (v, _) -> <:patt< $lid:v$ >>) var_tys |>
+                 Ast.paCom_of_list
+               in
+                 <:match_case<
+                   $uid:String.capitalize c.const_type$.$uid:c.const_name$
+                     $patt$ -> $write_values c.const_tag var_tys$
+                 >>)
             non_constant in
         let match_cases = constant_match_cases @ non_constant_cases in
           <:expr< match $v$ with [ $Ast.mcOr_of_list match_cases$ ] >>
