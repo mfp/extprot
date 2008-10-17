@@ -123,3 +123,5 @@ struct
         read_bytes t s 0 len;
         s
 end
+
+include Reader
