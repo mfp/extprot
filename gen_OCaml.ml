@@ -213,7 +213,7 @@ let read_field msgname constr_name name llty =
     | Tuple lltys ->
         <:expr<
           let t = Extprot.Codec.read_prefix s in
-            match Extprot.Codec.ll_type with [
+            match Extprot.Codec.ll_type t with [
                 Extprot.Codec.Tuple ->
                   let len = Extprot.Codec.read_vint s in
                   let nelms = Extprot.Codec.read_vint s in
@@ -363,7 +363,7 @@ let rec read_message msgname =
   let wrap match_cases =
     <:expr<
       let t = Extprot.Codec.read_prefix s in begin
-        if Extprot.Codec.ll_type <> Extprot.Error.Tuple then
+        if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
           Extprot.Error.bad_message_type $str:msgname$ else ();
         match Extprot.Codec.ll_tag t with [
           $match_cases$
