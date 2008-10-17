@@ -325,11 +325,11 @@ let record_case msgname ?constr tag fields =
     let rescue_match_case = match default with
         None ->
           <:match_case<
-            Extprot.Error.Bad_format _  e -> raise e
+            Extprot.Error.Extprot_error _ as e -> raise e
           >>
       | Some expr ->
           <:match_case<
-            Extprot.Error.Bad_format _ ->
+            Extprot.Error.Extprot_error _ ->
               do {
                 Extprot.Codec.skip_to s end_of_field;
                 $expr$
