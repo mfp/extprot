@@ -17,3 +17,7 @@ message msg_sum =
 type sum_type 'a 'b 'c = A 'a | B 'b | C 'c
 
 message simple_sum = { v : sum_type<bool, byte, string> }
+
+message nested_message = { v : simple_sum; b : int }
+
+message lists_arrays = { lint : [int]; abool : [| bool |] }

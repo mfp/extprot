@@ -95,6 +95,51 @@ let () =
           ~msg:"{ Simple_sum.v = Sum_type.C \"abcd\" }"
           Simple_sum.write_simple_sum { Simple_sum.v = Sum_type.C "abcd" } ();
       end;
+
+      "nested message" >:: begin fun () ->
+        (* 001       tuple, tag 0
+         * 015       len
+         * 002       nelms
+         *  001       tuple, tag 0
+         *  010       len
+         *  001       nelms
+         *   033       tuple, tag 2
+         *   007       len
+         *   001       nelms
+         *    003 004 abcd  bytes "abcd"
+         *  000 020   int 10
+         * *)
+        check_write "\001\015\002\001\010\001\033\007\001\003\004abcd\000\020"
+          Nested_message.write_nested_message
+          ~msg:"{ Nested_message.v = { Simple_sum.v = Sum_type.C \"abcd\" }; b = 10 }"
+          { Nested_message.v = { Simple_sum.v = Sum_type.C "abcd" }; b = 10 }
+          ()
+      end;
+
+      "lists and arrays" >:: begin fun () ->
+        (* 001       tuple, tag 0
+         * 018       len
+         * 002       nelms
+         *  005       htuple, tag 0
+         *  006       len
+         *  002       nelms
+         *   000 020  int(10)
+         *   000 128 004 int(256)
+         *
+         *  005       htuple, tag 0
+         *  007       len
+         *  003       nlems
+         *   000 001   true
+         *   000 000   false
+         *   000 000   false
+         * *)
+        check_write
+          "\001\018\002\005\006\002\000\020\000\128\004\005\007\003\000\001\000\000\000\000"
+          Lists_arrays.write_lists_arrays
+          ~msg:"{ Lists_arrays.lint = [10; 256]; abool = [| true; false; false |] }"
+          { Lists_arrays.lint = [10; 256]; abool = [| true; false; false |] }
+          ()
+      end;
     ]
 
 let () =
