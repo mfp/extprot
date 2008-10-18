@@ -1,10 +1,21 @@
 OCAMLPACKS [] += oUnit
 
+OCAMLINCLUDES += $(ROOT)/runtime
+
 OCAML_LIBS[] +=
     $(ROOT)/runtime/extprot
 
 TESTS[] =
+    test_types
     unit_write
+
+GENERATOR = ../sample
+
+OCAMLDEP_MODULES_ENABLED = false
+LocalOCamlGeneratedFiles(test_types.ml)
+
+test_types.ml: $(GENERATOR) test_types.proto
+    $(GENERATOR) test_types.proto > $@
 
 OCamlProgram(test, register_test $(TESTS) test)
 
