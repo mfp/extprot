@@ -8,9 +8,10 @@
 *.a
 *.s
 *.swp
+*.swo
+OMakefile.omc
 /.omakedb*
 /.omakedb.lock
-/OMakefile.omc
 /OMakeroot.omc
 /sample.opt
 /sample
