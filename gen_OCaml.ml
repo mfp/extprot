@@ -68,7 +68,7 @@ let generate_container bindings =
 
   and ctyp_of_poly_texpr_core = function
       `Bool -> <:ctyp< bool >>
-    | `Byte -> <:ctyp< char >>
+    | `Byte -> <:ctyp< int >>
     | `Int _ -> <:ctyp< int >>
     | `Long_int -> <:ctyp< Int64.t >>
     | `Float -> <:ctyp< float >>
