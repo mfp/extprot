@@ -19,7 +19,86 @@ let check_bits64 check v n =
        (bits n 32) (bits n 40) (bits n 48) (bits n 56))
 
 let () =
-  Register_test.register "write (unit)"
+  Register_test.register "write composed types"
+    [
+      "tuple" >::
+        (*
+         * 001        tuple, tag 0
+         * NNN        len
+         * 001        elements
+         *  001        tuple, tag 0
+         *  NNN        len
+         *  002        elements
+         *   000 010    vint(10)
+         *   000 001    bool(true)
+         * *)
+        check_write "\001\008\001\001\005\002\000\010\000\001"
+          ~msg:"{ Simple_tuple.v = (10, true) }"
+          Simple_tuple.write_simple_tuple { Simple_tuple.v = (10, true) };
+
+      "msg_sum" >:: begin fun () ->
+        (*
+         * 001      tuple, tag 0
+         * 003      len
+         * 001      nelms
+         *  000 000  bool false
+         * *)
+        check_write "\001\003\001\000\000"
+          ~msg:"(Msg_sum.A { Msg_sum.b = false })"
+          Msg_sum.write_msg_sum (Msg_sum.A { Msg_sum.b = false }) ();
+        (*
+         * 017      tuple, tag 1
+         * 003      len
+         * 001      nelms
+         *  000 000  bool false
+         * *)
+        check_write "\017\003\001\000\020"
+          ~msg:"(Msg_sum.B { Msg_sum.i = 10 })"
+          Msg_sum.write_msg_sum (Msg_sum.B { Msg_sum.i = 10 }) ()
+      end;
+
+      "simple_sum" >:: begin fun () ->
+        (*
+         * 001       tuple, tag 0
+         * 006       len
+         * 001       nelms
+         *  001       tuple, tag 0
+         *  003       len
+         *  001       nelms
+         *   000 001   bool true
+         * *)
+        check_write "\001\006\001\001\003\001\000\001"
+          ~msg:"{ Simple_sum.v = Sum_type.A true }"
+          Simple_sum.write_simple_sum { Simple_sum.v = Sum_type.A true } ();
+        (*
+         * 001       tuple, tag 0
+         * 007       len
+         * 001       nelms
+         *  017       tuple, tag 1
+         *  004       len
+         *  001       nelms
+         *   000 128 001  byte 128
+         * *)
+        check_write "\001\007\001\017\004\001\000\128\001"
+          ~msg:"{ Simple_sum.v = Sum_type.B 128 }"
+          Simple_sum.write_simple_sum { Simple_sum.v = Sum_type.B 128 } ();
+        (*
+         * 001       tuple, tag 0
+         * 010       len
+         * 001       nelms
+         *  033       tuple, tag 2
+         *  007       len
+         *  001       nelms
+         *   003 004 abcd  bytes "abcd"
+         * *)
+        check_write "\001\010\001\033\007\001\003\004abcd"
+          ~msg:"{ Simple_sum.v = Sum_type.C \"abcd\" }"
+          Simple_sum.write_simple_sum { Simple_sum.v = Sum_type.C "abcd" } ();
+      end;
+    ]
+
+let () =
+  Register_test.register "write simple types"
     [
       "bool (true)" >::
         check_write "\001\003\001\000\001"
@@ -121,3 +200,4 @@ let () =
       end;
 
     ]
+

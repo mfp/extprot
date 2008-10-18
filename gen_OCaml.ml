@@ -438,7 +438,7 @@ let rec write_field fname =
             aux
           }
         in do {
-          Extprot.Msg_buffer.add_tuple_prefix aux 0;
+          Extprot.Msg_buffer.add_tuple_prefix aux $int:string_of_int tag$;
           Extprot.Msg_buffer.add_vint aux
             (Extprot.Msg_buffer.length abuf +
              $int:string_of_int @@ vint_length nelms$);
@@ -518,7 +518,7 @@ let rec write_message msgname =
       <:expr<
          let aux = Extprot.Msg_buffer.create () in
          let nelms = $int:string_of_int nelms$ in do {
-           Extprot.Msg_buffer.add_tuple_prefix b 0;
+           Extprot.Msg_buffer.add_tuple_prefix b  $int:string_of_int tag$;
            $write_fields fields$;
            Extprot.Msg_buffer.add_vint b
              (Extprot.Msg_buffer.length aux +
