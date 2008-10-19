@@ -261,16 +261,25 @@ let read_field msgname constr_name name llty =
                         $str:msgname$ $str:constr_name$ $str:name$ tag >> ]
         in
 
-        let maybe_match_case (constr, l) = match l with
+        let maybe_match_case (constr, f, l) = match l with
             [] | [_] (* catch-all *)-> None
           | l ->
-              Some <:match_case<
-                      Extprot.Codec.$uid:constr$ ->
-                        match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list l$ ] >> in
+              let expr =
+                <:expr< match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list l$ ] >>
+              in
+                Some <:match_case< Extprot.Codec.$uid:constr$ -> $f expr$ >> in
+
+        let wrap_non_constant e =
+          <:expr<
+            let len = Extprot.Codec.Reader.read_vint s in
+            let nelms = Extprot.Codec.Reader.read_vint s in $e$ >> in
 
         let match_cases =
           List.filter_map maybe_match_case
-            ["Vint", constant_match_cases; "Tuple", nonconstant_match_cases]
+            [
+              "Vint", (fun e -> e), constant_match_cases;
+              "Tuple", wrap_non_constant, nonconstant_match_cases;
+            ]
         in
 
           <:expr< let t = Extprot.Codec.Reader.read_prefix s in
