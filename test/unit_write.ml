@@ -18,6 +18,86 @@ let check_bits64 check v n =
        (bits n 0)  (bits n 8)  (bits n 16) (bits n 24)
        (bits n 32) (bits n 40) (bits n 48) (bits n 56))
 
+let (@@) f x = f x
+
+module Probabilistic =
+struct
+  open Rand_monad.Rand
+  open Test_types.Complex_rtt
+  module PP = E.Pretty_print
+
+  let encode f v =
+    let b = E.Msg_buffer.create () in
+      f b v;
+      E.Msg_buffer.contents b
+
+  let decode f s = f @@ E.Codec.Reader.make s 0 (String.length s)
+
+  let generate = run
+  (* let rand_len = rand_integer 10 *)
+  let rand_len = return 1
+
+  let string_of_rtt =
+    let pp_sum_type f1 f2 f3 pp = function
+        Sum_type.A x -> PP.fprintf pp "A %a" f1 x
+      | Sum_type.B x -> PP.fprintf pp "B %a" f2 x
+      | Sum_type.C x -> PP.fprintf pp "C %a" f3 x in
+    let print_rtta =
+      PP.pp_struct
+        [
+          "Complex_rtt.a1",
+          PP.pp_field (fun t -> t.a1)
+            (PP.pp_list (PP.pp_tuple2 PP.pp_int (PP.pp_array PP.pp_bool)));
+
+          "Complex_rtt.a2",
+          PP.pp_field (fun t -> t.a2)
+             (PP.pp_list (pp_sum_type PP.pp_int PP.pp_string PP.pp_int64));
+        ] in
+    let print_rttb pp t = PP.fprintf pp "{ ... }"
+    in
+      function
+        A t -> PP.ppfmt "Complex_rtt.A %a" print_rtta t
+      | B t -> PP.ppfmt "Complex_rtt.B %a" print_rttb t
+
+  let rtt_a =
+    let a1_elm =
+      rand_int >>= fun n ->
+      rand_array rand_len rand_bool >>= fun a ->
+        return (n, a) in
+    let a2_elm =
+      rand_choice
+        [
+          (rand_int >>= fun n -> return (Sum_type.A n));
+          (rand_string rand_len >>= fun s -> return (Sum_type.B s));
+          (rand_int64 >>= fun n -> return (Sum_type.C n))
+        ]
+    in
+      rand_list rand_len a1_elm >>= fun a1 ->
+      rand_list rand_len a2_elm >>= fun a2 ->
+      return (A { a1 = a1; a2 = a2 })
+
+  let complex_rtt = rand_choice [ rtt_a ]
+
+  let () = Register_test.register "RTT"
+    [
+      "complex" >:: begin fun () ->
+        for i = 0 to 10 do
+          let v = generate complex_rtt in
+          let enc = encode write_complex_rtt v in
+            try
+              assert_equal ~printer:string_of_rtt v (decode read_complex_rtt enc)
+            with e ->
+              assert_failure @@
+              sprintf "%s for\n %s\nencoded as\n%s\n%s"
+                (Printexc.to_string e)
+                (string_of_rtt v)
+                (PP.pp PP.pp_dec_bytes enc)
+                (PP.pp PP.pp_hex_bytes enc)
+        done
+      end;
+    ]
+end
+
 let () =
   Register_test.register "write composed types"
     [

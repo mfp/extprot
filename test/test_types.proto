@@ -21,3 +21,14 @@ message simple_sum = { v : sum_type<bool, byte, string> }
 message nested_message = { v : simple_sum; b : int }
 
 message lists_arrays = { lint : [int]; abool : [| bool |] }
+
+message complex_rtt =
+  A {
+    a1 : [(int * [|bool|])];
+    a2 : [ sum_type<int, string, long> ]
+    }
+| B {
+    b1 : bool;
+    b2 : (string * [int])
+  }
+
