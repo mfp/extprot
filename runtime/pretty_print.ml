@@ -1,4 +1,7 @@
 open Format
+open ExtString
+
+let (@@) f x = f x
 
 let fprintf = Format.fprintf
 
@@ -18,14 +21,14 @@ let ppfmt fmt =
 let rec fprintfs sep f pp = function
     [] -> ()
   | [x] -> fprintf pp "%a" f x
-  | x::l -> fprintf pp "%a%a%a" f x sep () (fprintfs sep f) l
+  | x::l -> fprintf pp ("%a" ^^ sep ^^ "%a") f x (fprintfs sep f) l
 
 let pp_list f pp l =
-  let pr_elems = fprintfs (fun pp () -> fprintf pp ";@ ") f in
+  let pr_elems = fprintfs ";@ " f in
     fprintf pp "[@[<1>@ %a@ @]]" pr_elems l
 
 let pp_array f pp l =
-  let pr_elems = fprintfs (fun pp () -> fprintf pp ";@ ") f in
+  let pr_elems = fprintfs ";@ " f in
     fprintf pp "[|@[<1>@ %a@ @]|]" pr_elems (Array.to_list l)
 
 let pp_struct fields pp t =
@@ -59,7 +62,19 @@ let pp_int pp = function
     n when n < 0 -> fprintf pp "(%d)" n
   | n -> pp_print_int pp n
 
+let pp_hex pp n = fprintf pp "0x%X" n
+
 let pp_bool = pp_print_bool
 let pp_char pp = fprintf pp "%C"
 let pp_float = pp_print_float
 let pp_int64 pp n = fprintf pp "%s" (Int64.to_string n)
+
+let pp_bytes f pp s =
+  fprintf pp "Bytes [@[<2> %a@]@ ]"
+    (fprintfs "@ " f)
+    (List.map Char.code @@ String.explode s)
+
+let pp_dec_bytes = pp_bytes pp_int
+
+let pp_hex_bytes = pp_bytes pp_hex
+
