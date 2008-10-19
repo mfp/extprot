@@ -39,20 +39,28 @@ let pp_struct fields pp t =
   in
     fprintf pp "{@[<2>@ %a @]}" pr_fields fields
 
-let pp_tuple2 f1 f2 pp (a, b) = fprintf pp "(@[<1>%a,@ %a@])" f1 a f2 b
+let constr_string = function
+    None -> ""
+  | Some c -> c ^ " "
 
-let pp_tuple3 f1 f2 f3 pp (a, b,c) =
-  fprintf pp "(@[<1>%a,@ %a,@ %a@])" f1 a f2 b f3 c
+let pp_tuple2 ?constr f1 f2 pp (a, b) =
+  fprintf pp "%s(@[<1>%a,@ %a@])" (constr_string constr) f1 a f2 b
 
-let pp_tuple4 f1 f2 f3 f4 pp (a, b, c, d) =
-  fprintf pp "(@[<1>%a,@ %a,@ %a,@ %a@])" f1 a f2 b f3 c f4 d
+let pp_tuple3 ?constr f1 f2 f3 pp (a, b,c) =
+  fprintf pp "%s(@[<1>%a,@ %a,@ %a@])"
+    (constr_string constr) f1 a f2 b f3 c
 
-let pp_tuple5 f1 f2 f3 f4 f5 pp (a, b, c, d, e) =
-  fprintf pp "(@[<1>%a,@ %a,@ %a,@ %a,@ %a@])" f1 a f2 b f3 c f4 d f5 e
+let pp_tuple4 ?constr f1 f2 f3 f4 pp (a, b, c, d) =
+  fprintf pp "%s(@[<1>%a,@ %a,@ %a,@ %a@])"
+    (constr_string constr) f1 a f2 b f3 c f4 d
 
-let pp_tuple6 f1 f2 f3 f4 f5 f6 pp (a, b, c, d, e, f) =
-  fprintf pp "(@[<1>%a,@ %a,@ %a,@ %a,@ %a,@ %a@])"
-    f1 a f2 b f3 c f4 d f5 e f6 f
+let pp_tuple5 ?constr f1 f2 f3 f4 f5 pp (a, b, c, d, e) =
+  fprintf pp "%s(@[<1>%a,@ %a,@ %a,@ %a,@ %a@])"
+    (constr_string constr) f1 a f2 b f3 c f4 d f5 e
+
+let pp_tuple6 ?constr f1 f2 f3 f4 f5 f6 pp (a, b, c, d, e, f) =
+  fprintf pp "%s(@[<1>%a,@ %a,@ %a,@ %a,@ %a,@ %a@])"
+    (constr_string constr) f1 a f2 b f3 c f4 d f5 e f6 f
 
 let pp_field fieldf f pp t = f pp (fieldf t)
 
