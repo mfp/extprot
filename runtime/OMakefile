@@ -3,6 +3,7 @@ EXTPROT_RUNTIME_OBJS[] =
 	codec
 	error
 	msg_buffer
+	pretty_print
 
 section
 	OCAMLFLAGS += -for-pack Extprot
