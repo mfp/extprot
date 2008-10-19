@@ -86,10 +86,13 @@ struct
           let enc = encode write_complex_rtt v in
             try
               assert_equal ~printer:string_of_rtt v (decode read_complex_rtt enc)
-            with e ->
+            with E.Error.Extprot_error (err, msg) ->
               assert_failure @@
-              sprintf "%s for\n %s\nencoded as\n%s\n%s"
-                (Printexc.to_string e)
+              sprintf "%s\nfor\n %s\nencoded as\n%s =\n%s"
+                (PP.pp
+                   (PP.pp_tuple2 ~constr:"Extprot_error"
+                      E.Error.pp_extprot_error PP.pp_string)
+                   (err, msg))
                 (string_of_rtt v)
                 (PP.pp PP.pp_dec_bytes enc)
                 (PP.pp PP.pp_hex_bytes enc)
