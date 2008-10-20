@@ -20,6 +20,8 @@ let check_bits64 check v n =
 
 let (@@) f x = f x
 
+let wrap_printer f x = String.concat "\n" [""; f x; ""]
+
 module Probabilistic =
 struct
   open Rand_monad.Rand
@@ -34,14 +36,14 @@ struct
   let decode f s = f @@ E.Codec.Reader.make s 0 (String.length s)
 
   let generate = run
-  (* let rand_len = rand_integer 10 *)
-  let rand_len = return 1
+  let rand_len = rand_integer 10
+  (* let rand_len = return 1 *)
 
   let string_of_rtt =
     let pp_sum_type f1 f2 f3 pp = function
-        Sum_type.A x -> PP.fprintf pp "A %a" f1 x
-      | Sum_type.B x -> PP.fprintf pp "B %a" f2 x
-      | Sum_type.C x -> PP.fprintf pp "C %a" f3 x in
+        Sum_type.A x -> PP.fprintf pp "Sum_type.A %a" f1 x
+      | Sum_type.B x -> PP.fprintf pp "Sum_type.B %a" f2 x
+      | Sum_type.C x -> PP.fprintf pp "Sum_type.C %a" f3 x in
     let print_rtta =
       PP.pp_struct
         [
@@ -78,14 +80,16 @@ struct
 
   let complex_rtt = rand_choice [ rtt_a ]
 
-  let () = Register_test.register "RTT"
+  let () = Register_test.register "roundtrip"
     [
       "complex" >:: begin fun () ->
-        for i = 0 to 10 do
+        for i = 0 to 5000 do
           let v = generate complex_rtt in
+          (* print_endline @@ string_of_rtt v; *)
           let enc = encode write_complex_rtt v in
             try
-              assert_equal ~printer:string_of_rtt v (decode read_complex_rtt enc)
+              assert_equal ~printer:(wrap_printer string_of_rtt)
+                v (decode read_complex_rtt enc)
             with E.Error.Extprot_error (err, msg) ->
               assert_failure @@
               sprintf "%s\nfor\n %s\nencoded as\n%s =\n%s"
