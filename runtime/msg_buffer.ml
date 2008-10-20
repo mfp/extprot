@@ -141,22 +141,27 @@ let write_positive_int b n =
   add_vint b 0; (* tag 0, ctyp 0, vlen 0 *)
   add_vint b n
 
+let (&!) = Int32.logand
+let (&!!) = Int64.logand
+let (>!) = Int32.shift_right
+let (>!!) = Int64.shift_right
+
 let write_int32 b n =
   add_vint b 2; (* tag 0, ctyp 1, vlen 0 *)
-  add_byte b (Int32.to_int (Int32.logand n 0xFFl));
-  add_byte b (Int32.to_int (Int32.logand (Int32.shift_right n 8) 0xFFl));
-  add_byte b (Int32.to_int (Int32.logand (Int32.shift_right n 16) 0xFFl));
-  add_byte b (Int32.to_int (Int32.logand (Int32.shift_right n 24) 0xFFl))
+  add_byte b (Int32.to_int (n &! 0xFFl));
+  add_byte b (Int32.to_int ((n >!8) &! 0xFFl));
+  add_byte b (Int32.to_int ((n >! 16) &! 0xFFl));
+  add_byte b (Int32.to_int ((n >! 24) &! 0xFFl))
 
 let write_int64_bits b n =
-  add_byte b (Int64.to_int (Int64.logand n 0xFFL));
-  add_byte b (Int64.to_int (Int64.logand (Int64.shift_right n 8) 0xFFL));
-  add_byte b (Int64.to_int (Int64.logand (Int64.shift_right n 16) 0xFFL));
-  add_byte b (Int64.to_int (Int64.logand (Int64.shift_right n 24) 0xFFL));
-  add_byte b (Int64.to_int (Int64.logand (Int64.shift_right n 32) 0xFFL));
-  add_byte b (Int64.to_int (Int64.logand (Int64.shift_right n 40) 0xFFL));
-  add_byte b (Int64.to_int (Int64.logand (Int64.shift_right n 48) 0xFFL));
-  add_byte b (Int64.to_int (Int64.logand (Int64.shift_right n 56) 0xFFL))
+  add_byte b (Int64.to_int (n &!! 0xFFL));
+  add_byte b (Int64.to_int ((n >!! 8)  &!! 0xFFL));
+  add_byte b (Int64.to_int ((n >!! 16) &!! 0xFFL));
+  add_byte b (Int64.to_int ((n >!! 24) &!! 0xFFL));
+  add_byte b (Int64.to_int ((n >!! 32) &!! 0xFFL));
+  add_byte b (Int64.to_int ((n >!! 40) &!! 0xFFL));
+  add_byte b (Int64.to_int ((n >!! 48) &!! 0xFFL));
+  add_byte b (Int64.to_int ((n >!! 56) &!! 0xFFL))
 
 let write_int64 b n =
   add_vint b 4; (* tag 0, ctyp 2, vlen 0 *)
