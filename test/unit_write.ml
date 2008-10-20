@@ -32,7 +32,7 @@ struct
       f b v;
       E.Msg_buffer.contents b
 
-  let decode f s = f @@ E.Codec.Reader.make s 0 (String.length s)
+  let decode f s = f @@ E.Reader.String_reader.make s 0 (String.length s)
 
   let generate = run
   let rand_len = rand_integer 10

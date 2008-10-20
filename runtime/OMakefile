@@ -4,6 +4,7 @@ EXTPROT_RUNTIME_OBJS[] =
 	error
 	msg_buffer
 	pretty_print
+	reader
 
 section
 	OCAMLFLAGS += -for-pack Extprot

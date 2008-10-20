@@ -416,7 +416,7 @@ let add_message_reader bindings msgname mexpr c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings mexpr in
   let module Mk_normal_reader =
-    Make_reader(struct let reader_module = <:ident< Extprot.Codec.Reader >> end) in
+    Make_reader(struct let reader_module = <:ident< Extprot.Reader.String_reader >> end) in
   let read_expr = Mk_normal_reader.read_message msgname llrec in
   let reader = <:str_item< value $lid:"read_" ^ msgname$ = fun s -> $read_expr$>> in
     { c with c_reader = Some reader }
