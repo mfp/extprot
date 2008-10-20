@@ -25,7 +25,6 @@ let wrap_printer f x = String.concat "\n" [""; f x; ""]
 module Probabilistic =
 struct
   open Rand_monad.Rand
-  open Test_types.Complex_rtt
   module PP = E.Pretty_print
 
   let encode f v =
@@ -48,18 +47,18 @@ struct
       PP.pp_struct
         [
           "Complex_rtt.a1",
-          PP.pp_field (fun t -> t.a1)
+          PP.pp_field (fun t -> t.Complex_rtt.a1)
             (PP.pp_list (PP.pp_tuple2 PP.pp_int (PP.pp_array PP.pp_bool)));
 
           "Complex_rtt.a2",
-          PP.pp_field (fun t -> t.a2)
+          PP.pp_field (fun t -> t.Complex_rtt.a2)
              (PP.pp_list (pp_sum_type PP.pp_int PP.pp_string PP.pp_int64));
         ] in
     let print_rttb pp t = PP.fprintf pp "{ ... }"
     in
       function
-        A t -> PP.ppfmt "Complex_rtt.A %a" print_rtta t
-      | B t -> PP.ppfmt "Complex_rtt.B %a" print_rttb t
+        Complex_rtt.A t -> PP.ppfmt "Complex_rtt.A %a" print_rtta t
+      | Complex_rtt.B t -> PP.ppfmt "Complex_rtt.B %a" print_rttb t
 
   let rtt_a =
     let a1_elm =
@@ -76,32 +75,53 @@ struct
     in
       rand_list rand_len a1_elm >>= fun a1 ->
       rand_list rand_len a2_elm >>= fun a2 ->
-      return (A { a1 = a1; a2 = a2 })
+      return (Complex_rtt.A { Complex_rtt.a1 = a1; a2 = a2 })
 
   let complex_rtt = rand_choice [ rtt_a ]
+
+  let check_roundtrip write read prettyprint v =
+    (* print_endline @@ string_of_rtt v; *)
+    let enc = encode write v in
+      try
+        assert_equal ~printer:(wrap_printer prettyprint) v (decode read enc)
+      with E.Error.Extprot_error (err, msg) ->
+        assert_failure @@
+        sprintf "%s\nfor\n %s\nencoded as\n%s =\n%s"
+          (PP.pp
+             (PP.pp_tuple2 ~constr:"Extprot_error"
+                E.Error.pp_extprot_error PP.pp_string)
+             (err, msg))
+          (prettyprint v)
+          (PP.pp PP.pp_dec_bytes enc)
+          (PP.pp PP.pp_hex_bytes enc)
 
   let () = Register_test.register "roundtrip"
     [
       "complex" >:: begin fun () ->
         for i = 0 to 5000 do
           let v = generate complex_rtt in
-          (* print_endline @@ string_of_rtt v; *)
-          let enc = encode write_complex_rtt v in
-            try
-              assert_equal ~printer:(wrap_printer string_of_rtt)
-                v (decode read_complex_rtt enc)
-            with E.Error.Extprot_error (err, msg) ->
-              assert_failure @@
-              sprintf "%s\nfor\n %s\nencoded as\n%s =\n%s"
-                (PP.pp
-                   (PP.pp_tuple2 ~constr:"Extprot_error"
-                      E.Error.pp_extprot_error PP.pp_string)
-                   (err, msg))
-                (string_of_rtt v)
-                (PP.pp PP.pp_dec_bytes enc)
-                (PP.pp PP.pp_hex_bytes enc)
+            check_roundtrip
+              Complex_rtt.write_complex_rtt Complex_rtt.read_complex_rtt
+              string_of_rtt v
         done
       end;
+
+      "integers" >:: begin fun () ->
+        let string_of_simple_int =
+          PP.pp
+            (PP.pp_struct
+               [ "Simple_int.v", PP.pp_field (fun t -> t.Simple_int.v) PP.pp_int ]) in
+        let check n =
+          check_roundtrip
+            Simple_int.write_simple_int Simple_int.read_simple_int
+            string_of_simple_int
+            { Simple_int.v = n }
+        in
+          List.iter check
+             [
+               0; 1; -1; max_int; min_int; min_int - min_int / 2;
+             ]
+      end
     ]
 end
 
