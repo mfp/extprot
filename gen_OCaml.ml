@@ -166,253 +166,258 @@ let list_mapi f l =
 
 let make_list f n = Array.to_list (Array.init f n)
 
-let read_field msgname constr_name name llty =
-  let _loc = loc "<generated code @ field_match_cases>" in
+module Make_reader
+         (RD : sig val reader_module : Ast.ident end) =
+struct
+  let read_field msgname constr_name name llty =
+    let _loc = loc "<generated code @ field_match_cases>" in
 
-  let rec read_elms f lltys_and_defs =
-    (* TODO: handle missing elms *)
-    let vars = List.rev @@ Array.to_list @@
-               Array.init (List.length lltys_and_defs) (sprintf "v%d")
-    in
-      List.fold_right
-        (fun (n, llty, default) e ->
-           let varname = sprintf "v%d" n in
-             match default with
-                 None ->
-                   <:expr<
-                     let $lid:varname$ =
-                       if nelms >= $int:string_of_int (n+1)$ then
-                         $read llty$
-                       else
-                         Extprot.Error.missing_element
-                           $str:msgname$ $str:constr_name$ $str:name$
-                           $int:string_of_int n$
-                     in $e$
-                   >>
-               | Some expr ->
-                   <:expr<
-                     let $lid:varname$ =
-                       if nelms >= $int:string_of_int (n+1)$ then
-                         $read llty$
-                       else $expr$
-                     in $e$
-                   >>)
-        (list_mapi (fun i (ty, default) -> (i, ty, default)) lltys_and_defs)
-        (f (List.rev vars))
+    let rec read_elms f lltys_and_defs =
+      (* TODO: handle missing elms *)
+      let vars = List.rev @@ Array.to_list @@
+                 Array.init (List.length lltys_and_defs) (sprintf "v%d")
+      in
+        List.fold_right
+          (fun (n, llty, default) e ->
+             let varname = sprintf "v%d" n in
+               match default with
+                   None ->
+                     <:expr<
+                       let $lid:varname$ =
+                         if nelms >= $int:string_of_int (n+1)$ then
+                           $read llty$
+                         else
+                           Extprot.Error.missing_element
+                             $str:msgname$ $str:constr_name$ $str:name$
+                             $int:string_of_int n$
+                       in $e$
+                     >>
+                 | Some expr ->
+                     <:expr<
+                       let $lid:varname$ =
+                         if nelms >= $int:string_of_int (n+1)$ then
+                           $read llty$
+                         else $expr$
+                       in $e$
+                     >>)
+          (list_mapi (fun i (ty, default) -> (i, ty, default)) lltys_and_defs)
+          (f (List.rev vars))
 
-  and read_tuple_elms lltys_and_defs =
-    let mk_tup vars =
-      exCom_of_list @@ List.map (fun v -> <:expr< $lid:v$ >>) vars
-    in read_elms mk_tup lltys_and_defs
+    and read_tuple_elms lltys_and_defs =
+      let mk_tup vars =
+        exCom_of_list @@ List.map (fun v -> <:expr< $lid:v$ >>) vars
+      in read_elms mk_tup lltys_and_defs
 
-  and read_sum_elms constr lltys =
-    let c = constr in
-    let mk_expr vars =
-      List.fold_left
-        (fun e var -> <:expr< $e$ $lid:var$ >>)
-        <:expr< $uid:String.capitalize c.const_type$.$uid:c.const_name$ >>
-        vars
-    in read_elms mk_expr lltys
+    and read_sum_elms constr lltys =
+      let c = constr in
+      let mk_expr vars =
+        List.fold_left
+          (fun e var -> <:expr< $e$ $lid:var$ >>)
+          <:expr< $uid:String.capitalize c.const_type$.$uid:c.const_name$ >>
+          vars
+      in read_elms mk_expr lltys
 
-  and lltys_without_defaults = List.map (fun x -> (x, None))
+    and lltys_without_defaults = List.map (fun x -> (x, None))
 
-  and read = function
-      Vint Bool -> <:expr< Extprot.Codec.Reader.read_bool s >>
-    | Vint Int -> <:expr< Extprot.Codec.Reader.read_rel_int s >>
-    | Vint Positive_int -> <:expr< Extprot.Codec.Reader.read_positive_int s>>
-    | Bitstring32 -> <:expr< Extprot.Codec.Reader.read_i32 s >>
-    | Bitstring64 Long -> <:expr< Extprot.Codec.Reader.read_i64 s >>
-    | Bitstring64 Float -> <:expr< Extprot.Codec.Reader.read_float s >>
-    | Bytes -> <:expr< Extprot.Codec.Reader.read_string s >>
-    | Tuple lltys ->
-        <:expr<
-          let t = Extprot.Codec.Reader.read_prefix s in
-            match Extprot.Codec.ll_type t with [
-                Extprot.Codec.Tuple ->
-                  let len = Extprot.Codec.Reader.read_vint s in
-                  let nelms = Extprot.Codec.Reader.read_vint s in
-                    $read_tuple_elms (lltys_without_defaults lltys)$
-              | _ -> Extprot.Error.bad_field_format
-                       $str:msgname$ $str:constr_name$ $str:name$
-            ]
-        >>
-    | Sum (constant, non_constant) ->
-        let constant_match_cases =
-          List.map
-            (fun c ->
-               <:match_case<
-                 $int:string_of_int c.const_tag$ ->
-                   $uid:String.capitalize c.const_type$.$lid:c.const_name$
-               >>)
-            constant
-          @ [ <:match_case<
-                tag -> Extprot.Error.unknown_field_tag
-                       $str:msgname$ $str:constr_name$ $str:name$ tag >> ] in
-
-        let nonconstant_match_cases =
-          let mc (c, lltys) =
-            <:match_case<
-               $int:string_of_int c.const_tag$ ->
-                    $read_sum_elms c (lltys_without_defaults lltys)$
-            >>
-          in List.map mc non_constant @
-             [ <:match_case<
-                 tag -> Extprot.Error.unknown_field_tag
-                        $str:msgname$ $str:constr_name$ $str:name$ tag >> ]
-        in
-
-        let maybe_match_case (constr, f, l) = match l with
-            [] | [_] (* catch-all *)-> None
-          | l ->
-              let expr =
-                <:expr< match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list l$ ] >>
-              in
-                Some <:match_case< Extprot.Codec.$uid:constr$ -> $f expr$ >> in
-
-        let wrap_non_constant e =
+    and read = function
+        Vint Bool -> <:expr< $id:RD.reader_module$.read_bool s >>
+      | Vint Int -> <:expr< $id:RD.reader_module$.read_rel_int s >>
+      | Vint Positive_int -> <:expr< $id:RD.reader_module$.read_positive_int s>>
+      | Bitstring32 -> <:expr< $id:RD.reader_module$.read_i32 s >>
+      | Bitstring64 Long -> <:expr< $id:RD.reader_module$.read_i64 s >>
+      | Bitstring64 Float -> <:expr< $id:RD.reader_module$.read_float s >>
+      | Bytes -> <:expr< $id:RD.reader_module$.read_string s >>
+      | Tuple lltys ->
           <:expr<
-            let len = Extprot.Codec.Reader.read_vint s in
-            let nelms = Extprot.Codec.Reader.read_vint s in $e$ >> in
-
-        let match_cases =
-          List.filter_map maybe_match_case
-            [
-              "Vint", (fun e -> e), constant_match_cases;
-              "Tuple", wrap_non_constant, nonconstant_match_cases;
-            ]
-        in
-
-          <:expr< let t = Extprot.Codec.Reader.read_prefix s in
-            match Extprot.Codec.ll_type t with [
-              $Ast.mcOr_of_list match_cases$
-              | _ -> Extprot.Error.bad_field_format
-                       $str:msgname$ $str:constr_name$ $str:name$
-            ]
+            let t = $id:RD.reader_module$.read_prefix s in
+              match Extprot.Codec.ll_type t with [
+                  Extprot.Codec.Tuple ->
+                    let len = $id:RD.reader_module$.read_vint s in
+                    let nelms = $id:RD.reader_module$.read_vint s in
+                      $read_tuple_elms (lltys_without_defaults lltys)$
+                | _ -> Extprot.Error.bad_field_format
+                         $str:msgname$ $str:constr_name$ $str:name$
+              ]
           >>
-    | Message name ->
-        <:expr< $uid:String.capitalize name$.$lid:"read_" ^ name$ s >>
-    | Htuple (kind, llty) ->
-        let e = match kind with
-            List ->
-              <:expr<
-                let rec loop acc = fun [
-                    0 -> List.rev acc
-                  | n -> let v = $read llty$ in loop [v :: acc] (n - 1)
-                ] in loop [] nelms
+      | Sum (constant, non_constant) ->
+          let constant_match_cases =
+            List.map
+              (fun c ->
+                 <:match_case<
+                   $int:string_of_int c.const_tag$ ->
+                     $uid:String.capitalize c.const_type$.$lid:c.const_name$
+                 >>)
+              constant
+            @ [ <:match_case<
+                  tag -> Extprot.Error.unknown_field_tag
+                         $str:msgname$ $str:constr_name$ $str:name$ tag >> ] in
+
+          let nonconstant_match_cases =
+            let mc (c, lltys) =
+              <:match_case<
+                 $int:string_of_int c.const_tag$ ->
+                      $read_sum_elms c (lltys_without_defaults lltys)$
               >>
-            | Array ->
-                <:expr<
-                  match nelms with [
-                      0 -> [||]
-                    | n ->
-                        let elm = $read llty$ in
-                        let a = Array.make nelms elm in begin
-                          for i = 1 to nelms - 1 do
-                            a.(i) := $read llty$
-                          done;
-                          a
-                        end
-                  ]
-                >>
-        in <:expr<
-              let t = Extprot.Codec.Reader.read_prefix s in
-                match Extprot.Codec.ll_type t with [
-                    Extprot.Codec.Htuple ->
-                      let len = Extprot.Codec.Reader.read_vint s in
-                      let nelms = Extprot.Codec.Reader.read_vint s in
-                        $e$
-                  | _ -> Extprot.Error.bad_field_format
-                           $str:msgname$ $str:constr_name$ $str:name$
-                ]
+            in List.map mc non_constant @
+               [ <:match_case<
+                   tag -> Extprot.Error.unknown_field_tag
+                          $str:msgname$ $str:constr_name$ $str:name$ tag >> ]
+          in
+
+          let maybe_match_case (constr, f, l) = match l with
+              [] | [_] (* catch-all *)-> None
+            | l ->
+                let expr =
+                  <:expr< match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list l$ ] >>
+                in
+                  Some <:match_case< Extprot.Codec.$uid:constr$ -> $f expr$ >> in
+
+          let wrap_non_constant e =
+            <:expr<
+              let len = $id:RD.reader_module$.read_vint s in
+              let nelms = $id:RD.reader_module$.read_vint s in $e$ >> in
+
+          let match_cases =
+            List.filter_map maybe_match_case
+              [
+                "Vint", (fun e -> e), constant_match_cases;
+                "Tuple", wrap_non_constant, nonconstant_match_cases;
+              ]
+          in
+
+            <:expr< let t = $id:RD.reader_module$.read_prefix s in
+              match Extprot.Codec.ll_type t with [
+                $Ast.mcOr_of_list match_cases$
+                | _ -> Extprot.Error.bad_field_format
+                         $str:msgname$ $str:constr_name$ $str:name$
+              ]
             >>
-  in
-    read llty
-
-let record_case msgname ?constr tag fields =
-  let _loc = Loc.mk "<generated code @ record_case>" in
-  let constr_name = Option.default "<default>" constr in
-
-  let read_field fieldno (name, mutabl, llty) ?default expr =
-    let rescue_match_case = match default with
-        None ->
-          <:match_case<
-            Extprot.Error.Extprot_error _ as e -> raise e
-          >>
-      | Some expr ->
-          <:match_case<
-            Extprot.Error.Extprot_error _ ->
-              do {
-                Extprot.Codec.skip_to s end_of_field;
-                $expr$
-              } >> in
-    let default_value = match default with
-        Some expr -> expr
-      | None ->
-          <:expr< Extprot.Error.missing_field
-                    $str:msgname$ $str:constr_name$ $str:name$ >> in
-    let end_of_field_expr = match default with
-        Some _ -> <:expr< Extprot.Codec.value_endpos s >>
-      | None -> <:expr< () >>
+      | Message name ->
+          <:expr< $uid:String.capitalize name$.$lid:"read_" ^ name$ s >>
+      | Htuple (kind, llty) ->
+          let e = match kind with
+              List ->
+                <:expr<
+                  let rec loop acc = fun [
+                      0 -> List.rev acc
+                    | n -> let v = $read llty$ in loop [v :: acc] (n - 1)
+                  ] in loop [] nelms
+                >>
+              | Array ->
+                  <:expr<
+                    match nelms with [
+                        0 -> [||]
+                      | n ->
+                          let elm = $read llty$ in
+                          let a = Array.make nelms elm in begin
+                            for i = 1 to nelms - 1 do
+                              a.(i) := $read llty$
+                            done;
+                            a
+                          end
+                    ]
+                  >>
+          in <:expr<
+                let t = $id:RD.reader_module$.read_prefix s in
+                  match Extprot.Codec.ll_type t with [
+                      Extprot.Codec.Htuple ->
+                        let len = $id:RD.reader_module$.read_vint s in
+                        let nelms = $id:RD.reader_module$.read_vint s in
+                          $e$
+                    | _ -> Extprot.Error.bad_field_format
+                             $str:msgname$ $str:constr_name$ $str:name$
+                  ]
+              >>
     in
+      read llty
+
+  let record_case msgname ?constr tag fields =
+    let _loc = Loc.mk "<generated code @ record_case>" in
+    let constr_name = Option.default "<default>" constr in
+
+    let read_field fieldno (name, mutabl, llty) ?default expr =
+      let rescue_match_case = match default with
+          None ->
+            <:match_case<
+              Extprot.Error.Extprot_error _ as e -> raise e
+            >>
+        | Some expr ->
+            <:match_case<
+              Extprot.Error.Extprot_error _ ->
+                do {
+                  Extprot.Codec.skip_to s end_of_field;
+                  $expr$
+                } >> in
+      let default_value = match default with
+          Some expr -> expr
+        | None ->
+            <:expr< Extprot.Error.missing_field
+                      $str:msgname$ $str:constr_name$ $str:name$ >> in
+      let end_of_field_expr = match default with
+          Some _ -> <:expr< Extprot.Codec.value_endpos s >>
+        | None -> <:expr< () >>
+      in
+        <:expr<
+           let $lid:name$ =
+             if nelms >= $int:string_of_int (fieldno + 1)$ then
+               let end_of_field = $end_of_field_expr$ in
+               try
+                 $read_field msgname constr_name name llty$
+               with [$rescue_match_case$]
+             else
+                 $default_value$
+           in $expr$
+        >> in
+
+    let field_assigns =
+      List.map
+        (fun (name, _, _) -> <:rec_binding< $lid:name$ = $lid:name$ >>)
+        fields in
+    (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
+    let record =
+      let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
+          None -> r
+        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+    let e =
+      List.fold_right
+        (fun (i, fieldinfo) e -> read_field i fieldinfo e)
+        (list_mapi (fun i x -> (i, x)) fields)
+        record
+    in
+      <:match_case<
+        $int:string_of_int tag$ ->
+          let len = $id:RD.reader_module$.read_vint s in
+          let nelms = $id:RD.reader_module$.read_vint s in
+            $e$
+            >>
+
+  let rec read_message msgname =
+    let _loc = Loc.mk "<generated code @ read_message>" in
+    let wrap match_cases =
       <:expr<
-         let $lid:name$ =
-           if nelms >= $int:string_of_int (fieldno + 1)$ then
-             let end_of_field = $end_of_field_expr$ in
-             try
-               $read_field msgname constr_name name llty$
-             with [$rescue_match_case$]
-           else
-               $default_value$
-         in $expr$
-      >> in
-
-  let field_assigns =
-    List.map
-      (fun (name, _, _) -> <:rec_binding< $lid:name$ = $lid:name$ >>)
-      fields in
-  (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
-  let record =
-    let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
-        None -> r
-      | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
-  let e =
-    List.fold_right
-      (fun (i, fieldinfo) e -> read_field i fieldinfo e)
-      (list_mapi (fun i x -> (i, x)) fields)
-      record
-  in
-    <:match_case<
-      $int:string_of_int tag$ ->
-        let len = Extprot.Codec.Reader.read_vint s in
-        let nelms = Extprot.Codec.Reader.read_vint s in
-          $e$
-          >>
-
-let rec read_message msgname =
-  let _loc = Loc.mk "<generated code @ read_message>" in
-  let wrap match_cases =
-    <:expr<
-      let t = Extprot.Codec.Reader.read_prefix s in begin
-        if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
-          Extprot.Error.bad_message_type $str:msgname$ else ();
-        match Extprot.Codec.ll_tag t with [
-          $match_cases$
-          | tag -> Extprot.Error.unknown_message_tag $str:msgname$ tag
-        ]
-      end
-    >>
-  in
-    function
-      Record_single fields -> wrap (record_case msgname 0 fields)
-    | Record_sum l ->
-        list_mapi (fun tag (constr, fields) -> record_case msgname ~constr tag fields) l |>
-          Ast.mcOr_of_list |> wrap
-
+        let t = $id:RD.reader_module$.read_prefix s in begin
+          if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
+            Extprot.Error.bad_message_type $str:msgname$ else ();
+          match Extprot.Codec.ll_tag t with [
+            $match_cases$
+            | tag -> Extprot.Error.unknown_message_tag $str:msgname$ tag
+          ]
+        end
+      >>
+    in
+      function
+        Record_single fields -> wrap (record_case msgname 0 fields)
+      | Record_sum l ->
+          list_mapi (fun tag (constr, fields) -> record_case msgname ~constr tag fields) l |>
+            Ast.mcOr_of_list |> wrap
+end
 
 let add_message_reader bindings msgname mexpr c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings mexpr in
-  let read_expr = read_message msgname llrec in
+  let module Mk_normal_reader =
+    Make_reader(struct let reader_module = <:ident< Extprot.Codec.Reader >> end) in
+  let read_expr = Mk_normal_reader.read_message msgname llrec in
   let reader = <:str_item< value $lid:"read_" ^ msgname$ = fun s -> $read_expr$>> in
     { c with c_reader = Some reader }
 
