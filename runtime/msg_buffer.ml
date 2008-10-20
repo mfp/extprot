@@ -110,7 +110,7 @@ let add_byte b n = add_char b (Char.unsafe_chr n)
 
 let add_vint b n =
   let n = ref n in
-    while !n >= 128 do
+    while !n land -128 <> 0 do
       add_byte b (128 + (!n land 0x7f));
       n := !n lsr 7
     done;
