@@ -81,7 +81,7 @@ struct
   let read_rel_int t =
     check_prim_type Vint t;
     let n = read_vint t in
-      if n land 1 = 0 then (n lsr 1) else ((-n) asr 1)
+      (n lsr 1) lxor (- (n land 1))
 
   let (+!) = Int32.add
   let (<!) = Int32.shift_left

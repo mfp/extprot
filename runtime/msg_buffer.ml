@@ -133,11 +133,27 @@ let write_bool b bool =
   add_vint b 0; (* tag 0, ctyp 0, vlen 0 *)
   add_vint b (if bool then 1 else 0)
 
-let zigzag_enc n = (n lsl 1) lxor (n asr 63)
-
 let write_relative_int b n =
-  add_vint b 0; (* tag 0, ctyp 0, vlen 0 *)
-  add_vint b (zigzag_enc n)
+  (* cannot just use (n lsl 1) lxor (n asr 63) because it causes problems with
+   * large negative values *)
+  let zigzag_pos n = n lsl 1 in
+  let zigzag_neg n =
+    (* this is OK because we're given a 63-bit int, so even after shift_left  it
+     * will fit in 64 bits *)
+    let n = Int64.of_int n in
+      Int64.logxor (Int64.shift_left n 1) (Int64.shift_right n 63)
+  in
+    add_vint b 0; (* tag 0, ctyp 0, vlen 0 *)
+    if n > 0 then
+      add_vint b (zigzag_pos n)
+    else
+      (* TODO: find more efficient way to do this *)
+      let n = ref (zigzag_neg n) in
+        while Int64.logand !n (-128L) <> 0L do
+          add_byte b (Int64.to_int (Int64.add 128L (Int64.logand !n 0x7fL)));
+          n := Int64.shift_right_logical !n 7
+        done;
+        add_byte b (Int64.to_int !n)
 
 let write_positive_int b n =
   add_vint b 0; (* tag 0, ctyp 0, vlen 0 *)
