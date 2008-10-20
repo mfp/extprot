@@ -167,7 +167,10 @@ let list_mapi f l =
 let make_list f n = Array.to_list (Array.init f n)
 
 module Make_reader
-         (RD : sig val reader_module : Ast.ident end) =
+         (RD : sig
+            val reader_module : Ast.ident
+            val reader_func : string -> string
+          end) =
 struct
   let read_field msgname constr_name name llty =
     let _loc = loc "<generated code @ field_match_cases>" in
@@ -293,7 +296,7 @@ struct
               ]
             >>
       | Message name ->
-          <:expr< $uid:String.capitalize name$.$lid:"read_" ^ name$ s >>
+          <:expr< $uid:String.capitalize name$.$lid:RD.reader_func name$ s >>
       | Htuple (kind, llty) ->
           let e = match kind with
               List ->
@@ -416,10 +419,22 @@ let add_message_reader bindings msgname mexpr c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings mexpr in
   let module Mk_normal_reader =
-    Make_reader(struct let reader_module = <:ident< Extprot.Reader.String_reader >> end) in
+    Make_reader(struct
+                  let reader_module = <:ident< Extprot.Reader.String_reader >>
+                  let reader_func = ((^) "read_")
+                end) in
+  let module Mk_io_reader =
+    Make_reader(struct
+                  let reader_module = <:ident< Extprot.Reader.IO_reader >>
+                  let reader_func = ((^) "io_read_")
+                end) in
   let read_expr = Mk_normal_reader.read_message msgname llrec in
-  let reader = <:str_item< value $lid:"read_" ^ msgname$ = fun s -> $read_expr$>> in
-    { c with c_reader = Some reader }
+  let ioread_expr = Mk_io_reader.read_message msgname llrec in
+  let reader =
+    <:str_item<
+      value $lid:"read_" ^ msgname$ s = $read_expr$;
+      value $lid:"io_read_" ^ msgname$ s = $ioread_expr$ >>
+  in { c with c_reader = Some reader }
 
 let vint_length = function
     n when n < 128 -> 1
