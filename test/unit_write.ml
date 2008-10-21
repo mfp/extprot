@@ -38,27 +38,7 @@ struct
   let rand_len = rand_integer 10
   (* let rand_len = return 1 *)
 
-  let string_of_rtt =
-    let pp_sum_type f1 f2 f3 pp = function
-        Sum_type.A x -> PP.fprintf pp "Sum_type.A %a" f1 x
-      | Sum_type.B x -> PP.fprintf pp "Sum_type.B %a" f2 x
-      | Sum_type.C x -> PP.fprintf pp "Sum_type.C %a" f3 x in
-    let print_rtta =
-      PP.pp_struct
-        [
-          "Complex_rtt.a1",
-          PP.pp_field (fun t -> t.Complex_rtt.a1)
-            (PP.pp_list (PP.pp_tuple2 PP.pp_int (PP.pp_array PP.pp_bool)));
-
-          "Complex_rtt.a2",
-          PP.pp_field (fun t -> t.Complex_rtt.a2)
-             (PP.pp_list (pp_sum_type PP.pp_int PP.pp_string PP.pp_int64));
-        ] in
-    let print_rttb pp t = PP.fprintf pp "{ ... }"
-    in
-      function
-        Complex_rtt.A t -> PP.ppfmt "Complex_rtt.A %a" print_rtta t
-      | Complex_rtt.B t -> PP.ppfmt "Complex_rtt.B %a" print_rttb t
+  let string_of_rtt = PP.pp Complex_rtt.pp_complex_rtt
 
   let rtt_a =
     let a1_elm =
@@ -80,7 +60,7 @@ struct
   let complex_rtt = rand_choice [ rtt_a ]
 
   let check_roundtrip write read prettyprint v =
-    (* print_endline @@ string_of_rtt v; *)
+    (* print_endline @@ prettyprint v; *)
     let enc = encode write v in
       try
         assert_equal ~printer:(wrap_printer prettyprint) v (decode read enc)
@@ -107,14 +87,10 @@ struct
       end;
 
       "integers" >:: begin fun () ->
-        let string_of_simple_int =
-          PP.pp
-            (PP.pp_struct
-               [ "Simple_int.v", PP.pp_field (fun t -> t.Simple_int.v) PP.pp_int ]) in
         let check n =
           check_roundtrip
             Simple_int.write_simple_int Simple_int.read_simple_int
-            string_of_simple_int
+            (PP.pp Simple_int.pp_simple_int)
             { Simple_int.v = n }
         in
           List.iter check
