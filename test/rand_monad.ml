@@ -20,6 +20,7 @@ sig
   val rand_integer : int -> int t
   val rand_int : int t
   val rand_int64 : Int64.t t
+  val rand_float : float t
   val rand_string : int t -> string t
   val rand_list : int t -> 'a t -> 'a list t
   val rand_array : int t -> 'a t -> 'a array t
@@ -56,6 +57,8 @@ struct
     Int64.sub (R.int64 Int64.max_int) (R.int64 Int64.max_int)
 
   let rand_int64 = random gen_int64 ()
+
+  let rand_float = random (fun () -> Int64.float_of_bits (gen_int64 ())) ()
 
   let rand_string len =
     (* TODO: fill string with random stuff *)
