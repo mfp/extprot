@@ -11,8 +11,18 @@ type container = {
   c_name : string;
   c_types : Ast.str_item option;
   c_reader : Ast.str_item option;
+  c_io_reader : Ast.str_item option;
   c_writer : Ast.str_item option;
 }
+
+let empty_container name ty_str_item =
+  {
+    c_name = name;
+    c_types = Some ty_str_item;
+    c_reader = None;
+    c_io_reader = None;
+    c_writer = None
+  }
 
 let (|>) x f = f x
 let (@@) f x = f x
@@ -89,12 +99,7 @@ let generate_container bindings =
 
   in function
       Message_decl (msgname, mexpr) ->
-        Some {
-          c_name = msgname;
-          c_types = Some (message_types msgname mexpr);
-          c_reader = None;
-          c_writer = None
-        }
+        Some (empty_container msgname (message_types msgname mexpr))
     | Type_decl (name, params, texpr) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
             `Sum s -> begin
@@ -123,12 +128,7 @@ let generate_container bindings =
         let params =
           List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params
         in
-          Some {
-            c_name = name;
-            c_types = Some <:str_item< type $typedecl name ~params ty$ >>;
-            c_reader = None;
-            c_writer = None
-          }
+          Some (empty_container name <:str_item< type $typedecl name ~params ty$ >>)
 
 let loc = Camlp4.PreCast.Loc.mk
 
@@ -152,6 +152,7 @@ let generate_code containers =
        module $String.capitalize c.c_name$ = struct
          $maybe_str_item c.c_types$;
          $maybe_str_item c.c_reader$;
+         $maybe_str_item c.c_io_reader$;
          $maybe_str_item c.c_writer$
        end >>
   in string_of_ast (fun o -> o#implem)
@@ -423,18 +424,25 @@ let add_message_reader bindings msgname mexpr c =
                   let reader_module = <:ident< Extprot.Reader.String_reader >>
                   let reader_func = ((^) "read_")
                 end) in
+  let read_expr = Mk_normal_reader.read_message msgname llrec in
+    {
+      c with c_reader =
+         Some <:str_item< value $lid:"read_" ^ msgname$ s = $read_expr$ >>
+    }
+
+let add_message_io_reader bindings msgname mexpr c =
+  let _loc = Loc.mk "<generated code @ add_message_io_reader>" in
+  let llrec = Gencode.low_level_msg_def bindings mexpr in
   let module Mk_io_reader =
     Make_reader(struct
                   let reader_module = <:ident< Extprot.Reader.IO_reader >>
                   let reader_func = ((^) "io_read_")
                 end) in
-  let read_expr = Mk_normal_reader.read_message msgname llrec in
   let ioread_expr = Mk_io_reader.read_message msgname llrec in
-  let reader =
-    <:str_item<
-      value $lid:"read_" ^ msgname$ s = $read_expr$;
-      value $lid:"io_read_" ^ msgname$ s = $ioread_expr$ >>
-  in { c with c_reader = Some reader }
+    {
+      c with c_io_reader =
+        Some <:str_item< value $lid:"io_read_" ^ msgname$ s = $ioread_expr$ >>
+    }
 
 let vint_length = function
     n when n < 128 -> 1
@@ -574,3 +582,14 @@ let add_message_writer bindings msgname mexpr c =
   let writer = <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$ >> in
     { c with c_writer = Some writer }
 
+let msgdecl_generators =
+  [
+    "reader", add_message_reader;
+    "io_reader", add_message_io_reader;
+    "writer", add_message_writer;
+  ]
+
+let typedecl_generators =
+  [
+
+  ]

@@ -189,13 +189,19 @@ let low_level_msg_def bindings (msg : message_expr) =
 let collect_bindings =
   List.fold_left (fun m decl -> SMap.add (declaration_name decl) decl m) SMap.empty
 
+type 'container msgdecl_generator =
+    bindings -> string -> message_expr -> 'container -> 'container
+
+type 'container typedecl_generator =
+    bindings -> string -> type_param list -> type_expr -> 'container -> 'container
+
 module type GENCODE =
 sig
   type container
 
   val generate_container : bindings -> declaration -> container option
-  val add_message_reader : bindings -> string -> message_expr -> container -> container
-  val add_message_writer : bindings -> string -> message_expr -> container -> container
+  val msgdecl_generators : (string * container msgdecl_generator) list
+  val typedecl_generators : (string * container typedecl_generator) list
   val generate_code : container list -> string
 end
 
@@ -205,20 +211,34 @@ module Make(Gen : GENCODE) =
 struct
   open Gen
 
-  let generate_code (decls : declaration list) =
+  let generate_code ?(generators : string list option) (decls : declaration list) =
+    let use_generator name = match generators with
+        None -> true
+      | Some l -> List.mem name l in
+
     let bindings = collect_bindings decls in
-      List.filter_map
-        (fun decl ->
-           match generate_container bindings decl with
-               None -> None
-             | Some cont ->
-                 match decl with
-                     Type_decl _ -> Some cont
-                   | Message_decl (name, expr) ->
-                       Some (add_message_reader bindings name expr cont |>
-                               add_message_writer bindings name expr))
-        decls
-    |> generate_code
+      decls |>
+      List.filter_map begin fun decl ->
+        generate_container bindings decl |>
+          Option.map begin fun cont ->
+            match decl with
+               Type_decl (name, params, expr) ->
+                 List.fold_left
+                   (fun cont (gname, f) ->
+                      if use_generator gname then f bindings name params expr cont
+                      else cont)
+                   cont
+                   Gen.typedecl_generators
+             | Message_decl (name, expr) ->
+                 List.fold_left
+                   (fun cont (gname, f) ->
+                      if use_generator gname then f bindings name expr cont
+                      else cont)
+                   cont
+                   Gen.msgdecl_generators
+          end
+      end |>
+      Gen.generate_code
 end
 
 module Prettyprint =
