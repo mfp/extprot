@@ -246,8 +246,9 @@ struct
           in
             <:match_case<
               $uid:const$ $paSem_of_lidlist _loc params$ ->
-                $pp_poly_texpr_core (`Tuple ptexprs)$
-                  pp $exSem_of_lidlist _loc params$
+                $pp_func "fprintf"$ pp
+                $str:String.capitalize tyname ^ "." ^ const ^ " %a"$
+                $pp_poly_texpr_core (`Tuple ptexprs)$ $exSem_of_lidlist _loc params$
             >> in
         let constr_case constr =
           <:match_case<
