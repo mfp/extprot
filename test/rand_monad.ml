@@ -71,8 +71,12 @@ struct
   let rand_float = random (fun () -> Int64.float_of_bits (gen_int64 ())) ()
 
   let rand_string len =
-    (* TODO: fill string with random stuff *)
-    len >>= fun n -> return (String.create n)
+    len >>= fun n ->
+      let s = String.create n in
+      let rec loop = function
+          n when n < 0 -> return s
+        | n -> rand_integer 255 >>= fun c -> s.[n] <- Char.chr c; loop (n - 1)
+      in loop (n - 1)
 
   let rand_int =
     random
