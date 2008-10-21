@@ -37,7 +37,7 @@ let pp_struct fields pp t =
     | [name, f] -> fprintf pp "@[<1>%s@ =@ %a@]" name f t
     | (name, f)::l -> fprintf pp "@[<1>%s@ =@ %a@];@ %a" name f t pr_fields l
   in
-    fprintf pp "{@[<2>@ %a @]}" pr_fields fields
+    fprintf pp "{@[<1>@ %a @]}" pr_fields fields
 
 let constr_string = function
     None -> ""
@@ -75,7 +75,9 @@ let pp_hex pp n = fprintf pp "0x%X" n
 let pp_bool = pp_print_bool
 let pp_char pp = fprintf pp "%C"
 let pp_float = pp_print_float
-let pp_int64 pp n = fprintf pp "%s" (Int64.to_string n)
+let pp_int64 pp n =
+  let fmt = if n < 0L then format_of_string "(%s)" else format_of_string "%s" in
+    fprintf pp fmt (Int64.to_string n)
 
 let pp_bytes f pp s =
   fprintf pp "Bytes [@[<2> %a@]@ ]"
