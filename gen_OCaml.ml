@@ -12,6 +12,7 @@ type container = {
   c_types : Ast.str_item option;
   c_reader : Ast.str_item option;
   c_io_reader : Ast.str_item option;
+  c_pretty_printer : Ast.str_item option;
   c_writer : Ast.str_item option;
 }
 
@@ -21,6 +22,7 @@ let empty_container name ty_str_item =
     c_types = Some ty_str_item;
     c_reader = None;
     c_io_reader = None;
+    c_pretty_printer = None;
     c_writer = None
   }
 
@@ -36,6 +38,12 @@ let foldr1 msg f g = function
   | l -> match List.rev l with
         [] -> assert false
       | hd::tl -> List.fold_left (fun s x -> g x s) (f hd) tl
+
+let paSem_of_lidlist _loc l =
+  Ast.paSem_of_list @@ List.map (fun s -> <:patt< $lid:s$>>) l
+
+let exSem_of_lidlist _loc l =
+  Ast.exSem_of_list @@ List.map (fun s -> <:expr< $lid:s$>>) l
 
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
@@ -151,6 +159,7 @@ let generate_code containers =
     <:str_item<
        module $String.capitalize c.c_name$ = struct
          $maybe_str_item c.c_types$;
+         $maybe_str_item c.c_pretty_printer$;
          $maybe_str_item c.c_reader$;
          $maybe_str_item c.c_io_reader$;
          $maybe_str_item c.c_writer$
@@ -166,6 +175,100 @@ let list_mapi f l =
     List.map (fun x -> incr i; f !i x) l
 
 let make_list f n = Array.to_list (Array.init f n)
+
+module Pretty_print =
+struct
+  let _loc = Loc.mk "Gen_OCaml.Pretty_print"
+
+  let expr_of_list l =
+    List.fold_right (fun x l -> <:expr< [ $x$ :: $l$ ] >>) l <:expr< [] >>
+
+  let pp_func name = <:expr< Extprot.Pretty_print.$lid:name$ >>
+
+  let rec pp_message bindings msgname = function
+      `Record l ->
+        let pp_field (name, _, tyexpr) =
+          <:expr<
+            ( $str:String.capitalize msgname ^ "." ^ name$,
+              $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_texpr bindings tyexpr$ )
+          >> in
+        let pp_fields = List.map pp_field l in
+          <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
+    | `Sum l ->
+        let match_case (const, mexpr) =
+          <:match_case<
+            $uid:const$ t -> $pp_message bindings msgname (mexpr :> message_expr)$ t>>
+        in <:expr< fun [ $Ast.mcOr_of_list (List.map match_case l)$ ] >>
+
+  and pp_texpr bindings texpr =
+    type_expr texpr |> reduce_to_poly_texpr_core bindings |> pp_poly_texpr_core
+
+  and pp_poly_texpr_core = function
+      `Bool -> pp_func "pp_bool"
+    | `Byte -> pp_func "pp_int"
+    | `Int _ -> pp_func "pp_int"
+    | `Long_int -> pp_func "pp_int64"
+    | `Float -> pp_func "pp_float"
+    | `String -> pp_func "pp_string"
+    | `List ty -> <:expr< $pp_func "pp_list"$ $pp_poly_texpr_core ty$ >>
+    | `Array ty -> <:expr< $pp_func "pp_array"$ $pp_poly_texpr_core ty$ >>
+    | `Tuple [ty] -> pp_poly_texpr_core ty
+    | `Tuple l ->
+        List.fold_left
+          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
+          (pp_func ("pp_tuple" ^ string_of_int (List.length l)))
+          l
+    | `Type (name, args) ->
+        List.fold_left
+          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
+          <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
+          args
+    | `Type_arg n -> <:expr< $lid:"pp_" ^ n$ >>
+
+  let add_msgdecl_pretty_printer bindings msgname mexpr c =
+    let expr = pp_message bindings msgname mexpr in
+      { c with c_pretty_printer =
+          Some <:str_item< value $lid:"pp_" ^ msgname$ pp = $expr$ >> }
+
+  let add_typedecl_pretty_printer bindings tyname typarams texpr c =
+    let wrap expr =
+      List.fold_right
+        (fun typaram e ->
+           <:expr< fun $lid:"pp_" ^ type_param_name typaram$ -> $e$ >>)
+        typarams
+        expr in
+
+    let expr = match poly_beta_reduce_texpr bindings texpr with
+      `Sum s -> begin
+        let constr_ptexprs_case (const, ptexprs) =
+          let params = Array.to_list @@
+                       Array.init (List.length ptexprs) (sprintf "v%d")
+          in
+            <:match_case<
+              $uid:const$ $paSem_of_lidlist _loc params$ ->
+                $pp_poly_texpr_core (`Tuple ptexprs)$
+                  pp $exSem_of_lidlist _loc params$
+            >> in
+        let constr_case constr =
+          <:match_case<
+              $uid:constr$ -> $pp_func "fprintf"$ pp
+                                $str:String.capitalize tyname ^ "." ^ constr$
+          >> in
+        let cases = List.concat
+                      [
+                        List.map constr_case s.constant;
+                        List.map constr_ptexprs_case s.non_constant;
+                      ]
+        in <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
+      end
+      | #poly_type_expr_core ->
+          reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
+    in
+      { c with c_pretty_printer =
+          Some <:str_item< value $lid:"pp_" ^ tyname$ = $wrap expr$ >> }
+
+end
+
 
 module Make_reader
          (RD : sig
@@ -587,9 +690,10 @@ let msgdecl_generators =
     "reader", add_message_reader;
     "io_reader", add_message_io_reader;
     "writer", add_message_writer;
+    "pretty_printer", Pretty_print.add_msgdecl_pretty_printer;
   ]
 
 let typedecl_generators =
   [
-
+    "pretty_printer", Pretty_print.add_typedecl_pretty_printer;
   ]
