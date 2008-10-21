@@ -40,24 +40,30 @@ struct
 
   let string_of_rtt = PP.pp Complex_rtt.pp_complex_rtt
 
+  let rand_sum_type a b c =
+    rand_choice
+      [
+        (a >>= fun n -> return (Sum_type.A n));
+        (b >>= fun n -> return (Sum_type.B n));
+        (c >>= fun n -> return (Sum_type.C n))
+      ]
+
   let rtt_a =
     let a1_elm =
       rand_int >>= fun n ->
       rand_array rand_len rand_bool >>= fun a ->
         return (n, a) in
-    let a2_elm =
-      rand_choice
-        [
-          (rand_int >>= fun n -> return (Sum_type.A n));
-          (rand_string rand_len >>= fun s -> return (Sum_type.B s));
-          (rand_int64 >>= fun n -> return (Sum_type.C n))
-        ]
-    in
+    let a2_elm = rand_sum_type rand_int (rand_string rand_len) rand_int64 in
       rand_list rand_len a1_elm >>= fun a1 ->
       rand_list rand_len a2_elm >>= fun a2 ->
       return (Complex_rtt.A { Complex_rtt.a1 = a1; a2 = a2 })
 
-  let complex_rtt = rand_choice [ rtt_a ]
+  let rtt_b =
+    rand_bool >>= fun b1 ->
+    rand_tuple2 (rand_string rand_len) (rand_list rand_len rand_int) >>= fun b2 ->
+      return (Complex_rtt.B { Complex_rtt.b1 = b1; b2 = b2 })
+
+  let complex_rtt = rand_choice [ rtt_a; rtt_b ]
 
   let check_roundtrip write read prettyprint v =
     (* print_endline @@ prettyprint v; *)
@@ -75,9 +81,11 @@ struct
           (PP.pp PP.pp_dec_bytes enc)
           (PP.pp PP.pp_hex_bytes enc)
 
+  let iterations = 25000
+
   let () = Register_test.register "roundtrip"
     [
-      "complex" >:: begin fun () ->
+      "complex type" >:: begin fun () ->
         for i = 0 to 5000 do
           let v = generate complex_rtt in
             check_roundtrip
@@ -86,7 +94,7 @@ struct
         done
       end;
 
-      "integers" >:: begin fun () ->
+      "integer" >:: begin fun () ->
         let check n =
           check_roundtrip
             Simple_int.write_simple_int Simple_int.read_simple_int
@@ -96,8 +104,93 @@ struct
           List.iter check
              [
                0; 1; -1; max_int; min_int; min_int - min_int / 2;
-             ]
-      end
+             ];
+          for i = 0 to iterations do
+            check (generate rand_int)
+          done
+      end;
+
+      "bool" >:: begin fun () ->
+        let check v =
+          check_roundtrip
+            Simple_bool.write_simple_bool Simple_bool.read_simple_bool
+            (PP.pp Simple_bool.pp_simple_bool)
+            { Simple_bool.v = v }
+        in check true; check false
+      end;
+
+      "byte" >:: begin fun () ->
+        let check v =
+          check_roundtrip
+            Simple_byte.write_simple_byte Simple_byte.read_simple_byte
+            (PP.pp Simple_byte.pp_simple_byte)
+            { Simple_byte.v = v }
+        in for i = 0 to 255 do check i done
+      end;
+
+      "long" >:: begin fun () ->
+        let check v =
+          check_roundtrip
+            Simple_long.write_simple_long Simple_long.read_simple_long
+            (PP.pp Simple_long.pp_simple_long)
+            { Simple_long.v = v }
+        in for i = 0 to iterations do check (generate rand_int64) done
+      end;
+
+      "float" >:: begin fun () ->
+        let check v =
+          try
+            check_roundtrip
+              Simple_float.write_simple_float Simple_float.read_simple_float
+              (PP.pp Simple_float.pp_simple_float)
+              { Simple_float.v = v }
+          with e -> match classify_float v with
+              FP_nan -> ()
+            | _ -> raise e
+        in for i = 0 to iterations do check (generate rand_float) done
+      end;
+
+      "string" >:: begin fun () ->
+        let check v =
+          check_roundtrip
+            Simple_string.write_simple_string Simple_string.read_simple_string
+            (PP.pp Simple_string.pp_simple_string)
+            { Simple_string.v = v }
+        in for i = 0 to iterations do
+          check (generate (rand_string (rand_integer 10)))
+        done
+      end;
+
+      "sum type" >:: begin fun () ->
+        let check v =
+          check_roundtrip
+            Simple_sum.write_simple_sum Simple_sum.read_simple_sum
+            (PP.pp Simple_sum.pp_simple_sum)
+            { Simple_sum.v = v } in
+        let rand_simple_sum =
+          rand_sum_type rand_bool (rand_integer 255) (rand_string rand_len)
+        in
+          for i = 0 to iterations do
+            check (generate rand_simple_sum)
+          done
+      end;
+
+      "lists and arrays" >:: begin fun () ->
+        let check v =
+          check_roundtrip
+            Lists_arrays.write_lists_arrays Lists_arrays.read_lists_arrays
+            (PP.pp Lists_arrays.pp_lists_arrays)
+            v in
+        let rand_lists_arrays =
+          rand_list rand_len (rand_integer 255) >>= fun lint ->
+          rand_array rand_len rand_bool >>= fun abool ->
+            return { Lists_arrays.lint = lint; abool = abool }
+        in
+          for i = 0 to iterations do
+            check (generate rand_lists_arrays)
+          done
+      end;
+
     ]
 end
 
