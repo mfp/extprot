@@ -60,4 +60,15 @@ struct
       | _ -> raise End_of_file
 
   INCLUDE "reader_impl.ml"
+  DEFINE EOF_wrap(f, x) = try f x with IO.No_more_input -> raise End_of_file
+
+  let read_prefix t = EOF_wrap(read_prefix, t)
+  let read_vint t = EOF_wrap(read_vint, t)
+  let read_bool t = EOF_wrap(read_bool, t)
+  let read_rel_int t = EOF_wrap(read_rel_int, t)
+  let read_positive_int t = EOF_wrap(read_positive_int, t)
+  let read_i32 t = EOF_wrap(read_i32, t)
+  let read_i64 t = EOF_wrap(read_i64, t)
+  let read_float t = EOF_wrap(read_float, t)
+  let read_string t = EOF_wrap(read_string, t)
 end
