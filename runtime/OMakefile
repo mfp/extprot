@@ -2,6 +2,7 @@
 EXTPROT_RUNTIME_OBJS[] =
 	codec
 	error
+	inspect_msg
 	monad
 	msg_buffer
 	pretty_print
