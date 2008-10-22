@@ -68,11 +68,12 @@ struct
   let check_roundtrip write read prettyprint v =
     (* print_endline @@ prettyprint v; *)
     let enc = encode write v in
+      (* print_endline @@ PP.pp E.Inspect_msg.inspect (IO.input_string enc); *)
       try
         assert_equal ~printer:(wrap_printer prettyprint) v (decode read enc)
       with E.Error.Extprot_error (err, msg) ->
         assert_failure @@
-        sprintf "%s\nfor\n %s\nencoded as\n%s =\n%s"
+        sprintf "%s\nfor\n %s\nencoded as\n%s =\n%s =\n%s\n"
           (PP.pp
              (PP.pp_tuple2 ~constr:"Extprot_error"
                 E.Error.pp_extprot_error PP.pp_string)
@@ -80,6 +81,7 @@ struct
           (prettyprint v)
           (PP.pp PP.pp_dec_bytes enc)
           (PP.pp PP.pp_hex_bytes enc)
+          (PP.pp E.Inspect_msg.inspect (IO.input_string enc))
 
   let iterations = 25000
 
