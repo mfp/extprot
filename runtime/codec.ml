@@ -27,4 +27,16 @@ let ll_type prefix = match prefix land 0xf with
   | 5 (* ctyp 2 *) -> Htuple
   | _ -> Error.bad_format ()
 
+let tuple_prefix tag = (0x01 lor (tag lsl 4))  (* vlen:1 ctyp:0 *)
+let htuple_prefix tag = (0x05 lor (tag lsl 4)) (* vlen:1 ctyp:2 *)
+let const_prefix tag = (tag lsl 4)             (* vlen:0 ctyp:0 *)
+
+(* all the following for tag 0 *)
+let bool_prefix = 0                            (* ctyp 0, vlen 0 *)
+let relative_int_prefix = 0                    (* ctyp 0, vlen 0 *)
+let positive_int_prefix = 0                    (* ctyp 0, vlen 0 *)
+let float_prefix = 4                           (* ctyp 2, vlen 0 *)
+let int64_prefix = 4                           (* ctyp 2, vlen 0 *)
+let string_prefix = 3                          (* ctyp 1, vlen 1 *)
+
 let ll_tag prefix = prefix lsr 4

@@ -116,29 +116,23 @@ let add_vint b n =
     done;
     add_byte b !n
 
-let add_tuple_prefix b tag =
-  (* vlen:1 ctyp:0 *)
-  add_vint b (0x01 lor (tag lsl 4))
+let add_tuple_prefix b tag = add_vint b (Codec.tuple_prefix tag)
 
-let add_htuple_prefix b tag =
-  (* vlen:1 ctyp:2 *)
-  add_vint b (0x05 lor (tag lsl 4))
+let add_htuple_prefix b tag = add_vint b (Codec.htuple_prefix tag)
 
 (* FIXME: review *)
-let add_const_prefix b tag =
-  (* vlen:0 ctyp:0 *)
-  add_vint b (tag lsl 4)
+let add_const_prefix b tag = add_vint b (Codec.const_prefix tag)
 
 let write_bool b bool =
-  add_vint b 0; (* tag 0, ctyp 0, vlen 0 *)
+  add_vint b Codec.bool_prefix;
   add_vint b (if bool then 1 else 0)
 
 let write_relative_int b n =
-  add_vint b 0; (* tag 0, ctyp 0, vlen 0 *)
+  add_vint b Codec.relative_int_prefix;
   add_vint b ((n lsl 1) lxor (n asr 63))
 
 let write_positive_int b n =
-  add_vint b 0; (* tag 0, ctyp 0, vlen 0 *)
+  add_vint b Codec.positive_int_prefix;
   add_vint b n
 
 let (&!) = Int32.logand
@@ -164,12 +158,14 @@ let write_int64_bits b n =
   add_byte b (Int64.to_int ((n >!! 56) &!! 0xFFL))
 
 let write_int64 b n =
-  add_vint b 4; (* tag 0, ctyp 2, vlen 0 *)
+  add_vint b Codec.int64_prefix;
   write_int64_bits b n
 
-let write_float b fl = write_int64 b (Int64.bits_of_float fl)
+let write_float b fl =
+  add_vint b Codec.float_prefix;
+  write_int64_bits b (Int64.bits_of_float fl)
 
 let write_string b s =
-  add_vint b 0x3; (* tag 0, ctyp 1, vlen 1 *)
+  add_vint b Codec.string_prefix;
   add_vint b (String.length s);
   add_string b s
