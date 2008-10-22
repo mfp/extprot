@@ -15,6 +15,9 @@ CamlSources(mods) =
 	foreach(mod, $(mods))
 		$(addsuffixes .cmo .cmi .cmx .sig $(EXT_OBJ), $(mod)):
 
+CamlTargets(mod) =
+	return($(addsuffixes .cmo .cmi .cmx .o, $(mod)))
+
 .SUBDIRS: runtime test
 
 EXTPROT_OBJS[] =

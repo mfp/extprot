@@ -12,6 +12,7 @@ EXTPROT_RUNTIME_OBJS[] =
 section
 	OCAMLFLAGS += -for-pack Extprot
 	CamlSources($(EXTPROT_RUNTIME_OBJS))
+	$(CamlTargets reader): reader_impl.ml
 
 OCamlPackage(extprot, $(EXTPROT_RUNTIME_OBJS))
 OCamlLibrary(extprot, extprot)

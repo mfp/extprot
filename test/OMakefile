@@ -17,7 +17,7 @@ LocalOCamlGeneratedFiles(test_types.ml)
 test_types.ml: $(GENERATOR) test_types.proto
     $(GENERATOR) test_types.proto > $@
 
-test_types.cmo test_types.cmx test_types.cmi test_types.o: $(ROOT)/runtime/extprot.cmxa
+$(CamlTargets test_types): $(ROOT)/runtime/extprot.cmxa
 
 OCamlProgram(test, register_test $(TESTS) test)
 
