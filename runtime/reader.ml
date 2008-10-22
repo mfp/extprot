@@ -14,8 +14,20 @@ sig
   val read_i64 : t -> Int64.t
   val read_float : t -> float
   val read_string : t -> string
+
+  val skip_value : t -> prefix -> unit
 end
 
+DEFINE Read_vint(t) =
+  let b = ref (read_byte t) in
+  let x = ref 0 in
+  let e = ref 0 in
+    while !b >= 128 do
+      x := !x + ((!b - 128) lsl !e);
+      e := !e + 7;
+      b := read_byte t
+    done;
+    !x + (!b lsl !e)
 
 module String_reader : sig
   include S
@@ -42,6 +54,14 @@ struct
     String.blit t.buf t.pos buf off len;
     t.pos <- t.pos + len
 
+  let read_vint t = Read_vint(t)
+
+  let skip_value t p = match ll_type p with
+      Vint -> ignore (read_vint t)
+    | Bits32 -> t.pos <- t.pos + 4
+    | Bits64 -> t.pos <- t.pos + 8
+    | Tuple | Htuple | Bytes -> let len = read_vint t in t.pos <- t.pos + len
+
   INCLUDE "reader_impl.ml"
 end
 
@@ -58,6 +78,22 @@ struct
     match IO.really_input io buf off len with
         n when n = len -> ()
       | _ -> raise End_of_file
+
+  let read_vint t = Read_vint(t)
+
+  let skip_buf = String.create 4096
+
+  let skip_value io p = match ll_type p with
+      Vint -> ignore (read_vint io)
+    | Bits32 -> ignore (read_bytes io skip_buf 0 4)
+    | Bits64 -> ignore (read_bytes io skip_buf 0 8)
+    | Tuple | Htuple | Bytes ->
+        let rec loop = function
+            0 -> ()
+          | n -> let len = min n (String.length skip_buf) in
+              read_bytes io skip_buf 0 len;
+              loop (n - len)
+        in loop (read_vint io)
 
   INCLUDE "reader_impl.ml"
   DEFINE EOF_wrap(f, x) = try f x with IO.No_more_input -> raise End_of_file
