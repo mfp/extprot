@@ -24,7 +24,7 @@ let wrap_printer f x = String.concat "\n" [""; f x; ""]
 
 module Probabilistic =
 struct
-  open Rand_monad.Rand
+  open Extprot.Random_gen
   module PP = E.Pretty_print
 
   let encode f v =

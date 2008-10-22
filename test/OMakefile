@@ -7,7 +7,6 @@ OCAML_LIBS[] +=
 
 TESTS[] =
     test_types
-    rand_monad
     unit_write
 
 GENERATOR = ../sample

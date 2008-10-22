@@ -2,8 +2,10 @@
 EXTPROT_RUNTIME_OBJS[] =
 	codec
 	error
+	monad
 	msg_buffer
 	pretty_print
+	random_gen
 	reader
 
 section
