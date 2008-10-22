@@ -75,6 +75,11 @@ let pp_hex pp n = fprintf pp "0x%X" n
 let pp_bool = pp_print_bool
 let pp_char pp = fprintf pp "%C"
 let pp_float = pp_print_float
+
+let pp_int32 pp n =
+  let fmt = if n < 0l then format_of_string "(%s)" else format_of_string "%s" in
+    fprintf pp fmt (Int32.to_string n)
+
 let pp_int64 pp n =
   let fmt = if n < 0L then format_of_string "(%s)" else format_of_string "%s" in
     fprintf pp fmt (Int64.to_string n)
