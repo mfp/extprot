@@ -8,6 +8,7 @@ EXTPROT_RUNTIME_OBJS[] =
 	pretty_print
 	random_gen
 	reader
+	types
 
 section
 	OCAMLFLAGS += -for-pack Extprot

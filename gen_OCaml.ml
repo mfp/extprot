@@ -295,8 +295,10 @@ struct
                          if nelms >= $int:string_of_int (n+1)$ then
                            $read llty$
                          else
-                           Extprot.Error.missing_element
-                             $str:msgname$ $str:constr_name$ $str:name$
+                           Extprot.Error.missing_tuple_element
+                             ~message:$str:msgname$
+                             ~constructor:$str:constr_name$
+                             ~field:$str:name$
                              $int:string_of_int n$
                        in $e$
                      >>
@@ -343,8 +345,12 @@ struct
                     let len = $id:RD.reader_module$.read_vint s in
                     let nelms = $id:RD.reader_module$.read_vint s in
                       $read_tuple_elms (lltys_without_defaults lltys)$
-                | _ -> Extprot.Error.bad_field_format
-                         $str:msgname$ $str:constr_name$ $str:name$
+                | ty -> Extprot.Error.bad_wire_type
+                          ~message:$str:msgname$
+                          ~constructor:$str:constr_name$
+                          ~field:$str:name$
+                          ~ll_type:ty
+                          ()
               ]
           >>
       | Sum (constant, non_constant) ->
@@ -357,8 +363,11 @@ struct
                  >>)
               constant
             @ [ <:match_case<
-                  tag -> Extprot.Error.unknown_field_tag
-                         $str:msgname$ $str:constr_name$ $str:name$ tag >> ] in
+                  tag -> Extprot.Error.unknown_tag
+                           ~message:$str:msgname$
+                           ~constructor:$str:constr_name$
+                           ~field:$str:name$
+                           tag >> ] in
 
           let nonconstant_match_cases =
             let mc (c, lltys) =
@@ -368,8 +377,11 @@ struct
               >>
             in List.map mc non_constant @
                [ <:match_case<
-                   tag -> Extprot.Error.unknown_field_tag
-                          $str:msgname$ $str:constr_name$ $str:name$ tag >> ]
+                   tag -> Extprot.Error.unknown_tag
+                            ~message:$str:msgname$
+                            ~constructor:$str:constr_name$
+                            ~field:$str:name$ tag
+                            tag >> ]
           in
 
           let maybe_match_case (constr, f, l) = match l with
@@ -396,8 +408,12 @@ struct
             <:expr< let t = $id:RD.reader_module$.read_prefix s in
               match Extprot.Codec.ll_type t with [
                 $Ast.mcOr_of_list match_cases$
-                | _ -> Extprot.Error.bad_field_format
-                         $str:msgname$ $str:constr_name$ $str:name$
+                | ty -> Extprot.Error.bad_wire_type
+                         ~message:$str:msgname$
+                         ~constructor:$str:constr_name$
+                         ~field:$str:name$
+                         ~ll_type:ty
+                         ()
               ]
             >>
       | Message name ->
@@ -432,8 +448,12 @@ struct
                         let len = $id:RD.reader_module$.read_vint s in
                         let nelms = $id:RD.reader_module$.read_vint s in
                           $e$
-                    | _ -> Extprot.Error.bad_field_format
-                             $str:msgname$ $str:constr_name$ $str:name$
+                    | ty -> Extprot.Error.bad_wire_type
+                              ~message:$str:msgname$
+                              ~constructor:$str:constr_name$
+                              ~field:$str:name$
+                              ~ll_type:ty
+                              ()
                   ]
               >>
     in
@@ -447,28 +467,36 @@ struct
       let rescue_match_case = match default with
           None ->
             <:match_case<
-              Extprot.Error.Extprot_error _ as e -> raise e
+              Extprot.Error.Extprot_error (e, loc) ->
+                Extprot.Error.failwith_location
+                  ~message:$str:msgname$
+                  ~constructor:$str:constr_name$
+                  ~field:$str:name$
+                  e loc
             >>
         | Some expr ->
             <:match_case<
-              Extprot.Error.Extprot_error _ ->
-                do {
-                  Extprot.Codec.skip_to s end_of_field;
-                  $expr$
-                } >> in
+                Extprot.Error.Extprot_error
+                  (Extprot.Error.Bad_format ((Extprot.Error.Bad_wire_type _) as e), loc) ->
+                    Extprot.Error.failwith_location
+                      ~message:$str:msgname$
+                      ~constructor:$str:constr_name$
+                      ~field:$str:name$
+                      e loc
+              | Extprot.Error.Extprot_error _ -> $expr$ >> in
       let default_value = match default with
           Some expr -> expr
         | None ->
             <:expr< Extprot.Error.missing_field
-                      $str:msgname$ $str:constr_name$ $str:name$ >> in
-      let end_of_field_expr = match default with
-          Some _ -> <:expr< Extprot.Codec.value_endpos s >>
-        | None -> <:expr< () >>
+                      ~message:$str:msgname$
+                      ~constructor:$str:constr_name$
+                      ~field:$str:name$
+                      ()
+            >>
       in
         <:expr<
            let $lid:name$ =
              if nelms >= $int:string_of_int (fieldno + 1)$ then
-               let end_of_field = $end_of_field_expr$ in
                try
                  $read_field msgname constr_name name llty$
                with [$rescue_match_case$]
@@ -505,10 +533,12 @@ struct
       <:expr<
         let t = $id:RD.reader_module$.read_prefix s in begin
           if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
-            Extprot.Error.bad_message_type $str:msgname$ else ();
+            Extprot.Error.bad_wire_type
+              ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
+            else ();
           match Extprot.Codec.ll_tag t with [
             $match_cases$
-            | tag -> Extprot.Error.unknown_message_tag $str:msgname$ tag
+            | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
           ]
         end
       >>

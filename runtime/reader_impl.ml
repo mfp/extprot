@@ -3,10 +3,15 @@ let read_prefix = read_vint
 
 let check_prim_type ty t =
   let p = read_prefix t in
-    if ll_tag p <> 0 || ll_type p <> ty then begin
+    if ll_tag p <> 0 then begin
       (* skip the rest of the value *)
       skip_value t p;
-      Error.bad_format ()
+      Error.unknown_tag (ll_tag p)
+    end;
+    if ll_type p <> ty then begin
+      (* skip the rest of the value *)
+      skip_value t p;
+      Error.bad_wire_type ()
     end
 
 let read_bool t =

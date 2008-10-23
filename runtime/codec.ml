@@ -1,11 +1,4 @@
-
-type low_level_type =
-    Vint
-  | Bits32
-  | Bits64
-  | Bytes
-  | Tuple
-  | Htuple
+include Types
 
 type prefix = int
 
@@ -25,7 +18,7 @@ let ll_type prefix = match prefix land 0xf with
   | 1 (* ctyp 0 *) -> Tuple
   | 3 (* ctyp 1 *) -> Bytes
   | 5 (* ctyp 2 *) -> Htuple
-  | _ -> Error.bad_format ()
+  | _ -> Error.bad_wire_type ()
 
 let tuple_prefix tag = (0x01 lor (tag lsl 4))  (* vlen:1 ctyp:0 *)
 let htuple_prefix tag = (0x05 lor (tag lsl 4)) (* vlen:1 ctyp:2 *)

@@ -1,89 +1,70 @@
 open Printf
 module PP = Pretty_print
 
-type field_format_error =
-    Bad_field_format
-  | Bad_field_tag
-
-type message_error =
-    Bad_message_type
-  | Bad_message_tag
+type location =
+    Null_location
+  | Field of string * location
+  | Message of string * string option * location
 
 type format_error =
-    Field_error of string * string * string * field_format_error
-  | Message_error of string * message_error
-  | Unknown_error
+    Bad_wire_type of Types.low_level_type option
+  | Unknown_tag of int
 
 type extprot_error =
-    Missing_element of string * string * string * int
-  | Missing_field of string * string * string
+    Missing_tuple_element of int
+  | Missing_field
   | Bad_format of format_error
 
-exception Extprot_error of extprot_error * string
+exception Extprot_error of extprot_error * location
 
-let pp_field_format_error pp = function
-    Bad_field_format -> PP.fprintf pp "Bad_field_format"
-  | Bad_field_tag -> PP.fprintf pp "Bad_field_tag"
-
-let pp_message_format_error pp = function
-  | Bad_message_type -> PP.fprintf pp "Bad_message_type"
-  | Bad_message_tag -> PP.fprintf pp "Bad_message_tag"
+let rec pp_location pp = function
+  | Null_location -> PP.fprintf pp "()"
+  | Field (field, loc) ->
+      PP.fprintf pp "@[<1>%s.@,%a@]" field pp_location loc
+  | Message (msg, constr, loc) -> match constr with
+        None -> PP.fprintf pp "@[<1>%s.@,%a@]" (String.capitalize msg) pp_location loc
+      | Some c -> PP.fprintf pp "@[<1>%s_%s.@,%a@]"
+                    (String.capitalize msg) (String.capitalize c) pp_location loc
 
 let pp_format_error pp = function
-    Field_error (msg, constr, field, field_format_error) ->
-      PP.pp_tuple4 ~constr:"Field_error"
-        PP.pp_string PP.pp_string PP.pp_string pp_field_format_error
-        pp (msg, constr, field, field_format_error)
-  | Message_error (s, msg_error) ->
-      PP.pp_tuple2 ~constr:"Message_error"
-        PP.pp_string pp_message_format_error
-        pp (s, msg_error)
-  | Unknown_error -> PP.fprintf pp "Unknown_error"
+  | Bad_wire_type ty ->
+      PP.fprintf pp
+        "Bad_wire_type %a"
+        (PP.pp_option
+           (fun pp ty -> PP.fprintf pp "%s" (Types.string_of_low_level_type ty)))
+        ty
+  | Unknown_tag n -> PP.fprintf pp "Unknown_tag %d" n
 
-let pp_extprot_error pp = function
-    Missing_element (message, constr, field, elmno) ->
-      PP.pp_tuple4 ~constr:"Missing_element"
-        PP.pp_string PP.pp_string PP.pp_string PP.pp_int
-        pp (message, constr, field, elmno)
-  (* | Missing_field (message, constr, field) -> *)
-  | Missing_field (message, constr, field) ->
-      PP.pp_tuple3 ~constr:"Missing_field"
-        PP.pp_string PP.pp_string PP.pp_string
-        pp (message, constr, field)
+let pp_extprot_error pp (e, loc) = match e with
+    Missing_tuple_element elmno ->
+      PP.pp_tuple2 ~constr:"Missing_tuple_element" PP.pp_int pp_location
+        pp (elmno, loc)
+  | Missing_field -> PP.fprintf pp "@[<1>Missing_field@ (%a)@])" pp_location loc
   | Bad_format err ->
-      PP.fprintf pp "Bad_format %a" pp_format_error err
+      PP.pp_tuple2 ~constr:"Bad_format" pp_format_error pp_location pp (err, loc)
 
-let extprot_error err fmt =
-  (* kprintf (fun s -> if true then raise (Extprot_error (err, s))) fmt *)
-  kprintf (fun s -> raise (Extprot_error (err, s))) fmt
+let extprot_error err loc = raise (Extprot_error (err, loc))
 
-let missing_element msg constr field elm =
-  extprot_error (Missing_element (msg, constr, field, elm))
-    "Missing element in message %S, constructor %S, field %S, element number %d."
-    msg constr field elm
+let bad_format err loc = extprot_error (Bad_format err) loc
 
-let missing_field msg constr field =
-  extprot_error (Missing_field (msg, constr, field))
-    "Missing %S field in message %S, constructor %S." field msg constr
+let location ~message ~constructor ~field ?(loc = Null_location) () =
+  let loc = match field with None -> loc | Some f -> Field (f, loc) in
+    match (message, constructor) with
+        None, None -> loc
+      | Some m, cons -> Message (m, cons, loc)
+      | None, cons -> Message ("<unknown>", cons, loc)
 
-let bad_field_format msg constr field =
-  extprot_error (Bad_format (Field_error (msg, constr, field, Bad_field_format)))
-    "Bad field format for message %S, constructor %S, field %S."
-    msg constr field
+let failwith_location ?message ?constructor ?field err loc =
+  extprot_error err (location ~message ~constructor ~field ~loc ())
 
-let unknown_field_tag msg constr field tag =
-  extprot_error (Bad_format (Field_error (msg, constr, field, Bad_field_tag)))
-    "Unknown tag %d for message %S, constructor %S, field %S."
-    tag msg constr field
+let missing_tuple_element ?message ?constructor ?field elm =
+  extprot_error (Missing_tuple_element elm) (location ~message ~constructor ~field ())
 
-let bad_message_type msg =
-  extprot_error (Bad_format (Message_error (msg, Bad_message_type))) "Bad message type"
+let missing_field ?message ?constructor ?field () =
+  extprot_error Missing_field (location ~message ~constructor ~field ())
 
-let unknown_message_tag msg tag =
-  extprot_error (Bad_format (Message_error (msg, Bad_message_tag)))
-    "Bad message tag %d" tag
+let bad_wire_type ?message ?constructor ?field ?ll_type () =
+  bad_format (Bad_wire_type ll_type) (location ~message ~constructor ~field ())
 
-let bad_format () =
-  extprot_error (Bad_format Unknown_error)
-    "Unexpected or unknown type"
-
+let unknown_tag ?message ?constructor ?field tag =
+  bad_format (Unknown_tag tag) (location ~message ~constructor ~field ())
