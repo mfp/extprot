@@ -43,6 +43,10 @@ let constr_string = function
     None -> ""
   | Some c -> c ^ " "
 
+let pp_option f pp = function
+    None -> fprintf pp "None"
+  | Some x -> fprintf pp "Some %a" f x
+
 let pp_tuple2 ?constr f1 f2 pp (a, b) =
   fprintf pp "%s(@[<1>%a,@ %a@])" (constr_string constr) f1 a f2 b
 
