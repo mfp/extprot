@@ -12,9 +12,10 @@ let check_write ?msg expected f v () =
 let bits n shift =
   Char.chr (Int64.to_int (Int64.logand (Int64.shift_right_logical n shift) 0xFFL))
 
-let check_bits64 check v n =
+let check_bits64 ~prefix check v n : unit =
   check v
-    (sprintf "\001\010\001\004%c%c%c%c%c%c%c%c"
+    (sprintf "\001\010\001%c%c%c%c%c%c%c%c%c"
+       (Char.chr prefix)
        (bits n 0)  (bits n 8)  (bits n 16) (bits n 24)
        (bits n 32) (bits n 40) (bits n 48) (bits n 56))
 
@@ -68,7 +69,7 @@ struct
   let check_roundtrip write read prettyprint v =
     (* print_endline @@ prettyprint v; *)
     let enc = encode write v in
-      (* print_endline @@ PP.pp E.Inspect_msg.inspect (IO.input_string enc); *)
+      (* print_endline @@ PP.pp (E.Inspect_msg.inspect ~verbose:false) (IO.input_string enc); *)
       try
         assert_equal ~printer:(wrap_printer prettyprint) v (decode read enc)
       with E.Error.Extprot_error (err, loc) ->
@@ -204,10 +205,10 @@ let () =
          *  001        tuple, tag 0
          *  NNN        len
          *  002        elements
-         *   000 010    vint(10)
-         *   000 001    bool(true)
+         *   002 010    unsigned vint(10)
+         *   002 001    bool(true)
          * *)
-        check_write "\001\008\001\001\005\002\000\010\000\001"
+        check_write "\001\008\001\001\005\002\002\010\002\001"
           ~msg:"{ Simple_tuple.v = (10, true) }"
           Simple_tuple.write_simple_tuple { Simple_tuple.v = (10, true) };
 
@@ -216,16 +217,16 @@ let () =
          * 001      tuple, tag 0
          * 003      len
          * 001      nelms
-         *  000 000  bool false
+         *  002 000  bool false
          * *)
-        check_write "\001\003\001\000\000"
+        check_write "\001\003\001\002\000"
           ~msg:"(Msg_sum.A { Msg_sum.b = false })"
           Msg_sum.write_msg_sum (Msg_sum.A { Msg_sum.b = false }) ();
         (*
          * 017      tuple, tag 1
          * 003      len
          * 001      nelms
-         *  000 000  bool false
+         *  000 020  vint 10
          * *)
         check_write "\017\003\001\000\020"
           ~msg:"(Msg_sum.B { Msg_sum.i = 10 })"
@@ -240,9 +241,9 @@ let () =
          *  001       tuple, tag 0
          *  003       len
          *  001       nelms
-         *   000 001   bool true
+         *   002 001   bool true
          * *)
-        check_write "\001\006\001\001\003\001\000\001"
+        check_write "\001\006\001\001\003\001\002\001"
           ~msg:"{ Simple_sum.v = Sum_type.A true }"
           Simple_sum.write_simple_sum { Simple_sum.v = Sum_type.A true } ();
         (*
@@ -252,9 +253,9 @@ let () =
          *  017       tuple, tag 1
          *  004       len
          *  001       nelms
-         *   000 128 001  byte 128
+         *   002 128 001  byte 128
          * *)
-        check_write "\001\007\001\017\004\001\000\128\001"
+        check_write "\001\007\001\017\004\001\002\128\001"
           ~msg:"{ Simple_sum.v = Sum_type.B 128 }"
           Simple_sum.write_simple_sum { Simple_sum.v = Sum_type.B 128 } ();
         (*
@@ -304,12 +305,12 @@ let () =
          *  005       htuple, tag 0
          *  007       len
          *  003       nlems
-         *   000 001   true
-         *   000 000   false
-         *   000 000   false
+         *   002 001   true
+         *   002 000   false
+         *   002 000   false
          * *)
         check_write
-          "\001\018\002\005\006\002\000\020\000\128\004\005\007\003\000\001\000\000\000\000"
+          "\001\018\002\005\006\002\000\020\000\128\004\005\007\003\002\001\002\000\002\000"
           Lists_arrays.write_lists_arrays
           ~msg:"{ Lists_arrays.lint = [10; 256]; abool = [| true; false; false |] }"
           { Lists_arrays.lint = [10; 256]; abool = [| true; false; false |] }
@@ -321,20 +322,20 @@ let () =
   Register_test.register "write simple types"
     [
       "bool (true)" >::
-        check_write "\001\003\001\000\001"
+        check_write "\001\003\001\002\001"
           Simple_bool.write_simple_bool { Simple_bool.v = true };
 
       "bool (false)" >::
-        check_write "\001\003\001\000\000"
+        check_write "\001\003\001\002\000"
           Simple_bool.write_simple_bool { Simple_bool.v = false };
 
       "byte" >:: begin fun () ->
         for n = 0 to 127 do
-          check_write (sprintf "\001\003\001\000%c" (Char.chr n))
+          check_write (sprintf "\001\003\001\002%c" (Char.chr n))
             Simple_byte.write_simple_byte { Simple_byte.v = n } ()
         done;
         for n = 128 to 255 do
-          check_write (sprintf "\001\004\001\000%c\001" (Char.chr n))
+          check_write (sprintf "\001\004\001\002%c\001" (Char.chr n))
             Simple_byte.write_simple_byte { Simple_byte.v = n } ()
         done
       end;
@@ -368,11 +369,11 @@ let () =
             Simple_unsigned.write_simple_unsigned { Simple_unsigned.v = n } ()
         in
           for n = 0 to 127 do
-            check n (sprintf "\001\003\001\000%c" (Char.chr n));
+            check n (sprintf "\001\003\001\002%c" (Char.chr n));
           done;
           for n = 128 to 16383 do
             check n
-              (sprintf "\001\004\001\000%c%c"
+              (sprintf "\001\004\001\002%c%c"
                  (Char.chr (n mod 128 + 128)) (Char.chr (n / 128)));
           done
       end;
@@ -389,7 +390,7 @@ let () =
         in
           for i = 0 to 10000 do
             let n = rand_int64 () in
-              check_bits64 check_long n n
+              check_bits64 ~prefix:6 check_long n n
           done;
       end;
 
@@ -401,7 +402,7 @@ let () =
           for i = 0 to 1000 do
             let fl = Random.float max_float -. Random.float max_float in
             let n = Int64.bits_of_float fl in
-              check_bits64 check_float fl n
+              check_bits64 ~prefix:8 check_float fl n
           done
       end;
 

@@ -57,9 +57,9 @@ struct
   let read_vint t = Read_vint(t)
 
   let skip_value t p = match ll_type p with
-      Vint -> ignore (read_vint t)
+      Vint | Vint_pos -> ignore (read_vint t)
     | Bits32 -> t.pos <- t.pos + 4
-    | Bits64 -> t.pos <- t.pos + 8
+    | Bits64_long | Bits64_float -> t.pos <- t.pos + 8
     | Tuple | Htuple | Bytes -> let len = read_vint t in t.pos <- t.pos + len
 
   INCLUDE "reader_impl.ml"
@@ -84,9 +84,9 @@ struct
   let skip_buf = String.create 4096
 
   let skip_value io p = match ll_type p with
-      Vint -> ignore (read_vint io)
+      Vint | Vint_pos -> ignore (read_vint io)
     | Bits32 -> ignore (read_bytes io skip_buf 0 4)
-    | Bits64 -> ignore (read_bytes io skip_buf 0 8)
+    | Bits64_float | Bits64_long -> ignore (read_bytes io skip_buf 0 8)
     | Tuple | Htuple | Bytes ->
         let rec loop = function
             0 -> ()
