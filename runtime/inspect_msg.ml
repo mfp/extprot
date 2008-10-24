@@ -40,45 +40,49 @@ let read_64_bits io =
     (to_i64 e <!! 32) +!! (to_i64 f <!! 40) +!!
     (to_i64 g <!! 48) +!! (to_i64 h <!! 56)
 
-let pp_int ~verbose pp ~tag n =
+let pp_verbose fmt1 fmt2 f ~verbose pp ~tag x =
   if verbose || tag <> 0 then
-    PP.fprintf pp "Vint_t%d@[<1>@ %a@]" tag PP.pp_int n
+    PP.fprintf pp fmt1 tag f x
   else
-    PP.pp_int pp n
+    PP.fprintf pp fmt2 f x
 
 let rec inspect ?(verbose=true) pp io prefix =
   let tag = ll_tag prefix in match ll_type prefix with
     Tuple -> inspect_tuple ~verbose "{" "}" prefix pp io
   | Htuple -> inspect_tuple ~verbose "[" "]" prefix pp io
   | Vint ->
-      let n = zigzag_dec (read_vint io) in pp_int ~verbose pp ~tag n
+      let n = zigzag_dec (read_vint io) in
+        pp_verbose "Vint_%d@[<1>@ %a@]" "%a" PP.pp_int ~verbose ~tag pp n
   | Vint_pos ->
-      let n = read_vint io in pp_int ~verbose pp ~tag n
+      let n = read_vint io in
+        pp_verbose "Vint_%d@[<1>@ %a@]" "%a" PP.pp_int ~verbose ~tag pp n
   | Bits32 ->
       let a = read_byte io in
       let b = read_byte io in
       let c = read_byte io in
       let d = read_byte io in
       let i32 = to_i32 a +! (to_i32 b <! 8) +! (to_i32 c <! 16) +! (to_i32 d <! 24) in
-        PP.fprintf pp "Bits32_t%d@[<1>@ %a@]" (ll_tag prefix) PP.pp_int32 i32
+        pp_verbose "I32_%d@[<1>@ %a@]" "%al" PP.pp_int32 ~verbose ~tag pp i32
   | Bits64_long ->
       let n = read_64_bits io in
-        PP.fprintf pp "Bits64_t%d@[<1>@ %a@]" tag PP.pp_int64 n
+        pp_verbose "I64_%d@[<1>@ %a@]" "%aL" PP.pp_int64 ~verbose ~tag pp n
   | Bits64_float ->
       let fl = Int64.float_of_bits (read_64_bits io) in
-        PP.fprintf pp "Bits64_t%d@[<1>@ %a@]" tag PP.pp_float fl
+        pp_verbose "Fl_%d@[<1>@ %a@]" "%a" PP.pp_float ~verbose ~tag pp fl
   | Bytes ->
       let len = read_vint io in
       let s = IO.nread io len in
-        PP.fprintf pp "@[<1>Bytes_t%d@ %a@]" tag PP.pp_string s
+        pp_verbose "B_%d@[<1>@ %a@]" "%a" PP.pp_string ~verbose ~tag pp s
 
-
-and inspect_tuple ?verbose left right prefix pp io =
+and inspect_tuple ?(verbose = true) left right prefix pp io =
   let tag = ll_tag prefix in
   let _ = read_vint io in (* len *)
   let nelms = read_vint io in
-    PP.fprintf pp "@[<1>T%d %s@[<1>@ %a@]%s@]" tag
-      left (inspect_elms ?verbose io) nelms right
+    if verbose || tag <> 0 then
+      PP.fprintf pp "T%d %s@[<1>@ %a @]%s" tag
+        left (inspect_elms ~verbose io) nelms right
+    else
+      PP.fprintf pp "%s@[<1>@ %a @]%s" left (inspect_elms ~verbose io) nelms right
 
 and inspect_elms ?verbose io pp = function
     0 -> ()
