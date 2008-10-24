@@ -345,12 +345,7 @@ struct
                     let len = $id:RD.reader_module$.read_vint s in
                     let nelms = $id:RD.reader_module$.read_vint s in
                       $read_tuple_elms (lltys_without_defaults lltys)$
-                | ty -> Extprot.Error.bad_wire_type
-                          ~message:$str:msgname$
-                          ~constructor:$str:constr_name$
-                          ~field:$str:name$
-                          ~ll_type:ty
-                          ()
+                | ll_type -> Extprot.Error.bad_wire_type ~ll_type ()
               ]
           >>
       | Sum (constant, non_constant) ->
@@ -363,11 +358,7 @@ struct
                  >>)
               constant
             @ [ <:match_case<
-                  tag -> Extprot.Error.unknown_tag
-                           ~message:$str:msgname$
-                           ~constructor:$str:constr_name$
-                           ~field:$str:name$
-                           tag >> ] in
+                  tag -> Extprot.Error.unknown_tag tag >> ] in
 
           let nonconstant_match_cases =
             let mc (c, lltys) =
@@ -377,11 +368,7 @@ struct
               >>
             in List.map mc non_constant @
                [ <:match_case<
-                   tag -> Extprot.Error.unknown_tag
-                            ~message:$str:msgname$
-                            ~constructor:$str:constr_name$
-                            ~field:$str:name$ tag
-                            tag >> ]
+                   tag -> Extprot.Error.unknown_tag tag >> ]
           in
 
           let maybe_match_case (constr, f, l) = match l with
@@ -408,12 +395,7 @@ struct
             <:expr< let t = $id:RD.reader_module$.read_prefix s in
               match Extprot.Codec.ll_type t with [
                 $Ast.mcOr_of_list match_cases$
-                | ty -> Extprot.Error.bad_wire_type
-                         ~message:$str:msgname$
-                         ~constructor:$str:constr_name$
-                         ~field:$str:name$
-                         ~ll_type:ty
-                         ()
+                | ll_type -> Extprot.Error.bad_wire_type ~ll_type ()
               ]
             >>
       | Message name ->
@@ -448,16 +430,10 @@ struct
                         let len = $id:RD.reader_module$.read_vint s in
                         let nelms = $id:RD.reader_module$.read_vint s in
                           $e$
-                    | ty -> Extprot.Error.bad_wire_type
-                              ~message:$str:msgname$
-                              ~constructor:$str:constr_name$
-                              ~field:$str:name$
-                              ~ll_type:ty
-                              ()
+                    | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
                   ]
               >>
-    in
-      read llty
+    in read llty
 
   let record_case msgname ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
