@@ -26,10 +26,16 @@ let to_i64 = Int64.of_int
 
 let zigzag_dec n = (n lsr 1) lxor (- (n land 1))
 
-let rec inspect pp io prefix = match ll_type prefix with
-    Tuple -> inspect_tuple "{" "}" prefix pp io
-  | Htuple -> inspect_tuple "[" "]" prefix pp io
-  | Vint -> PP.fprintf pp "Vint_t%d@[<1>@ %a@]" (ll_tag prefix) PP.pp_int (zigzag_dec (read_vint io))
+let rec inspect ?(verbose=true) pp io prefix =
+  let tag = ll_tag prefix in match ll_type prefix with
+    Tuple -> inspect_tuple ~verbose "{" "}" prefix pp io
+  | Htuple -> inspect_tuple ~verbose "[" "]" prefix pp io
+  | Vint ->
+      let n = zigzag_dec (read_vint io) in
+        if verbose || tag <> 0 then
+          PP.fprintf pp "Vint_t%d@[<1>@ %a@]" tag PP.pp_int n
+        else
+          PP.pp_int pp n
   | Bits32 ->
       let a = read_byte io in
       let b = read_byte io in
@@ -50,25 +56,26 @@ let rec inspect pp io prefix = match ll_type prefix with
                 (to_i64 c <!! 16) +!! (to_i64 d <!! 24) +!!
                 (to_i64 e <!! 32) +!! (to_i64 f <!! 40) +!!
                 (to_i64 g <!! 48) +!! (to_i64 h <!! 56)
-      in PP.fprintf pp "Bits64_t%d@[<1>@ %a@]" (ll_tag prefix) PP.pp_int64 i64
+      in PP.fprintf pp "Bits64_t%d@[<1>@ %a@]" tag PP.pp_int64 i64
   | Bytes ->
       let len = read_vint io in
       let s = IO.nread io len in
-        PP.fprintf pp "@[<1>Bytes_t%d@ %a@]" (ll_tag prefix) PP.pp_string s
+        PP.fprintf pp "@[<1>Bytes_t%d@ %a@]" tag PP.pp_string s
 
 
-and inspect_tuple left right prefix pp io =
+and inspect_tuple ?verbose left right prefix pp io =
   let tag = ll_tag prefix in
   let _ = read_vint io in (* len *)
   let nelms = read_vint io in
-    PP.fprintf pp "@[<1>T%d %s@[<1>@ %a@]%s@]" tag left (inspect_elms io) nelms right
+    PP.fprintf pp "@[<1>T%d %s@[<1>@ %a@]%s@]" tag
+      left (inspect_elms ?verbose io) nelms right
 
-and inspect_elms io pp = function
+and inspect_elms ?verbose io pp = function
     0 -> ()
-  | 1 -> inspect pp io (read_prefix io)
-  | n -> inspect pp io (read_prefix io);
+  | 1 -> inspect ?verbose pp io (read_prefix io)
+  | n -> inspect ?verbose pp io (read_prefix io);
          PP.fprintf pp ";@ ";
-         inspect_elms io pp (n - 1)
+         inspect_elms ?verbose io pp (n - 1)
 
-let inspect pp io = inspect pp io (read_prefix io)
+let inspect ?(verbose = true) pp io = inspect ~verbose pp io (read_prefix io)
 
