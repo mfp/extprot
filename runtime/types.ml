@@ -5,8 +5,8 @@ type low_level_type =
   | Bits32
   | Bits64_long
   | Bits64_float
-  | Bytes
   | Tuple
+  | Bytes
   | Htuple
 
 let string_of_low_level_type = function

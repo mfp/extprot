@@ -22,6 +22,13 @@ let ll_type prefix = match prefix land 0xf with
   | 5 (* ctyp 2 *) -> Htuple
   | _ -> Error.bad_wire_type ()
 
+(* unsafe hack to avoid branch misprediction -- do not use unless profiling
+ * reveals it's become useful *)
+(* let ll_type prefix : low_level_type = *)
+  (* let n = prefix land 0xf in *)
+    (* if n > 8 || n = 7 then Error.bad_wire_type (); *)
+    (* Obj.magic (5 * (n land 1) + n lsr 1) *)
+
 let tuple_prefix tag = (0x01 lor (tag lsl 4))  (* vlen:1 ctyp:0 *)
 let htuple_prefix tag = (0x05 lor (tag lsl 4)) (* vlen:1 ctyp:2 *)
 let const_prefix tag = (tag lsl 4)             (* vlen:0 ctyp:0 *)
