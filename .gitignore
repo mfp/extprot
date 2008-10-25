@@ -9,6 +9,8 @@
 *.s
 *.swp
 *.swo
+*.opt
+*.run
 OMakefile.omc
 /.omakedb*
 /.omakedb.lock
