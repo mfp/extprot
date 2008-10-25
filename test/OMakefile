@@ -5,8 +5,9 @@ OCAMLINCLUDES += $(ROOT)/runtime
 OCAML_LIBS[] +=
     $(ROOT)/runtime/extprot
 
-TESTS[] =
+TEST_MODULES[] =
     test_types
+    gen_data
     unit_write
 
 GENERATOR = ../sample
@@ -19,7 +20,7 @@ test_types.ml: $(GENERATOR) test_types.proto
 
 $(CamlTargets test_types): $(ROOT)/runtime/extprot.cmxa
 
-OCamlProgram(test, register_test $(TESTS) test)
+OCamlProgram(test, register_test $(TEST_MODULES) test)
 
 .DEFAULT: test
 

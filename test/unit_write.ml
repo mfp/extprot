@@ -25,8 +25,8 @@ let wrap_printer f x = String.concat "\n" [""; f x; ""]
 
 module Probabilistic =
 struct
-  open Extprot.Random_gen
   module PP = E.Pretty_print
+  open Extprot.Random_gen
 
   let encode f v =
     let b = E.Msg_buffer.create () in
@@ -34,37 +34,6 @@ struct
       E.Msg_buffer.contents b
 
   let decode f s = f @@ E.Reader.String_reader.make s 0 (String.length s)
-
-  let generate = run
-  let rand_len = rand_integer 10
-  (* let rand_len = return 1 *)
-
-  let string_of_rtt = PP.pp Complex_rtt.pp_complex_rtt
-
-  let rand_sum_type a b c =
-    rand_choice
-      [
-        (a >>= fun n -> return (Sum_type.A n));
-        (b >>= fun n -> return (Sum_type.B n));
-        (c >>= fun n -> return (Sum_type.C n))
-      ]
-
-  let rtt_a =
-    let a1_elm =
-      rand_int >>= fun n ->
-      rand_array rand_len rand_bool >>= fun a ->
-        return (n, a) in
-    let a2_elm = rand_sum_type rand_int (rand_string rand_len) rand_int64 in
-      rand_list rand_len a1_elm >>= fun a1 ->
-      rand_list rand_len a2_elm >>= fun a2 ->
-      return (Complex_rtt.A { Complex_rtt.a1 = a1; a2 = a2 })
-
-  let rtt_b =
-    rand_bool >>= fun b1 ->
-    rand_tuple2 (rand_string rand_len) (rand_list rand_len rand_int) >>= fun b2 ->
-      return (Complex_rtt.B { Complex_rtt.b1 = b1; b2 = b2 })
-
-  let complex_rtt = rand_choice [ rtt_a; rtt_b ]
 
   let check_roundtrip write read prettyprint v =
     (* print_endline @@ prettyprint v; *)
@@ -87,10 +56,10 @@ struct
     [
       "complex type" >:: begin fun () ->
         for i = 0 to 5000 do
-          let v = generate complex_rtt in
+          let v = Gen_data.generate Gen_data.complex_rtt in
             check_roundtrip
               Complex_rtt.write_complex_rtt Complex_rtt.read_complex_rtt
-              string_of_rtt v
+              (PP.pp Complex_rtt.pp_complex_rtt) v
         done
       end;
 
@@ -106,7 +75,7 @@ struct
                0; 1; -1; max_int; min_int; min_int - min_int / 2;
              ];
           for i = 0 to iterations do
-            check (generate rand_int)
+            check (Gen_data.generate rand_int)
           done
       end;
 
@@ -134,7 +103,7 @@ struct
             Simple_long.write_simple_long Simple_long.read_simple_long
             (PP.pp Simple_long.pp_simple_long)
             { Simple_long.v = v }
-        in for i = 0 to iterations do check (generate rand_int64) done
+        in for i = 0 to iterations do check (Gen_data.generate rand_int64) done
       end;
 
       "float" >:: begin fun () ->
@@ -147,7 +116,7 @@ struct
           with e -> match classify_float v with
               FP_nan -> ()
             | _ -> raise e
-        in for i = 0 to iterations do check (generate rand_float) done
+        in for i = 0 to iterations do check (Gen_data.generate rand_float) done
       end;
 
       "string" >:: begin fun () ->
@@ -157,7 +126,7 @@ struct
             (PP.pp Simple_string.pp_simple_string)
             { Simple_string.v = v }
         in for i = 0 to iterations do
-          check (generate (rand_string (rand_integer 10)))
+          check (Gen_data.generate (rand_string (rand_integer 10)))
         done
       end;
 
@@ -168,10 +137,11 @@ struct
             (PP.pp Simple_sum.pp_simple_sum)
             { Simple_sum.v = v } in
         let rand_simple_sum =
-          rand_sum_type rand_bool (rand_integer 255) (rand_string rand_len)
+          Gen_data.rand_sum_type rand_bool (rand_integer 255)
+            (rand_string Gen_data.rand_len)
         in
           for i = 0 to iterations do
-            check (generate rand_simple_sum)
+            check (Gen_data.generate rand_simple_sum)
           done
       end;
 
@@ -182,12 +152,12 @@ struct
             (PP.pp Lists_arrays.pp_lists_arrays)
             v in
         let rand_lists_arrays =
-          rand_list rand_len (rand_integer 255) >>= fun lint ->
-          rand_array rand_len rand_bool >>= fun abool ->
+          rand_list Gen_data.rand_len (rand_integer 255) >>= fun lint ->
+          rand_array Gen_data.rand_len rand_bool >>= fun abool ->
             return { Lists_arrays.lint = lint; abool = abool }
         in
           for i = 0 to iterations do
-            check (generate rand_lists_arrays)
+            check (Gen_data.generate rand_lists_arrays)
           done
       end;
 
