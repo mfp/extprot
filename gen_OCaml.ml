@@ -87,7 +87,7 @@ let generate_container bindings =
   and ctyp_of_poly_texpr_core = function
       `Bool -> <:ctyp< bool >>
     | `Byte -> <:ctyp< int >>
-    | `Int _ -> <:ctyp< int >>
+    | `Int -> <:ctyp< int >>
     | `Long_int -> <:ctyp< Int64.t >>
     | `Float -> <:ctyp< float >>
     | `String -> <:ctyp< string >>
@@ -206,7 +206,7 @@ struct
   and pp_poly_texpr_core = function
       `Bool -> pp_func "pp_bool"
     | `Byte -> pp_func "pp_int"
-    | `Int _ -> pp_func "pp_int"
+    | `Int -> pp_func "pp_int"
     | `Long_int -> pp_func "pp_int64"
     | `Float -> pp_func "pp_float"
     | `String -> pp_func "pp_string"
@@ -332,7 +332,7 @@ struct
     and read = function
         Vint Bool -> <:expr< $id:RD.reader_module$.read_bool s >>
       | Vint Int -> <:expr< $id:RD.reader_module$.read_rel_int s >>
-      | Vint Positive_int -> <:expr< $id:RD.reader_module$.read_positive_int s>>
+      | Vint Int8 -> <:expr< $id:RD.reader_module$.read_i8 s >>
       | Bitstring32 -> <:expr< $id:RD.reader_module$.read_i32 s >>
       | Bitstring64 Long -> <:expr< $id:RD.reader_module$.read_i64 s >>
       | Bitstring64 Float -> <:expr< $id:RD.reader_module$.read_float s >>
@@ -566,7 +566,7 @@ let rec write_field fname =
   let simple_write_func = function
       Vint Bool -> "write_bool"
     | Vint Int -> "write_relative_int"
-    | Vint Positive_int -> "write_positive_int"
+    | Vint Int8 -> "write_int8"
     | Bitstring32 -> "write_int32"
     | Bitstring64 Long -> "write_int64"
     | Bitstring64 Float -> "write_float"

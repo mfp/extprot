@@ -175,10 +175,10 @@ let () =
          *  001        tuple, tag 0
          *  NNN        len
          *  002        elements
-         *   002 010    unsigned vint(10)
+         *   000 020    vint(10)
          *   002 001    bool(true)
          * *)
-        check_write "\001\008\001\001\005\002\002\010\002\001"
+        check_write "\001\008\001\001\005\002\000\020\002\001"
           ~msg:"{ Simple_tuple.v = (10, true) }"
           Simple_tuple.write_simple_tuple { Simple_tuple.v = (10, true) };
 
@@ -223,9 +223,9 @@ let () =
          *  017       tuple, tag 1
          *  004       len
          *  001       nelms
-         *   002 128 001  byte 128
+         *   002 128  byte 128
          * *)
-        check_write "\001\007\001\017\004\001\002\128\001"
+        check_write "\001\006\001\017\003\001\002\128"
           ~msg:"{ Simple_sum.v = Sum_type.B 128 }"
           Simple_sum.write_simple_sum { Simple_sum.v = Sum_type.B 128 } ();
         (*
@@ -300,14 +300,10 @@ let () =
           Simple_bool.write_simple_bool { Simple_bool.v = false };
 
       "byte" >:: begin fun () ->
-        for n = 0 to 127 do
+        for n = 0 to 255 do
           check_write (sprintf "\001\003\001\002%c" (Char.chr n))
             Simple_byte.write_simple_byte { Simple_byte.v = n } ()
         done;
-        for n = 128 to 255 do
-          check_write (sprintf "\001\004\001\002%c\001" (Char.chr n))
-            Simple_byte.write_simple_byte { Simple_byte.v = n } ()
-        done
       end;
 
       "int" >:: begin fun () ->
@@ -330,21 +326,6 @@ let () =
               check (-n)
                 (sprintf "\001\004\001\000%c%c"
                    (Char.chr (n' mod 128 + 128)) (Char.chr (n' / 128)))
-          done
-      end;
-
-      "unsigned int" >:: begin fun () ->
-        let check n expected =
-          check_write ~msg:(sprintf "int %d" n) expected
-            Simple_unsigned.write_simple_unsigned { Simple_unsigned.v = n } ()
-        in
-          for n = 0 to 127 do
-            check n (sprintf "\001\003\001\002%c" (Char.chr n));
-          done;
-          for n = 128 to 16383 do
-            check n
-              (sprintf "\001\004\001\002%c%c"
-                 (Char.chr (n mod 128 + 128)) (Char.chr (n / 128)));
           done
       end;
 

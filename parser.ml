@@ -68,8 +68,7 @@ EXTEND Gram
     | "simple"
         [ "bool" -> `Bool
         | "byte" -> `Byte
-        | "int" -> `Int false;
-        | "unsigned"; "int" -> `Int true
+        | "int" -> `Int
         | "long" -> `Long_int
         | "float" -> `Float
         | "string" -> `String ] ];

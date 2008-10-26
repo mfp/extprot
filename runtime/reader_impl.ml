@@ -15,14 +15,14 @@ let check_prim_type ty t =
     end
 
 let read_bool t =
-  check_prim_type Vint_pos t;
+  check_prim_type Bits8 t;
   match read_vint t with
       0 -> false
     | _ -> true
 
-let read_positive_int t =
-  check_prim_type Vint_pos t;
-  read_vint t
+let read_i8 t =
+  check_prim_type Bits8 t;
+  read_byte t
 
 let read_rel_int t =
   check_prim_type Vint t;

@@ -31,7 +31,7 @@ and low_level_record = low_level record
 
 and vint_meaning =
     Bool
-  | Positive_int
+  | Int8
   | Int
 
 and b64_meaning =
@@ -158,9 +158,8 @@ let low_level_msg_def bindings (msg : message_expr) =
 
   let rec low_level_of_rtexp : reduced_type_expr -> low_level = function
       `Bool -> Vint Bool
-    | `Byte -> Vint Positive_int
-    | `Int true -> Vint Positive_int
-    | `Int false -> Vint Int
+    | `Byte -> Vint Int8
+    | `Int -> Vint Int
     | `Long_int -> Bitstring64 Long
     | `Float -> Bitstring64 Float
     | `String -> Bytes
@@ -259,8 +258,7 @@ struct
   let pp_base_expr_simple ppf : base_type_expr_simple -> unit = function
       `Bool -> pp ppf "Bool"
     | `Byte -> pp ppf "Byte"
-    | `Int b -> pp ppf "%s"
-                  (match b with true -> "Int_positive" | false -> "Int_relative")
+    | `Int -> pp ppf "Int"
     | `Long_int -> pp ppf "Long_int"
     | `Float -> pp ppf "Float"
     | `String -> pp ppf "String"

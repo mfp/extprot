@@ -2,13 +2,12 @@
 message simple_bool = { v : bool }
 message simple_byte = { v : byte }
 message simple_int = { v : int }
-message simple_unsigned = { v : unsigned int }
 message simple_long = { v : long }
 message simple_float = { v : float }
 message simple_string = { v : string }
 
 type tuple 'a 'b = ('a * 'b)
-message simple_tuple = { v : tuple<unsigned int, bool> }
+message simple_tuple = { v : tuple<int, bool> }
 
 message msg_sum =
     A { b : bool }

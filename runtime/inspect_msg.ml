@@ -53,9 +53,9 @@ let rec inspect ?(verbose=true) pp io prefix =
   | Vint ->
       let n = zigzag_dec (read_vint io) in
         pp_verbose "Vint_%d@[<1>@ %a@]" "%a" PP.pp_int ~verbose ~tag pp n
-  | Vint_pos ->
-      let n = read_vint io in
-        pp_verbose "Vint_%d@[<1>@ %a@]" "%a" PP.pp_int ~verbose ~tag pp n
+  | Bits8 ->
+      let n = read_byte io in
+        pp_verbose "I8_%d@[<1>@ %a@]" "%a" PP.pp_int ~verbose ~tag pp n
   | Bits32 ->
       let a = read_byte io in
       let b = read_byte io in

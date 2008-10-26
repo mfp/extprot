@@ -5,7 +5,7 @@ open Syntax
 type base_type_expr_simple = [
     `Bool
   | `Byte
-  | `Int of bool      (* true if positive *)
+  | `Int
   | `Long_int
   | `Float
   | `String

@@ -9,7 +9,7 @@ sig
   val read_vint : t -> int
   val read_bool : t -> bool
   val read_rel_int : t -> int
-  val read_positive_int : t -> int
+  val read_i8 : t -> int
   val read_i32 : t -> Int32.t
   val read_i64 : t -> Int64.t
   val read_float : t -> float
@@ -58,7 +58,8 @@ struct
   let read_vint t = Read_vint(t)
 
   let skip_value t p = match ll_type p with
-      Vint | Vint_pos -> ignore (read_vint t)
+      Vint  -> ignore (read_vint t)
+    | Bits8 -> t.pos <- t.pos + 1
     | Bits32 -> t.pos <- t.pos + 4
     | Bits64_long | Bits64_float -> t.pos <- t.pos + 8
     | Tuple | Htuple | Bytes -> let len = read_vint t in t.pos <- t.pos + len
@@ -85,7 +86,8 @@ struct
   let skip_buf = String.create 4096
 
   let skip_value io p = match ll_type p with
-      Vint | Vint_pos -> ignore (read_vint io)
+      Vint -> ignore (read_vint io)
+    | Bits8 -> ignore (read_byte io)
     | Bits32 -> ignore (read_bytes io skip_buf 0 4)
     | Bits64_float | Bits64_long -> ignore (read_bytes io skip_buf 0 8)
     | Tuple | Htuple | Bytes ->
@@ -103,7 +105,7 @@ struct
   let read_vint t = EOF_wrap(read_vint, t)
   let read_bool t = EOF_wrap(read_bool, t)
   let read_rel_int t = EOF_wrap(read_rel_int, t)
-  let read_positive_int t = EOF_wrap(read_positive_int, t)
+  let read_i8 t = EOF_wrap(read_i8, t)
   let read_i32 t = EOF_wrap(read_i32, t)
   let read_i64 t = EOF_wrap(read_i64, t)
   let read_float t = EOF_wrap(read_float, t)

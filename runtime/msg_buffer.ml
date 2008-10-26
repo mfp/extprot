@@ -125,15 +125,15 @@ let add_const_prefix b tag = add_vint b (Codec.const_prefix tag)
 
 let write_bool b bool =
   add_vint b Codec.bool_prefix;
-  add_vint b (if bool then 1 else 0)
+  add_byte b (if bool then 1 else 0)
+
+let write_int8 b c =
+  add_vint b Codec.byte_prefix;
+  add_byte b c
 
 let write_relative_int b n =
   add_vint b Codec.relative_int_prefix;
   add_vint b ((n lsl 1) lxor (n asr 63))
-
-let write_positive_int b n =
-  add_vint b Codec.positive_int_prefix;
-  add_vint b n
 
 let (&!) = Int32.logand
 let (&!!) = Int64.logand
