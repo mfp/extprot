@@ -42,10 +42,11 @@ struct
     { buf = s; pos = off; last = off + len }
 
   let read_byte t =
-    if t.pos >= t.last then raise End_of_file;
-    let r = Char.code t.buf.[t.pos] in
-      t.pos <- t.pos + 1;
-      r
+    let pos = t.pos in
+      if pos >= t.last then raise End_of_file;
+      let r = Char.code (String.unsafe_get t.buf pos) in
+        t.pos <- t.pos + 1;
+        r
 
   let read_bytes t buf off len =
     if off < 0 || len < 0 || off + len > String.length buf then
