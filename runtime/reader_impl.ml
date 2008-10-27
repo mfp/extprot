@@ -17,12 +17,11 @@ let check_prim_type ty t =
 DEFINE Read_prim_type(t, ty, read) =
  let p = read_prefix t in
  let llty = ll_type p in
-   if ll_tag p <> 0 then begin
+   if ll_tag p = 0 && llty = ty then read
+   else if ll_tag p <> 0 then begin
      skip_value t p;
      Error.unknown_tag (ll_tag p)
-   end;
-   if llty = ty then read
-   else if llty = Tuple then begin
+   end else if llty = Tuple then begin
      let len = read_vint t in
      let eot = offset t len in
      let nelms = read_vint t in
