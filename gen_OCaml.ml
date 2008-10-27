@@ -343,8 +343,12 @@ struct
               match Extprot.Codec.ll_type t with [
                   Extprot.Codec.Tuple ->
                     let len = $id:RD.reader_module$.read_vint s in
+                    let eot = $id:RD.reader_module$.offset s len in
                     let nelms = $id:RD.reader_module$.read_vint s in
-                      $read_tuple_elms (lltys_without_defaults lltys)$
+                    let v = $read_tuple_elms (lltys_without_defaults lltys)$ in begin
+                      $id:RD.reader_module$.skip_to s eot;
+                      v
+                    end
                 | ll_type -> Extprot.Error.bad_wire_type ~ll_type ()
               ]
           >>
@@ -382,7 +386,12 @@ struct
           let wrap_non_constant e =
             <:expr<
               let len = $id:RD.reader_module$.read_vint s in
-              let nelms = $id:RD.reader_module$.read_vint s in $e$ >> in
+              let eot = $id:RD.reader_module$.offset s len in
+              let nelms = $id:RD.reader_module$.read_vint s in
+              let v = $e$ in begin
+                $id:RD.reader_module$.skip_to s eot;
+                v
+              end >> in
 
           let match_cases =
             List.filter_map maybe_match_case
@@ -428,8 +437,12 @@ struct
                   match Extprot.Codec.ll_type t with [
                       Extprot.Codec.Htuple ->
                         let len = $id:RD.reader_module$.read_vint s in
+                        let eoht = $id:RD.reader_module$.offset s len in
                         let nelms = $id:RD.reader_module$.read_vint s in
-                          $e$
+                        let v = $e$ in begin
+                          $id:RD.reader_module$.skip_to s eoht;
+                          v
+                        end
                     | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
                   ]
               >>
@@ -499,9 +512,12 @@ struct
       <:match_case<
         $int:string_of_int tag$ ->
           let len = $id:RD.reader_module$.read_vint s in
+          let eom = $id:RD.reader_module$.offset s len in
           let nelms = $id:RD.reader_module$.read_vint s in
-            $e$
-            >>
+          let v = $e$ in begin
+            $id:RD.reader_module$.skip_to s eom;
+            v
+          end >>
 
   let rec read_message msgname =
     let _loc = Loc.mk "<generated code @ read_message>" in
@@ -670,7 +686,7 @@ let rec write_message msgname =
            Extprot.Msg_buffer.add_vint b
              (Extprot.Msg_buffer.length aux +
               $int:string_of_int @@ vint_length nelms$);
-           Extprot.Msg_buffer.add_vint b $int:string_of_int nelms$;
+           Extprot.Msg_buffer.add_vint b nelms;
            Extprot.Msg_buffer.add_buffer b aux
          }
       >>
