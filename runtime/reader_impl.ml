@@ -47,7 +47,7 @@ DEFINE Read_prim_type(t, ty, read) =
       Error.bad_wire_type ()
     end
 
-let read_raw_bool t = match read_vint t with
+let read_raw_bool t = match read_byte t with
     0 -> false
   | _ -> true
 
