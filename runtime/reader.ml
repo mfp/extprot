@@ -3,6 +3,9 @@ open Codec
 module type S =
 sig
   type t
+  type position
+
+  val close : t -> unit
 
   val read_prefix : t -> prefix
 
@@ -14,6 +17,9 @@ sig
   val read_i64 : t -> Int64.t
   val read_float : t -> float
   val read_string : t -> string
+
+  val offset : t -> int -> position
+  val skip_to : t -> position -> unit
 
   val skip_value : t -> prefix -> unit
 end
@@ -32,14 +38,21 @@ DEFINE Read_vint(t) =
 module String_reader : sig
   include S
   val make : string -> int -> int -> t
+  val close : t -> unit
 end =
 struct
-  type t = { buf : string; last : int; mutable pos : int }
+  type t = { mutable buf : string; mutable last : int; mutable pos : int }
+  type position = int
 
   let make s off len =
     if off < 0 || len < 0 || off + len > String.length s then
       invalid_arg "Reader.String_reader.make";
     { buf = s; pos = off; last = off + len }
+
+  let close t = (* invalidate reader *)
+    t.buf <- "";
+    t.pos <- 1;
+    t.last <- 0
 
   let read_byte t =
     let pos = t.pos in
@@ -65,38 +78,69 @@ struct
     | Tuple | Htuple | Bytes -> let len = read_vint t in t.pos <- t.pos + len
 
   INCLUDE "reader_impl.ml"
+
+  let offset t off =
+    let pos = off + t.pos in
+    (* only check if > because need to be able to skip to EOF, but not "past" it *)
+      if off < 0 then invalid_arg "Extprot.Reader.String_reader.offset";
+      if pos > t.last then raise End_of_file;
+      pos
+
+  let skip_to t pos =
+    if pos > t.last then raise End_of_file;
+    if pos > t.pos then t.pos <- pos
 end
 
 module IO_reader : sig
-  include S with type t = IO.input
+  include S
+  val from_io : IO.input -> t
+  val from_string : string -> t
+  val from_file : string -> t
 end =
 struct
-  type t = IO.input
-  let read_byte = IO.read_byte
+  type t = { io : IO.input; mutable pos : int }
+  type position = int
 
-  let read_bytes io buf off len =
+  let from_io io = { io = io; pos = 0 }
+  let from_string s = { io = IO.input_string s; pos = 0 }
+  let from_file fname = from_io (IO.input_channel (open_in fname))
+
+  let close t = IO.close_in t.io
+
+  let offset t off =
+    if off < 0 then invalid_arg "Extprot.Reader.IO_reader.offset";
+    t.pos + off
+
+  let read_byte t =
+    let b = IO.read_byte t.io in
+      t.pos <- t.pos + 1;
+      b
+
+  let read_bytes t buf off len =
     if off < 0 || len < 0 || off + len > String.length buf then
       invalid_arg "Reader.IO_reader.read_bytes";
-    match IO.really_input io buf off len with
-        n when n = len -> ()
-      | _ -> raise End_of_file
+    let n = IO.really_input t.io buf off len in
+      t.pos <- t.pos + n;
+      if n <> len then raise End_of_file
 
   let read_vint t = Read_vint(t)
 
   let skip_buf = String.create 4096
 
-  let skip_value io p = match ll_type p with
-      Vint -> ignore (read_vint io)
-    | Bits8 -> ignore (read_byte io)
-    | Bits32 -> ignore (read_bytes io skip_buf 0 4)
-    | Bits64_float | Bits64_long -> ignore (read_bytes io skip_buf 0 8)
-    | Tuple | Htuple | Bytes ->
-        let rec loop = function
-            0 -> ()
-          | n -> let len = min n (String.length skip_buf) in
-              read_bytes io skip_buf 0 len;
-              loop (n - len)
-        in loop (read_vint io)
+  let rec skip_n t = function
+      0 -> ()
+    | n -> let len = min n (String.length skip_buf) in
+        read_bytes t skip_buf 0 len;
+        skip_n t (n - len)
+
+  let skip_value t p = match ll_type p with
+      Vint -> ignore (read_vint t)
+    | Bits8 -> ignore (read_byte t)
+    | Bits32 -> ignore (read_bytes t skip_buf 0 4)
+    | Bits64_float | Bits64_long -> ignore (read_bytes t skip_buf 0 8)
+    | Tuple | Htuple | Bytes -> skip_n t (read_vint t)
+
+  let skip_to t pos = if t.pos < pos then skip_n t (pos - t.pos)
 
   INCLUDE "reader_impl.ml"
   DEFINE EOF_wrap(f, x) = try f x with IO.No_more_input -> raise End_of_file

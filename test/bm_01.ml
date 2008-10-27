@@ -63,7 +63,7 @@ let main () =
   let a = match !in_file with
       None -> bm (sprintf "gen array of length %d" !len) make_array !len
     | Some f ->
-        let io = IO.input_channel (open_in f) in
+        let io = E.Reader.IO_reader.from_file f in
         let rec loop l =
           match try Some (dec_io io) with End_of_file -> None with
               None -> Array.of_list (List.rev l)
@@ -85,7 +85,7 @@ let main () =
       a;
 
     bm_extprot "IO_reader"
-      (fun b -> IO.input_string (M.contents b))
+      (fun b -> E.Reader.IO_reader.from_string (M.contents b))
       (fun rd -> try while true do ignore (dec_io rd) done with End_of_file -> ())
       a;
 
