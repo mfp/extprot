@@ -14,20 +14,48 @@ let check_prim_type ty t =
       Error.bad_wire_type ()
     end
 
+DEFINE Read_prim_type(t, ty, read) =
+ let p = read_prefix t in
+ let llty = ll_type p in
+   if ll_tag p <> 0 then begin
+     skip_value t p;
+     Error.unknown_tag (ll_tag p)
+   end;
+   if llty = ty then read
+   else if llty = Tuple then begin
+     let len = read_vint t in
+     let eot = offset t len in
+     let nelms = read_vint t in
+       if nelms >= 1 then begin
+         let p = read_prefix t in
+           if ll_tag p <> 0 then begin
+             skip_to t eot;
+             Error.unknown_tag (ll_tag p)
+           end;
+           if ll_type p <> ty then begin
+             skip_to t eot;
+             Error.bad_wire_type ()
+           end;
+           let v = read in
+             skip_to t eot;
+             v
+       end else begin
+         skip_to t eot;
+         Error.bad_wire_type ()
+       end
+   end else begin
+      skip_value t p;
+      Error.bad_wire_type ()
+    end
+
 let read_bool t =
-  check_prim_type Bits8 t;
-  match read_vint t with
-      0 -> false
-    | _ -> true
+  Read_prim_type(t, Bits8, (match read_vint t with 0 -> false | _ -> true))
 
 let read_i8 t =
-  check_prim_type Bits8 t;
-  read_byte t
+  Read_prim_type(t, Bits8, read_byte t)
 
 let read_rel_int t =
-  check_prim_type Vint t;
-  let n = read_vint t in
-    (n lsr 1) lxor (- (n land 1))
+  Read_prim_type(t, Vint, (let n = read_vint t in (n lsr 1) lxor (- (n land 1))))
 
 let (+!) = Int32.add
 let (<!) = Int32.shift_left
@@ -38,12 +66,12 @@ let (<!!) = Int64.shift_left
 let to_i64 = Int64.of_int
 
 let read_i32 t =
-  check_prim_type Bits32 t;
-  let a = read_byte t in
-  let b = read_byte t in
-  let c = read_byte t in
-  let d = read_byte t in
-    to_i32 a +! (to_i32 b <! 8) +! (to_i32 c <! 16) +! (to_i32 d <! 24)
+  Read_prim_type(t, Bits32,
+                 (let a = read_byte t in
+                  let b = read_byte t in
+                  let c = read_byte t in
+                  let d = read_byte t in
+                    to_i32 a +! (to_i32 b <! 8) +! (to_i32 c <! 16) +! (to_i32 d <! 24)))
 
 let read_i64_bits t =
   let a = read_byte t in
@@ -60,16 +88,13 @@ let read_i64_bits t =
     (to_i64 g <!! 48) +!! (to_i64 h <!! 56)
 
 let read_i64 t =
-  check_prim_type Bits64_long t;
-  read_i64_bits t
+  Read_prim_type(t, Bits64_long, read_i64_bits t)
 
 let read_float t =
-  check_prim_type Bits64_float t;
-  Int64.float_of_bits (read_i64_bits t)
+  Read_prim_type(t, Bits64_float, Int64.float_of_bits (read_i64_bits t))
 
 let read_string t =
-  check_prim_type Bytes t;
-  let len = read_vint t in
-  let s = String.create len in
-    read_bytes t s 0 len;
-    s
+  Read_prim_type(t, Bytes, (let len = read_vint t in
+                            let s = String.create len in
+                              read_bytes t s 0 len;
+                              s))

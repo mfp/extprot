@@ -98,8 +98,6 @@ struct
     | Bits64_long | Bits64_float -> t.pos <- t.pos + 8
     | Tuple | Htuple | Bytes -> let len = read_vint t in t.pos <- t.pos + len
 
-  INCLUDE "reader_impl.ml"
-
   let offset t off =
     let pos = off + t.pos in
     (* only check if > because need to be able to skip to EOF, but not "past" it *)
@@ -110,6 +108,8 @@ struct
   let skip_to t pos =
     if pos > t.last then raise End_of_file;
     if pos > t.pos then t.pos <- pos
+
+  INCLUDE "reader_impl.ml"
 end
 
 module IO_reader : sig
