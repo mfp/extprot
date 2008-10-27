@@ -24,6 +24,27 @@ sig
   val skip_value : t -> prefix -> unit
 end
 
+type reader_func =
+    [
+      `Offset | `Skip_to | `Read_prefix
+      | `Read_vint | `Read_bool | `Read_rel_int | `Read_io | `Read_i8
+      | `Read_i32 | `Read_i64 | `Read_float | `Read_string
+    ]
+
+let string_of_reader_func : reader_func -> string = function
+  `Offset -> "offset"
+  | `Skip_to -> "skip_to"
+  | `Read_prefix -> "read_prefix"
+  | `Read_vint -> "read_vint"
+  | `Read_bool -> "read_bool"
+  | `Read_rel_int -> "read_rel_int"
+  | `Read_io -> "read_io"
+  | `Read_i8 -> "read_i8"
+  | `Read_i32 -> "read_i32"
+  | `Read_i64 -> "read_i64"
+  | `Read_float -> "read_float"
+  | `Read_string -> "read_string"
+
 DEFINE Read_vint(t) =
   let b = ref (read_byte t) in
   let x = ref 0 in

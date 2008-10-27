@@ -27,6 +27,7 @@ EXTPROT_OBJS[] =
 	gen_OCaml
 
 section
+	OCAMLINCLUDES[] += runtime
 	section
 		OCAMLFLAGS += -for-pack Extprot_gen
 		CamlSources($(EXTPROT_OBJS))
@@ -34,7 +35,7 @@ section
 	OCamlLibrary(extprot_gen, extprot_gen)
 
 section
-	OCAML_LIBS = extprot_gen
+	OCAML_LIBS = runtime/extprot extprot_gen
 	OCAMLPACKS += camlp4.lib
 	OCamlProgram(sample, sample)
 

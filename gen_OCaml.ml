@@ -270,11 +270,10 @@ struct
 
 end
 
-
 module Make_reader
          (RD : sig
-            val reader_module : Ast.ident
-            val reader_func : string -> string
+            val reader_func : Extprot.Reader.reader_func -> Ast.expr
+            val read_msg_func : string -> string
           end) =
 struct
   let read_field msgname constr_name name llty =
@@ -330,23 +329,23 @@ struct
     and lltys_without_defaults = List.map (fun x -> (x, None))
 
     and read = function
-        Vint Bool -> <:expr< $id:RD.reader_module$.read_bool s >>
-      | Vint Int -> <:expr< $id:RD.reader_module$.read_rel_int s >>
-      | Vint Int8 -> <:expr< $id:RD.reader_module$.read_i8 s >>
-      | Bitstring32 -> <:expr< $id:RD.reader_module$.read_i32 s >>
-      | Bitstring64 Long -> <:expr< $id:RD.reader_module$.read_i64 s >>
-      | Bitstring64 Float -> <:expr< $id:RD.reader_module$.read_float s >>
-      | Bytes -> <:expr< $id:RD.reader_module$.read_string s >>
+        Vint Bool -> <:expr< $RD.reader_func `Read_bool$ s >>
+      | Vint Int -> <:expr< $RD.reader_func `Read_rel_int$ s >>
+      | Vint Int8 -> <:expr< $RD.reader_func `Read_i8$ s >>
+      | Bitstring32 -> <:expr< $RD.reader_func `Read_i32$ s >>
+      | Bitstring64 Long -> <:expr< $RD.reader_func `Read_i64$ s >>
+      | Bitstring64 Float -> <:expr< $RD.reader_func `Read_float$ s >>
+      | Bytes -> <:expr< $RD.reader_func `Read_string$ s >>
       | Tuple lltys ->
           <:expr<
-            let t = $id:RD.reader_module$.read_prefix s in
+            let t = $RD.reader_func `Read_prefix$ s in
               match Extprot.Codec.ll_type t with [
                   Extprot.Codec.Tuple ->
-                    let len = $id:RD.reader_module$.read_vint s in
-                    let eot = $id:RD.reader_module$.offset s len in
-                    let nelms = $id:RD.reader_module$.read_vint s in
+                    let len = $RD.reader_func `Read_vint$ s in
+                    let eot = $RD.reader_func `Offset$ s len in
+                    let nelms = $RD.reader_func `Read_vint$ s in
                     let v = $read_tuple_elms (lltys_without_defaults lltys)$ in begin
-                      $id:RD.reader_module$.skip_to s eot;
+                      $RD.reader_func `Skip_to$ s eot;
                       v
                     end
                 | ll_type -> Extprot.Error.bad_wire_type ~ll_type ()
@@ -385,11 +384,11 @@ struct
 
           let wrap_non_constant e =
             <:expr<
-              let len = $id:RD.reader_module$.read_vint s in
-              let eot = $id:RD.reader_module$.offset s len in
-              let nelms = $id:RD.reader_module$.read_vint s in
+              let len = $RD.reader_func `Read_vint$ s in
+              let eot = $RD.reader_func `Offset$ s len in
+              let nelms = $RD.reader_func `Read_vint$ s in
               let v = $e$ in begin
-                $id:RD.reader_module$.skip_to s eot;
+                $RD.reader_func `Skip_to$ s eot;
                 v
               end >> in
 
@@ -401,14 +400,14 @@ struct
               ]
           in
 
-            <:expr< let t = $id:RD.reader_module$.read_prefix s in
+            <:expr< let t = $RD.reader_func `Read_prefix$ s in
               match Extprot.Codec.ll_type t with [
                 $Ast.mcOr_of_list match_cases$
                 | ll_type -> Extprot.Error.bad_wire_type ~ll_type ()
               ]
             >>
       | Message name ->
-          <:expr< $uid:String.capitalize name$.$lid:RD.reader_func name$ s >>
+          <:expr< $uid:String.capitalize name$.$lid:RD.read_msg_func name$ s >>
       | Htuple (kind, llty) ->
           let e = match kind with
               List ->
@@ -433,14 +432,14 @@ struct
                     ]
                   >>
           in <:expr<
-                let t = $id:RD.reader_module$.read_prefix s in
+                let t = $RD.reader_func `Read_prefix$ s in
                   match Extprot.Codec.ll_type t with [
                       Extprot.Codec.Htuple ->
-                        let len = $id:RD.reader_module$.read_vint s in
-                        let eoht = $id:RD.reader_module$.offset s len in
-                        let nelms = $id:RD.reader_module$.read_vint s in
+                        let len = $RD.reader_func `Read_vint$ s in
+                        let eoht = $RD.reader_func `Offset$ s len in
+                        let nelms = $RD.reader_func `Read_vint$ s in
                         let v = $e$ in begin
-                          $id:RD.reader_module$.skip_to s eoht;
+                          $RD.reader_func `Skip_to$ s eoht;
                           v
                         end
                     | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
@@ -511,11 +510,11 @@ struct
     in
       <:match_case<
         $int:string_of_int tag$ ->
-          let len = $id:RD.reader_module$.read_vint s in
-          let eom = $id:RD.reader_module$.offset s len in
-          let nelms = $id:RD.reader_module$.read_vint s in
+          let len = $RD.reader_func `Read_vint$ s in
+          let eom = $RD.reader_func `Offset$ s len in
+          let nelms = $RD.reader_func `Read_vint$ s in
           let v = $e$ in begin
-            $id:RD.reader_module$.skip_to s eom;
+            $RD.reader_func `Skip_to$ s eom;
             v
           end >>
 
@@ -523,7 +522,7 @@ struct
     let _loc = Loc.mk "<generated code @ read_message>" in
     let wrap match_cases =
       <:expr<
-        let t = $id:RD.reader_module$.read_prefix s in begin
+        let t = $RD.reader_func `Read_prefix$ s in begin
           if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
             Extprot.Error.bad_wire_type
               ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
@@ -547,8 +546,10 @@ let add_message_reader bindings msgname mexpr c =
   let llrec = Gencode.low_level_msg_def bindings mexpr in
   let module Mk_normal_reader =
     Make_reader(struct
-                  let reader_module = <:ident< Extprot.Reader.String_reader >>
-                  let reader_func = ((^) "read_")
+                  let reader_func t =
+                    <:expr< Extprot.Reader.String_reader.
+                              $lid:Extprot.Reader.string_of_reader_func t$ >>
+                  let read_msg_func = ((^) "read_")
                 end) in
   let read_expr = Mk_normal_reader.read_message msgname llrec in
     {
@@ -561,8 +562,10 @@ let add_message_io_reader bindings msgname mexpr c =
   let llrec = Gencode.low_level_msg_def bindings mexpr in
   let module Mk_io_reader =
     Make_reader(struct
-                  let reader_module = <:ident< Extprot.Reader.IO_reader >>
-                  let reader_func = ((^) "io_read_")
+                  let reader_func t =
+                    <:expr< Extprot.Reader.IO_reader.
+                              $lid:Extprot.Reader.string_of_reader_func t$ >>
+                  let read_msg_func = ((^) "io_read_")
                 end) in
   let ioread_expr = Mk_io_reader.read_message msgname llrec in
     {
