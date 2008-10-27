@@ -48,14 +48,20 @@ DEFINE Read_prim_type(t, ty, read) =
       Error.bad_wire_type ()
     end
 
-let read_bool t =
-  Read_prim_type(t, Bits8, (match read_vint t with 0 -> false | _ -> true))
+let read_raw_bool t = match read_vint t with
+    0 -> false
+  | _ -> true
 
-let read_i8 t =
-  Read_prim_type(t, Bits8, read_byte t)
+let read_bool t = Read_prim_type(t, Bits8, read_raw_bool t)
 
-let read_rel_int t =
-  Read_prim_type(t, Vint, (let n = read_vint t in (n lsr 1) lxor (- (n land 1))))
+let read_raw_i8 t = read_byte t
+
+let read_i8 t = Read_prim_type(t, Bits8, read_raw_i8 t)
+
+let read_raw_rel_int t =
+  let n = read_vint t in (n lsr 1) lxor (- (n land 1))
+
+let read_rel_int t = Read_prim_type(t, Vint, read_raw_rel_int t)
 
 let (+!) = Int32.add
 let (<!) = Int32.shift_left
@@ -65,13 +71,14 @@ let (+!!) = Int64.add
 let (<!!) = Int64.shift_left
 let to_i64 = Int64.of_int
 
-let read_i32 t =
-  Read_prim_type(t, Bits32,
-                 (let a = read_byte t in
-                  let b = read_byte t in
-                  let c = read_byte t in
-                  let d = read_byte t in
-                    to_i32 a +! (to_i32 b <! 8) +! (to_i32 c <! 16) +! (to_i32 d <! 24)))
+let read_raw_i32 t =
+  let a = read_byte t in
+  let b = read_byte t in
+  let c = read_byte t in
+  let d = read_byte t in
+    to_i32 a +! (to_i32 b <! 8) +! (to_i32 c <! 16) +! (to_i32 d <! 24)
+
+let read_i32 t = Read_prim_type(t, Bits32, read_raw_i32 t)
 
 let read_i64_bits t =
   let a = read_byte t in
@@ -87,14 +94,18 @@ let read_i64_bits t =
     (to_i64 e <!! 32) +!! (to_i64 f <!! 40) +!!
     (to_i64 g <!! 48) +!! (to_i64 h <!! 56)
 
-let read_i64 t =
-  Read_prim_type(t, Bits64_long, read_i64_bits t)
+let read_raw_i64 = read_i64_bits
 
-let read_float t =
-  Read_prim_type(t, Bits64_float, Int64.float_of_bits (read_i64_bits t))
+let read_i64 t = Read_prim_type(t, Bits64_long, read_raw_i64 t)
 
-let read_string t =
-  Read_prim_type(t, Bytes, (let len = read_vint t in
-                            let s = String.create len in
-                              read_bytes t s 0 len;
-                              s))
+let read_raw_float t = Int64.float_of_bits (read_i64_bits t)
+
+let read_float t = Read_prim_type(t, Bits64_float, read_raw_float t)
+
+let read_raw_string t =
+  let len = read_vint t in
+  let s = String.create len in
+    read_bytes t s 0 len;
+    s
+
+let read_string t = Read_prim_type(t, Bytes, read_raw_string t)

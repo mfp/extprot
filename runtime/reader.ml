@@ -18,6 +18,14 @@ sig
   val read_float : t -> float
   val read_string : t -> string
 
+  val read_raw_bool : t -> bool
+  val read_raw_rel_int : t -> int
+  val read_raw_i8 : t -> int
+  val read_raw_i32 : t -> Int32.t
+  val read_raw_i64 : t -> Int64.t
+  val read_raw_float : t -> float
+  val read_raw_string : t -> string
+
   val offset : t -> int -> position
   val skip_to : t -> position -> unit
 
@@ -27,8 +35,10 @@ end
 type reader_func =
     [
       `Offset | `Skip_to | `Read_prefix
-      | `Read_vint | `Read_bool | `Read_rel_int | `Read_io | `Read_i8
+      | `Read_vint | `Read_bool | `Read_rel_int | `Read_i8
       | `Read_i32 | `Read_i64 | `Read_float | `Read_string
+      | `Read_raw_bool | `Read_raw_rel_int | `Read_raw_i8
+      | `Read_raw_i32 | `Read_raw_i64 | `Read_raw_float | `Read_raw_string
     ]
 
 let string_of_reader_func : reader_func -> string = function
@@ -38,12 +48,18 @@ let string_of_reader_func : reader_func -> string = function
   | `Read_vint -> "read_vint"
   | `Read_bool -> "read_bool"
   | `Read_rel_int -> "read_rel_int"
-  | `Read_io -> "read_io"
   | `Read_i8 -> "read_i8"
   | `Read_i32 -> "read_i32"
   | `Read_i64 -> "read_i64"
   | `Read_float -> "read_float"
   | `Read_string -> "read_string"
+  | `Read_raw_bool -> "read_raw_bool"
+  | `Read_raw_rel_int -> "read_raw_rel_int"
+  | `Read_raw_i8 -> "read_raw_i8"
+  | `Read_raw_i32 -> "read_raw_i32"
+  | `Read_raw_i64 -> "read_raw_i64"
+  | `Read_raw_float -> "read_raw_float"
+  | `Read_raw_string -> "read_raw_string"
 
 DEFINE Read_vint(t) =
   let b = ref (read_byte t) in
