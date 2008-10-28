@@ -74,6 +74,7 @@ let rec inspect ?(verbose=true) pp io prefix =
       let len = read_vint io in
       let s = IO.nread io len in
         pp_verbose "B_%d@[<1>@ %a@]" "%a" PP.pp_string ~verbose ~tag pp s
+  | Invalid_ll_type -> Error.bad_wire_type ()
 
 and inspect_tuple ?(verbose = true) left right prefix pp io =
   let tag = ll_tag prefix in
