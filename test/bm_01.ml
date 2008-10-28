@@ -35,20 +35,33 @@ let bm msg f x =
     printf "[%s] %8.5fs\n%!" msg dt;
     y
 
-let bm_wr_rd msg write open_rd read a =
-  Gc.compact ();
-  printf "==== %s ====\n" msg;
-  let out = bm "write" write a in
-    let dt = ref 0. in
-      for i = 0 to !rounds do
-        Gc.compact ();
-        let _, ddt = time read (open_rd out) in
-          dt := !dt +. ddt
-      done;
-      printf "[read] %8.5fs / iter\n" (!dt /. float !rounds)
+let bms = ref `All
+
+let bm_wr_rd id msg write open_rd read a =
+    let run () =
+      Gc.compact ();
+      printf "==== %s ====\n" msg;
+      let out = bm "write" write a in
+      let dt = ref 0. in
+        for i = 0 to !rounds do
+          Gc.compact ();
+          let _, ddt = time read (open_rd out) in
+            dt := !dt +. ddt
+        done;
+        printf "[read] %8.5fs / iter\n" (!dt /. float !rounds)
+
+    in match !bms with
+        `All -> run ()
+      | `Some l -> if List.mem id l then run ()
+
+let set_tests id = match !bms with
+    `All -> bms := `Some [id]
+  | `Some l -> bms := `Some (id :: l)
 
 let main () =
-  Arg.parse arg_spec ignore "Usage:";
+  Arg.parse arg_spec set_tests
+    "Usage: bm_01 [options] [benchmarks]\n\n\
+     Known benchmarks: string_reader, io_reader, marshal, marshal_array\n";
 
   let pr_size n = printf "** Serialized in %d bytes.\n%!" n in
 
@@ -58,8 +71,8 @@ let main () =
       pr_size (M.length b);
       b in
 
-  let bm_extprot msg open_rd read x =
-    bm_wr_rd ("extprot " ^ msg) encode_to_msg_buf open_rd read x in
+  let bm_extprot id msg open_rd read x =
+    bm_wr_rd id ("extprot " ^ msg) encode_to_msg_buf open_rd read x in
 
   let a = match !in_file with
       None -> bm (sprintf "gen array of length %d" !len) make_array !len
@@ -78,25 +91,25 @@ let main () =
            IO.close_out io)
       !out_file;
 
-    bm_extprot "String_reader"
+    bm_extprot "string_reader" "String_reader"
       (fun b ->
          let s = M.contents b in
            E.Reader.String_reader.make s 0 (String.length s))
       (fun rd -> try while true do ignore (dec rd) done with End_of_file -> ())
       a;
 
-    bm_extprot "IO_reader"
+    bm_extprot "io_reader" "IO_reader"
       (fun b -> E.Reader.IO_reader.from_string (M.contents b))
       (fun rd -> try while true do ignore (dec_io rd) done with End_of_file -> ())
       a;
 
-    bm_wr_rd "Marshal (array)"
+    bm_wr_rd "marshal" "Marshal (array)"
       (fun a -> let s = Marshal.to_string a [] in pr_size (String.length s); s)
       (fun s -> s)
       (fun s -> ignore (Marshal.from_string s 0))
       a;
 
-    bm_wr_rd "Marshal (individual msgs)"
+    bm_wr_rd "marshal_array" "Marshal (individual msgs)"
       (fun a ->
          let b = B.create 256 in
            Array.iter (fun x -> B.add_string b (Marshal.to_string x [])) a;
