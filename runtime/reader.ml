@@ -62,7 +62,7 @@ let string_of_reader_func : reader_func -> string = function
   | `Read_raw_string -> "read_raw_string"
 
 DEFINE Read_vint(t) =
-  let b = ref (read_byte t) in
+  let b = ref (read_byte t) in if !b < 128 then !b else
   let x = ref 0 in
   let e = ref 0 in
     while !b >= 128 do
