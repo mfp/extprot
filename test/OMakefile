@@ -1,5 +1,7 @@
 OCAMLPACKS [] += oUnit
 
+OCAMLFLAGS += -w Aelz
+
 OCAMLINCLUDES += $(ROOT)/runtime
 
 OCAML_LIBS[] +=

@@ -3,8 +3,8 @@ NATIVE_ENABLED = true
 BYTE_ENABLED = true
 
 OCAMLDEPFLAGS = -pp "camlp4orf"
-OCAMLFLAGS = -dtypes -pp "camlp4orf"
-OCAMLOPTFLAGS = -inline 100 
+OCAMLFLAGS = -dtypes -pp "camlp4orf" -w A -warn-error A
+OCAMLOPTFLAGS = -S -inline 100
 OCAMLCFLAGS += -g
 
 OCAMLPACKS[] =
@@ -31,6 +31,9 @@ section
 	section
 		OCAMLFLAGS += -for-pack Extprot_gen
 		CamlSources($(EXTPROT_OBJS))
+	section
+		OCAMLFLAGS += -for-pack Extprot_gen -w e
+		CamlSources(parser)
 	OCamlPackage(extprot_gen, $(EXTPROT_OBJS))
 	OCamlLibrary(extprot_gen, extprot_gen)
 

@@ -468,7 +468,7 @@ struct
     let _loc = Loc.mk "<generated code @ record_case>" in
     let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno (name, mutabl, llty) ?default expr =
+    let read_field fieldno (name, _, llty) ?default expr =
       let rescue_match_case = match default with
           None ->
             <:match_case<
@@ -706,6 +706,7 @@ let write_fields fs =
   Ast.exSem_of_list @@ List.map (fun (name, _, llty) -> write_field name llty) fs
 
 let rec write_message msgname =
+  ignore msgname;
   let _loc = Loc.mk "<generated code @ write_message>" in
   let dump_fields tag fields =
     let nelms = List.length fields in

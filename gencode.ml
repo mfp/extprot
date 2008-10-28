@@ -89,17 +89,17 @@ let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
     | `Type_param p ->
         let name = string_of_type_param p in begin match smap_find name bindings with
             Some (Message_decl (name, _)) -> `Message name
-          | Some (Type_decl (name, [], exp)) -> beta_reduce_texpr bindings exp
+          | Some (Type_decl (_, [], exp)) -> beta_reduce_texpr bindings exp
           | Some (Type_decl (_, _, _)) ->
               failwithfmt "beta_reduce_texpr: wrong arity for higher-order type %S" name;
               assert false
-          | _ -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
-                 assert false
+          | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
+                    assert false
         end
 
     | `App (name, args) -> match smap_find name bindings with
           Some (Message_decl _) -> `Message name
-        | Some (Type_decl (name, params, exp)) ->
+        | Some (Type_decl (_, params, exp)) ->
             let bindings =
               update_bindings bindings (List.map string_of_type_param params)
                 (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
@@ -119,9 +119,9 @@ let rec reduce_to_poly_texpr_core bindings (texpr : type_expr) : poly_type_expr_
     | `Type_param p -> `Type_arg (type_param_name p)
     | `App (name, args) -> match smap_find name bindings with
           Some (Message_decl _) -> `Type (name, [])
-        | Some (Type_decl (name, params, `Sum _)) ->
+        | Some (Type_decl (name, _, `Sum _)) ->
             `Type (name, List.map (self bindings) (args :> type_expr list))
-        | Some (Type_decl (name, params, exp)) ->
+        | Some (Type_decl (name, _, _)) ->
             `Type (name, List.map (self bindings) (args :> type_expr list))
             (* let bindings = *)
               (* update_bindings bindings (List.map string_of_type_param params) *)
@@ -279,7 +279,7 @@ struct
               in list elt "@ | " ppf cases
             in match s.constant with
                 [] -> pp ppf "@[<1>%a@]" pp_non_constant non_const
-              | l -> pp ppf "@[<1>%a@ | %a@]" (list (pp' "%s") "@ | ") s.constant
+              | _ -> pp ppf "@[<1>%a@ | %a@]" (list (pp' "%s") "@ | ") s.constant
                        pp_non_constant non_const
       end
     | `Message s -> pp ppf "msg:%S" s
