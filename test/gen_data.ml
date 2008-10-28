@@ -10,7 +10,8 @@ let rand_sum_type a b c =
     [
       (a >>= fun n -> return (Sum_type.A n));
       (b >>= fun n -> return (Sum_type.B n));
-      (c >>= fun n -> return (Sum_type.C n))
+      (c >>= fun n -> return (Sum_type.C n));
+      return Sum_type.D;
     ]
 
 let rtt_a =

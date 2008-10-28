@@ -240,6 +240,15 @@ let () =
         check_write "\001\010\001\033\007\001\003\004abcd"
           ~msg:"{ Simple_sum.v = Sum_type.C \"abcd\" }"
           Simple_sum.write_simple_sum { Simple_sum.v = Sum_type.C "abcd" } ();
+        (*
+         * 001       tuple, tag 0
+         * 002       len
+         * 001       nelms
+         *  010       enum, tag 0
+         * *)
+        check_write "\001\002\001\010"
+          ~msg:"{ Simple_sum.v = Sum_type.D }"
+          Simple_sum.write_simple_sum { Simple_sum.v = Sum_type.D } ();
       end;
 
       "nested message" >:: begin fun () ->

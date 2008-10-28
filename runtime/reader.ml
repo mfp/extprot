@@ -113,6 +113,7 @@ struct
     | Bits8 -> t.pos <- t.pos + 1
     | Bits32 -> t.pos <- t.pos + 4
     | Bits64_long | Bits64_float -> t.pos <- t.pos + 8
+    | Enum -> ()
     | Tuple | Htuple | Bytes -> let len = read_vint t in t.pos <- t.pos + len
     | Invalid_ll_type -> Error.bad_wire_type ()
 
@@ -177,6 +178,7 @@ struct
     | Bits8 -> ignore (read_byte t)
     | Bits32 -> ignore (read_bytes t skip_buf 0 4)
     | Bits64_float | Bits64_long -> ignore (read_bytes t skip_buf 0 8)
+    | Enum -> ()
     | Tuple | Htuple | Bytes -> skip_n t (read_vint t)
     | Invalid_ll_type -> Error.bad_wire_type ()
 

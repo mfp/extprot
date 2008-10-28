@@ -120,7 +120,6 @@ let add_tuple_prefix b tag = add_vint b (Codec.tuple_prefix tag)
 
 let add_htuple_prefix b tag = add_vint b (Codec.htuple_prefix tag)
 
-(* FIXME: review *)
 let add_const_prefix b tag = add_vint b (Codec.const_prefix tag)
 
 let write_bool b bool =

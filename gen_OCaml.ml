@@ -412,7 +412,7 @@ struct
           let match_cases =
             List.filter_map maybe_match_case
               [
-                Extprot.Codec.Vint, (fun e -> e), constant_match_cases;
+                Extprot.Codec.Enum, (fun e -> e), constant_match_cases;
                 Extprot.Codec.Tuple, wrap_non_constant, nonconstant_match_cases;
               ]
           in

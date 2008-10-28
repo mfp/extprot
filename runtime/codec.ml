@@ -13,7 +13,7 @@ let ll_type_prefix_table =
   [|
     Vint;            Tuple;           Bits8;           Bytes;
     Bits32;          Htuple;          Bits64_long;     Invalid_ll_type;
-    Bits64_float;    Invalid_ll_type; Invalid_ll_type; Invalid_ll_type;
+    Bits64_float;    Invalid_ll_type; Enum;            Invalid_ll_type;
     Invalid_ll_type; Invalid_ll_type; Invalid_ll_type; Invalid_ll_type;
   |]
 
@@ -23,7 +23,7 @@ let ll_tag prefix = prefix lsr 4
 
 let tuple_prefix tag = (0x01 lor (tag lsl 4))  (* vlen:1 ctyp:0 *)
 let htuple_prefix tag = (0x05 lor (tag lsl 4)) (* vlen:1 ctyp:2 *)
-let const_prefix tag = (tag lsl 4)             (* vlen:0 ctyp:0 *)
+let const_prefix tag = (10 lor (tag lsl 4))    (* vlen:0 ctyp:5 *)
 
 (* all the following for tag 0 *)
 let relative_int_prefix = 0                    (* ctyp 0, vlen 0 *)

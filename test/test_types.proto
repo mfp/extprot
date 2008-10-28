@@ -13,7 +13,7 @@ message msg_sum =
     A { b : bool }
   | B { i : int }
 
-type sum_type 'a 'b 'c = A 'a | B 'b | C 'c
+type sum_type 'a 'b 'c = A 'a | B 'b | C 'c | D
 
 message simple_sum = { v : sum_type<bool, byte, string> }
 

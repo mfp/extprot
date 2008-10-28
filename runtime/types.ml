@@ -5,6 +5,7 @@ type low_level_type =
   | Bits32
   | Bits64_long
   | Bits64_float
+  | Enum
   | Tuple
   | Bytes
   | Htuple
@@ -16,6 +17,7 @@ let string_of_low_level_type = function
   | Bits32 -> "Bits32"
   | Bits64_long -> "Bits64_long"
   | Bits64_float -> "Bits64_float"
+  | Enum -> "Enum"
   | Bytes -> "Bytes"
   | Tuple -> "Tuple"
   | Htuple -> "Htuple"
