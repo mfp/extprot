@@ -45,6 +45,10 @@ let paSem_of_lidlist _loc l =
 let exSem_of_lidlist _loc l =
   Ast.exSem_of_list @@ List.map (fun s -> <:expr< $lid:s$>>) l
 
+let patt_of_ll_type t =
+  let _loc = Loc.mk "<genererated code @ patt_of_ll_type>" in
+    <:patt< Extprot.Codec.$uid:Extprot.Codec.string_of_low_level_type t$ >>
+
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
 
@@ -387,13 +391,13 @@ struct
                    tag -> Extprot.Error.unknown_tag tag >> ]
           in
 
-          let maybe_match_case (constr, f, l) = match l with
+          let maybe_match_case (llty, f, l) = match l with
               [] | [_] (* catch-all *)-> None
             | l ->
                 let expr =
                   <:expr< match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list l$ ] >>
                 in
-                  Some <:match_case< Extprot.Codec.$uid:constr$ -> $f expr$ >> in
+                  Some <:match_case< $patt_of_ll_type llty$ -> $f expr$ >> in
 
           let wrap_non_constant e =
             <:expr<
@@ -408,8 +412,8 @@ struct
           let match_cases =
             List.filter_map maybe_match_case
               [
-                "Vint", (fun e -> e), constant_match_cases;
-                "Tuple", wrap_non_constant, nonconstant_match_cases;
+                Extprot.Codec.Vint, (fun e -> e), constant_match_cases;
+                Extprot.Codec.Tuple, wrap_non_constant, nonconstant_match_cases;
               ]
           in
 
@@ -555,8 +559,7 @@ struct
 end
 
 let raw_rd_func reader_func =
-  let _loc = Loc.mk "<genererated code @ raw_rd_func>" in
-  let patt t = <:patt< Extprot.Codec.$uid:Extprot.Codec.string_of_low_level_type t$ >> in
+  let patt = patt_of_ll_type in
   let module C = Extprot.Codec in function
       Vint Bool -> Some (patt C.Bits8, reader_func `Read_raw_bool)
     | Vint Int8 -> Some (patt C.Bits8, reader_func `Read_raw_i8)
