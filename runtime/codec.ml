@@ -4,7 +4,7 @@ type prefix = int
 
 let vint_length = function
     n when n < 128 -> 1
-  | n when n < 13384 -> 2
+  | n when n < 16384 -> 2
   | n when n < 2097152 -> 3
   | n when n < 268435456 -> 4
   | _ -> 5 (* FIXME: checking for 64-bit and 32-bit archs *)
