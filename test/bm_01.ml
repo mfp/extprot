@@ -3,6 +3,7 @@ open ExtArray
 module C = Test_types.Complex_rtt
 module M = Extprot.Msg_buffer
 module E = Extprot
+module B = Buffer
 
 let make_array n = Array.init n (fun _ -> Gen_data.generate Gen_data.complex_rtt)
 let dec = C.read_complex_rtt
@@ -89,11 +90,30 @@ let main () =
       (fun rd -> try while true do ignore (dec_io rd) done with End_of_file -> ())
       a;
 
-    bm_wr_rd "Marshal"
+    bm_wr_rd "Marshal (array)"
       (fun a -> let s = Marshal.to_string a [] in pr_size (String.length s); s)
       (fun s -> s)
       (fun s -> ignore (Marshal.from_string s 0))
-      a
+      a;
+
+    bm_wr_rd "Marshal (individual msgs)"
+      (fun a ->
+         let b = B.create 256 in
+           Array.iter (fun x -> B.add_string b (Marshal.to_string x [])) a;
+           pr_size (B.length b);
+           B.contents b)
+      (fun s -> s)
+      (fun s ->
+         let max = String.length s in
+         let rec loop n =
+           if n < max then begin
+             let len = Marshal.total_size s n in
+               ignore (Marshal.from_string s n);
+               loop (n + len)
+           end
+         in loop 0)
+      a;
+    ()
 
 let () =
   try
