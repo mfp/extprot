@@ -93,10 +93,11 @@ struct
 
   let read_byte t =
     let pos = t.pos in
-      if pos >= t.last then raise End_of_file;
-      let r = Char.code (String.unsafe_get t.buf pos) in
-        t.pos <- t.pos + 1;
-        r
+      if pos < t.last then begin
+        let r = Char.code (String.unsafe_get t.buf pos) in
+          t.pos <- t.pos + 1;
+          r
+      end else raise End_of_file
 
   let read_bytes t buf off len =
     if off < 0 || len < 0 || off + len > String.length buf then
