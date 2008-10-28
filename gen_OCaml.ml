@@ -608,13 +608,6 @@ let add_message_io_reader bindings msgname mexpr c =
         Some <:str_item< value $lid:"io_read_" ^ msgname$ s = $ioread_expr$ >>
     }
 
-let vint_length = function
-    n when n < 128 -> 1
-  | n when n < 13384 -> 2
-  | n when n < 2097152 -> 3
-  | n when n < 268435456 -> 4
-  | _ -> 5 (* FIXME: checking for 64-bit and 32-bit archs *)
-
 let rec write_field fname =
   let _loc = Loc.mk "<generated code @ write>" in
   let simple_write_func = function
@@ -642,7 +635,7 @@ let rec write_field fname =
           Extprot.Msg_buffer.add_tuple_prefix aux $int:string_of_int tag$;
           Extprot.Msg_buffer.add_vint aux
             (Extprot.Msg_buffer.length abuf +
-             $int:string_of_int @@ vint_length nelms$);
+             $int:string_of_int @@ Extprot.Codec.vint_length nelms$);
           Extprot.Msg_buffer.add_vint aux $int:string_of_int nelms$;
           Extprot.Msg_buffer.add_buffer aux abuf
         }
@@ -723,7 +716,7 @@ let rec write_message msgname =
            $write_fields fields$;
            Extprot.Msg_buffer.add_vint b
              (Extprot.Msg_buffer.length aux +
-              $int:string_of_int @@ vint_length nelms$);
+              $int:string_of_int @@ Extprot.Codec.vint_length nelms$);
            Extprot.Msg_buffer.add_vint b nelms;
            Extprot.Msg_buffer.add_buffer b aux
          }
