@@ -1,0 +1,27 @@
+
+EXTPROT_OBJS[] =
+	parser
+	ptypes
+	gencode
+	gen_OCaml
+
+section
+	section
+		OCAMLFLAGS += -for-pack Extprot_gen
+		CamlSources($(EXTPROT_OBJS))
+	section
+		OCAMLFLAGS += -for-pack Extprot_gen -w e
+		CamlSources(parser)
+	OCamlPackage(extprot_gen, $(EXTPROT_OBJS))
+	OCamlLibrary(extprot_gen, extprot_gen)
+
+section
+	OCAML_LIBS = $(ROOT)/runtime/extprot extprot_gen
+	OCAMLPACKS += camlp4.lib
+	OCamlProgram(extprotc, extprotc)
+
+.DEFAULT: extprot_gen.cma extprot_gen.cmxa extprotc
+
+.PHONY: clean
+clean:
+	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot

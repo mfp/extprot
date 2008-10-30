@@ -12,7 +12,7 @@ TEST_MODULES[] =
     gen_data
     unit_write
 
-GENERATOR = ../sample
+GENERATOR = $(ROOT)/extprotc
 
 OCAMLDEP_MODULES_ENABLED = false
 LocalOCamlGeneratedFiles(test_types.ml)
@@ -29,4 +29,4 @@ OCamlProgram(bm_01, test_types gen_data bm_01)
 
 .PHONY: clean
 clean:
-	rm -f $(filter-proper-targets $(ls R, .)) *.annot
+	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot

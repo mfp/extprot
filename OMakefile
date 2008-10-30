@@ -6,6 +6,7 @@ OCAMLDEPFLAGS = -pp "camlp4orf"
 OCAMLFLAGS = -dtypes -pp "camlp4orf" -w A -warn-error A
 OCAMLOPTFLAGS = -S -inline 100
 OCAMLCFLAGS += -g
+OCAMLINCLUDES[] += $(ROOT)/runtime
 
 OCAMLPACKS[] =
 	camlp4
@@ -18,38 +19,17 @@ CamlSources(mods) =
 CamlTargets(mod) =
 	return($(addsuffixes .cmo .cmi .cmx .o, $(mod)))
 
-.SUBDIRS: runtime test
-
-EXTPROT_OBJS[] =
-	parser
-	ptypes
-	gencode
-	gen_OCaml
-
-section
-	OCAMLINCLUDES[] += runtime
-	section
-		OCAMLFLAGS += -for-pack Extprot_gen
-		CamlSources($(EXTPROT_OBJS))
-	section
-		OCAMLFLAGS += -for-pack Extprot_gen -w e
-		CamlSources(parser)
-	OCamlPackage(extprot_gen, $(EXTPROT_OBJS))
-	OCamlLibrary(extprot_gen, extprot_gen)
-
-section
-	OCAML_LIBS = runtime/extprot extprot_gen
-	OCAMLPACKS += camlp4.lib
-	OCamlProgram(sample, sample)
+.SUBDIRS: compiler runtime test
 
 %.sig: %.ml %.cmo
 	$(OCAMLFIND) $(OCAMLC) -package $(concat \,, $(OCAMLPACKS)) \
 	    $(mapprefix -I, $(OCAMLINCLUDES)) \
 	    $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
 
-.DEFAULT: extprot_gen.cma extprot_gen.cmxa sample
+extprotc: compiler/extprotc
+	cp $^ $@
 
 .PHONY: clean
 clean:
-	rm -f $(filter-proper-targets $(ls R, .))
+	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot
 

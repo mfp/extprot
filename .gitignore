@@ -15,5 +15,4 @@ OMakefile.omc
 /.omakedb*
 /.omakedb.lock
 /OMakeroot.omc
-/sample.opt
-/sample
+/extprotc
