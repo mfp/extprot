@@ -42,13 +42,12 @@ let bm_wr_rd id msg write open_rd read a =
       Gc.compact ();
       printf "==== %s ====\n" msg;
       let out = bm "write" write a in
-      let dt = ref 0. in
-        for i = 0 to !rounds do
-          Gc.compact ();
-          let _, ddt = time read (open_rd out) in
-            dt := !dt +. ddt
-        done;
-        printf "[read] %8.5fs / iter\n" (!dt /. float !rounds)
+      let dts = Array.init !rounds
+                  (fun  _ -> Gc.compact ();
+                             let _, ddt = time read (open_rd out) in ddt)
+      in printf "[read] min: %8.5fs   avg: %8.5fs\n"
+           (Array.fold_left min max_float dts)
+           (Array.fold_left (+.) 0. dts /. float !rounds)
 
     in match !bms with
         `All -> run ()
