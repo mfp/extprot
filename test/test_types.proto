@@ -31,3 +31,6 @@ message complex_rtt =
     b2 : (string * [int])
   }
 
+message msg1 = { a : int }
+message msg1a = A { a : int } | B { b : string }
+message msg1b = A { a : int; a' : int } | B { b : string; b' : string }

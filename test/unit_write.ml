@@ -27,13 +27,7 @@ module Probabilistic =
 struct
   module PP = E.Pretty_print
   open Extprot.Random_gen
-
-  let encode f v =
-    let b = E.Msg_buffer.create () in
-      f b v;
-      E.Msg_buffer.contents b
-
-  let decode f s = f @@ E.Reader.String_reader.make s 0 (String.length s)
+  open Util
 
   let check_roundtrip write read prettyprint v =
     (* print_endline @@ prettyprint v; *)
