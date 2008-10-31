@@ -41,13 +41,10 @@ let bms = ref `All
 
 let bm_wr_rd id msg write open_rd read a =
     let run () =
-      Gc.compact ();
       eprintf "==== %s ====\n" msg;
       let out = bm "write" write a in
-      let dts = Array.init !rounds
-                  (fun  _ -> Gc.compact ();
-                             let _, ddt = time read (open_rd out) in ddt)
-      in eprintf "[read] min: %8.5fs   avg: %8.5fs\n"
+      let dts = Array.init !rounds (fun  _ -> snd (time read (open_rd out))) in
+        eprintf "[read] min: %8.5fs   avg: %8.5fs\n"
            (Array.fold_left min max_float dts)
            (Array.fold_left (+.) 0. dts /. float !rounds)
 
