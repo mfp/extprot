@@ -73,7 +73,11 @@ struct
 
   let rand_int =
     random
-      (fun () -> Int64.to_int (Int64.shift_right (gen_int64 ()) (8 * R.int 8)))
+      (fun () ->
+         Int32.to_int
+           (Int32.shift_right
+              (Int32.sub (R.int32 Int32.max_int) (R.int32 Int32.max_int))
+              (1 + 8 * R.int 4)))
       ()
 
   let rand_list len elm =
