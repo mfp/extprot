@@ -14,6 +14,7 @@ let len = ref 50000
 let in_file = ref None
 let out_file = ref None
 let rounds = ref 2
+let dump = ref false
 
 let arg_spec =
   Arg.align
@@ -22,6 +23,7 @@ let arg_spec =
       "-i", Arg.String (fun s -> in_file := Some s), "FILE Input data from specified file.";
       "-o", Arg.String (fun s -> out_file := Some s), "FILE Output data to specified file.";
       "-r", Arg.Set_int rounds, "INT Number of iterations for deserialization.";
+      "--dump", Arg.Set dump, " Dump data in readable form to stdout."
     ]
 
 let time f x =
@@ -32,7 +34,7 @@ let time f x =
 
 let bm msg f x =
   let y, dt = time f x in
-    printf "[%s] %8.5fs\n%!" msg dt;
+    eprintf "[%s] %8.5fs\n%!" msg dt;
     y
 
 let bms = ref `All
@@ -40,12 +42,12 @@ let bms = ref `All
 let bm_wr_rd id msg write open_rd read a =
     let run () =
       Gc.compact ();
-      printf "==== %s ====\n" msg;
+      eprintf "==== %s ====\n" msg;
       let out = bm "write" write a in
       let dts = Array.init !rounds
                   (fun  _ -> Gc.compact ();
                              let _, ddt = time read (open_rd out) in ddt)
-      in printf "[read] min: %8.5fs   avg: %8.5fs\n"
+      in eprintf "[read] min: %8.5fs   avg: %8.5fs\n"
            (Array.fold_left min max_float dts)
            (Array.fold_left (+.) 0. dts /. float !rounds)
 
@@ -62,7 +64,7 @@ let main () =
     "Usage: bm_01 [options] [benchmarks]\n\n\
      Known benchmarks: string_reader, io_reader, marshal, marshal_array\n";
 
-  let pr_size n = printf "** Serialized in %d bytes.\n%!" n in
+  let pr_size n = eprintf "** Serialized in %d bytes.\n%!" n in
 
   let encode_to_msg_buf x =
     let b = M.create () in
@@ -125,10 +127,11 @@ let main () =
            end
          in loop 0)
       a;
+    if !dump then Array.iter (Format.printf "%a@?\n" C.pp_complex_rtt) a;
     ()
 
 let () =
   try
     main ()
   with E.Error.Extprot_error (e, loc) ->
-    Format.printf "Extprot_error: %a\n" E.Error.pp_extprot_error (e, loc)
+    Format.eprintf "Extprot_error: %a\n" E.Error.pp_extprot_error (e, loc)
