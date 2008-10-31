@@ -81,11 +81,11 @@ let pp_char pp = fprintf pp "%C"
 let pp_float = pp_print_float
 
 let pp_int32 pp n =
-  let fmt = if n < 0l then format_of_string "(%s)" else format_of_string "%s" in
+  let fmt = if n < 0l then format_of_string "(%sl)" else format_of_string "%sl" in
     fprintf pp fmt (Int32.to_string n)
 
 let pp_int64 pp n =
-  let fmt = if n < 0L then format_of_string "(%s)" else format_of_string "%s" in
+  let fmt = if n < 0L then format_of_string "(%sL)" else format_of_string "%sL" in
     fprintf pp fmt (Int64.to_string n)
 
 let pp_bytes f pp s =
