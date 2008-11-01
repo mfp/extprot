@@ -24,6 +24,7 @@ let arg_spec =
       "-o", Arg.String (fun s -> out_file := Some s), "FILE Output data to specified file.";
       "-r", Arg.Set_int rounds, "INT Number of iterations for deserialization.";
       "--dump", Arg.Unit (fun () -> dump := `PP), " Dump data in readable form to stdout.";
+      "--dumpbin", Arg.Unit (fun () -> dump := `Binary), " Dump data in encoded form to stdout.";
       "--xml", Arg.Unit (fun () -> dump := `Xml), " Dump data in XML form to stdout.";
     ]
 
@@ -127,6 +128,7 @@ let main () =
       a;
     match !dump with
         `No -> ()
+      | `Binary -> print_string (M.contents (encode_to_msg_buf a))
       | `PP -> Array.iter (Format.printf "%a@?\n" C.pp_complex_rtt) a
       | `Xml ->
           let b = Buffer.create 256 in
