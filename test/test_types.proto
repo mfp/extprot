@@ -34,3 +34,7 @@ message complex_rtt =
 message msg1 = { a : int }
 message msg1a = A { a : int } | B { b : string }
 message msg1b = A { a : int; a' : int } | B { b : string; b' : string }
+
+type int_or_stuff 'a = Int int | Stuff 'a
+
+message msg1c = { a : int_or_stuff<string> }

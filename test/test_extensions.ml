@@ -11,10 +11,12 @@ let check_roundtrip pp enc dec v1 v2 =
   let enc = encode enc v1 in
     aeq pp v2 (decode dec enc)
 
-let raises_extprot_err f x =
+let raises_extprot_err ?msg (f : 'a -> unit) x =
   try
     f x;
-    assert_failure "Extprot_error expected."
+    match msg with
+        None -> assert_failure "Extprot_error expected."
+      | Some m -> assert_failure ("Extprot_error expected: " ^ m)
   with Extprot.Error.Extprot_error _ -> ()
 
 let () = Register_test.register "extensions"
@@ -24,6 +26,7 @@ let () = Register_test.register "extensions"
         (Msg1a.A { Msg1a.a = 123 }) { Msg1.a = 123 };
 
       raises_extprot_err
+        ~msg:"Use of unknown tag"
         (check_roundtrip Msg1.pp_msg1 Msg1a.write_msg1a Msg1.read_msg1
            (Msg1a.B { Msg1a.b = "123" }))
         { Msg1.a = 123 }
@@ -48,6 +51,23 @@ let () = Register_test.register "extensions"
                | Msg1a.A t -> assert_equal ~printer:string_of_int n t.Msg1a.a)
             a
     end;
+
+    "tuple to primitive type" >:: begin fun () ->
+      check_roundtrip Msg1.pp_msg1 Msg1c.write_msg1c Msg1.read_msg1
+        { Msg1c.a = Int_or_stuff.Int 123 } { Msg1.a = 123 };
+
+      raises_extprot_err
+        ~msg:"Use of new tag in tuple type"
+        (check_roundtrip Msg1.pp_msg1 Msg1c.write_msg1c Msg1.read_msg1
+           { Msg1c.a = Int_or_stuff.Stuff "foo" })
+        { Msg1.a = 123 };
+    end;
+
+    "primitive type to tuple" >:: begin fun () ->
+      check_roundtrip Msg1c.pp_msg1c Msg1.write_msg1 Msg1c.read_msg1c
+        { Msg1.a = 123 } { Msg1c.a = Int_or_stuff.Int 123 };
+    end;
+
   ]
 
 

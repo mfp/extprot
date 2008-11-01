@@ -402,10 +402,10 @@ struct
           let wrap_non_constant e =
             <:expr<
               let len = $RD.reader_func `Read_vint$ s in
-              let eot = $RD.reader_func `Offset$ s len in
+              let eot' = $RD.reader_func `Offset$ s len in
               let nelms = $RD.reader_func `Read_vint$ s in
               let v = $e$ in begin
-                $RD.reader_func `Skip_to$ s eot;
+                $RD.reader_func `Skip_to$ s eot';
                 v
               end >> in
 
@@ -414,13 +414,26 @@ struct
               [
                 Extprot.Codec.Enum, (fun e -> e), constant_match_cases;
                 Extprot.Codec.Tuple, wrap_non_constant, nonconstant_match_cases;
-              ]
-          in
+              ] in
 
+          let bad_type_case =
+            <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
+
+          let other_cases = match non_constant with
+              (c, [ty]) :: _ -> begin match RD.raw_rd_func ty with
+                  Some (mc, reader_expr) ->
+                    <:match_case<
+                        $mc$ -> $uid:String.capitalize c.const_type$.$uid:c.const_name$ ($reader_expr$ s)
+                      | $bad_type_case$
+                    >>
+                | None -> bad_type_case
+              end
+            | _ -> bad_type_case
+          in
             <:expr< let t = $RD.reader_func `Read_prefix$ s in
               match Extprot.Codec.ll_type t with [
                 $Ast.mcOr_of_list match_cases$
-                | ll_type -> Extprot.Error.bad_wire_type ~ll_type ()
+                | $other_cases$
               ]
             >>
       | Message name ->
@@ -558,7 +571,7 @@ struct
             Ast.mcOr_of_list |> wrap
 end
 
-let raw_rd_func reader_func =
+let rec raw_rd_func reader_func =
   let patt = patt_of_ll_type in
   let module C = Extprot.Codec in function
       Vint Bool -> Some (patt C.Bits8, reader_func `Read_raw_bool)
