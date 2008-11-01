@@ -14,7 +14,7 @@ let len = ref 50000
 let in_file = ref None
 let out_file = ref None
 let rounds = ref 2
-let dump = ref false
+let dump = ref `No
 
 let arg_spec =
   Arg.align
@@ -23,7 +23,8 @@ let arg_spec =
       "-i", Arg.String (fun s -> in_file := Some s), "FILE Input data from specified file.";
       "-o", Arg.String (fun s -> out_file := Some s), "FILE Output data to specified file.";
       "-r", Arg.Set_int rounds, "INT Number of iterations for deserialization.";
-      "--dump", Arg.Set dump, " Dump data in readable form to stdout."
+      "--dump", Arg.Unit (fun () -> dump := `PP), " Dump data in readable form to stdout.";
+      "--xml", Arg.Unit (fun () -> dump := `Xml), " Dump data in XML form to stdout.";
     ]
 
 let time f x =
@@ -124,8 +125,16 @@ let main () =
            end
          in loop 0)
       a;
-    if !dump then Array.iter (Format.printf "%a@?\n" C.pp_complex_rtt) a;
-    ()
+    match !dump with
+        `No -> ()
+      | `PP -> Array.iter (Format.printf "%a@?\n" C.pp_complex_rtt) a
+      | `Xml ->
+          let b = Buffer.create 256 in
+            Array.iter
+              (fun x -> Gen_data.Xml.complex_rtt_to_xml x b;
+                        Buffer.add_char b '\n')
+              a;
+            print_endline (Buffer.contents b)
 
 let () =
   try

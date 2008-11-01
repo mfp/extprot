@@ -31,3 +31,52 @@ let rtt_b =
 
 let complex_rtt = rand_choice [ rtt_a; rtt_b ]
 
+module Xml = struct
+  open Printf
+  module B = Buffer
+
+  let open_tag t b = B.add_char b '<'; B.add_string b t; B.add_char b '>'
+  let close_tag t b = B.add_string b "</"; B.add_string b t; B.add_char b '>'
+
+  let add b fmt = kprintf (B.add_string b) fmt
+
+  let tag t f b =
+    open_tag t b;
+    f b;
+    close_tag t b
+
+  let sum_type_to_xml f1 f2 f3 x b = match x with
+      Sum_type.A x -> tag "sum_A" (f1 x) b
+    | Sum_type.B x -> tag "sum_B" (f2 x) b
+    | Sum_type.C x -> tag "sum_C" (f3 x) b
+    | Sum_type.D -> tag "sum_D" (fun _ -> ()) b
+
+  let tuple2_to_xml
+        (f1 : 'a -> B.t -> unit)
+        (f2 : 'b -> B.t -> unit)
+        ((a, b) : 'a * 'b) =
+    tag "tuple" (fun buf -> f1 a buf; f2 b buf)
+
+  let list_to_xml (f : 'a -> B.t -> unit) (l : 'a list) =
+    tag "list" (fun buf -> List.iter (fun x -> f x buf) l)
+
+  let array_to_xml (f : 'a -> B.t -> unit) (a : 'a array) =
+    tag "array" (fun buf -> Array.iter (fun x -> f x buf) a)
+
+  let int_to_xml x = tag "int" (fun b -> add b "%d" x)
+  let bool_to_xml x = tag "bool" (fun b -> add b "%s" (string_of_bool x))
+  let string_to_xml x = tag "string" (fun b -> B.add_string b (Base64.str_encode x))
+  let long_to_xml x = tag "long" (fun b -> add b "%s" (Int64.to_string x))
+
+  open Complex_rtt
+
+  let complex_rtt_to_xml x b = match x with
+      A t -> tag "complex_rtt_A" begin fun b ->
+        list_to_xml (tuple2_to_xml int_to_xml (array_to_xml bool_to_xml)) t.a1 b;
+        list_to_xml (sum_type_to_xml int_to_xml string_to_xml long_to_xml) t.a2 b
+      end b
+    | B t -> tag "complex_rtt_A" begin fun b ->
+        bool_to_xml t.b1 b;
+        tuple2_to_xml string_to_xml (list_to_xml int_to_xml) t.b2 b;
+      end b
+end
