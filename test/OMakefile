@@ -27,6 +27,11 @@ $(CamlTargets test_types): $(ROOT)/runtime/extprot.cmxa
 OCamlProgram(test, register_test $(TEST_MODULES) test)
 OCamlProgram(bm_01, test_types gen_data bm_01)
 
+section
+    OCAMLPACKS [] += expat
+    OCamlProgram(bm_expat, bm_expat)
+    CamlSources(bm_expat)
+
 .DEFAULT: test bm_01
 
 .PHONY: clean
