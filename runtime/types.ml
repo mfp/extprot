@@ -9,6 +9,7 @@ type low_level_type =
   | Tuple
   | Bytes
   | Htuple
+  | Assoc
   | Invalid_ll_type
 
 let string_of_low_level_type = function
@@ -21,5 +22,6 @@ let string_of_low_level_type = function
   | Bytes -> "Bytes"
   | Tuple -> "Tuple"
   | Htuple -> "Htuple"
+  | Assoc -> "Assoc"
   | Invalid_ll_type -> failwith "string_of_low_level_type: Invalid_ll_type"
 

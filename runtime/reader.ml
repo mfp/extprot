@@ -114,7 +114,7 @@ struct
     | Bits32 -> t.pos <- t.pos + 4
     | Bits64_long | Bits64_float -> t.pos <- t.pos + 8
     | Enum -> ()
-    | Tuple | Htuple | Bytes -> let len = read_vint t in t.pos <- t.pos + len
+    | Tuple | Htuple | Bytes | Assoc -> let len = read_vint t in t.pos <- t.pos + len
     | Invalid_ll_type -> Error.bad_wire_type ()
 
   let offset t off =
@@ -179,7 +179,7 @@ struct
     | Bits32 -> ignore (read_bytes t skip_buf 0 4)
     | Bits64_float | Bits64_long -> ignore (read_bytes t skip_buf 0 8)
     | Enum -> ()
-    | Tuple | Htuple | Bytes -> skip_n t (read_vint t)
+    | Tuple | Htuple | Bytes | Assoc -> skip_n t (read_vint t)
     | Invalid_ll_type -> Error.bad_wire_type ()
 
   let skip_to t pos = if t.pos < pos then skip_n t (pos - t.pos)

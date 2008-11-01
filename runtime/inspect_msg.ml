@@ -50,6 +50,7 @@ let rec inspect ?(verbose=true) pp io prefix =
   let tag = ll_tag prefix in match ll_type prefix with
     Tuple -> inspect_tuple ~verbose "{" "}" prefix pp io
   | Htuple -> inspect_tuple ~verbose "[" "]" prefix pp io
+  | Assoc -> inspect_assoc ~verbose prefix pp io
   | Vint ->
       let n = zigzag_dec (read_vint io) in
         pp_verbose "Vint_%d@[<1>@ %a@]" "%a" PP.pp_int ~verbose ~tag pp n
@@ -88,12 +89,31 @@ and inspect_tuple ?(verbose = true) left right prefix pp io =
     else
       PP.fprintf pp "%s@[<1>@ %a @]%s" left (inspect_elms ~verbose io) nelms right
 
-and inspect_elms ?verbose io pp = function
+and inspect_assoc ?(verbose = true) prefix pp io =
+  let tag = ll_tag prefix in
+  let _ = read_vint io in (* len *)
+  let nelms = read_vint io in
+    if verbose || tag <> 0 then
+      PP.fprintf pp "A%d [@[<1>@ %a @]]" tag (inspect_assoc_elms ~verbose io) nelms
+    else
+      PP.fprintf pp "A [@[<1>@ %a @]]" (inspect_assoc_elms ~verbose io) nelms
+
+and inspect_elms_aux f ?verbose io pp = function
     0 -> ()
-  | 1 -> inspect ?verbose pp io (read_prefix io)
-  | n -> inspect ?verbose pp io (read_prefix io);
+  | 1 -> f ()
+  | n -> f ();
          PP.fprintf pp ";@ ";
-         inspect_elms ?verbose io pp (n - 1)
+         inspect_elms_aux f ?verbose io pp (n-1)
+
+and inspect_assoc_elms ?verbose io pp =
+  inspect_elms_aux
+    (fun () ->
+       inspect ?verbose pp io (read_prefix io);
+       inspect ?verbose pp io (read_prefix io))
+    ?verbose io pp
+
+and inspect_elms ?verbose io pp =
+  inspect_elms_aux (fun () -> inspect ?verbose pp io (read_prefix io)) ?verbose io pp
 
 let inspect ?(verbose = true) pp io = inspect ~verbose pp io (read_prefix io)
 

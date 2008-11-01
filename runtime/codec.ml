@@ -12,7 +12,7 @@ let vint_length = function
 let ll_type_prefix_table =
   [|
     Vint;            Tuple;           Bits8;           Bytes;
-    Bits32;          Htuple;          Bits64_long;     Invalid_ll_type;
+    Bits32;          Htuple;          Bits64_long;     Assoc;
     Bits64_float;    Invalid_ll_type; Enum;            Invalid_ll_type;
     Invalid_ll_type; Invalid_ll_type; Invalid_ll_type; Invalid_ll_type;
   |]
