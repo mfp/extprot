@@ -126,7 +126,7 @@ class Reader
 
   def read_i32; read_prim_type(:bits32){ read_raw_i32 } end
 
-  def read_raw_i64; read_raw_i32 + read_raw_i32 << 32 end
+  def read_raw_i64; read_bytes(8).unpack("q")[0] end
 
   def read_i64; read_prim_type(:bits64_long) { read_raw_i64 } end
 
