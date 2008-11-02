@@ -1,3 +1,4 @@
+require "prettyprint"
 
 module Codec
   @@types = [ 
@@ -149,14 +150,16 @@ end
 class Inspect
   include Codec 
 
-  def initialize(reader, out, verbose = true)
+  def initialize(reader, out, verbose = true, maxwidth = 79)
     @rd = reader
     @verbose = verbose
-    @out = out
+    @out = PrettyPrint.new(out, maxwidth)
   end
 
   def inspect
     doinspect(@rd.read_prefix)
+    @out.flush
+    @out.output
   end
 
   private
@@ -164,50 +167,50 @@ class Inspect
   def doinspect(prefix)
     tag = ll_tag(prefix)
     case ll_type(prefix) 
-    when :tuple; inspect_tuple("{", "}", prefix)
-    when :htuple; inspect_tuple("[", "]", prefix)
+    when :tuple; inspect_tuple("{ ", " }", prefix)
+    when :htuple; inspect_tuple("[ ", " ]", prefix)
     when :assoc; inspect_assoc(prefix)
     when :vint
       if @verbose || tag != 0 
-        @out.print("Vint_%d %d" % [tag, @rd.read_raw_rel_int])
+        @out.text("Vint_%d %d" % [tag, @rd.read_raw_rel_int])
       else
-        @out.print("%d" % @rd.read_raw_rel_int)
+        @out.text("%d" % @rd.read_raw_rel_int)
       end
     when :bits8
       if @verbose || tag != 0
-        @out.print("I8_%d 0x%x" % [tag, @rd.read_byte])
+        @out.text("I8_%d 0x%x" % [tag, @rd.read_byte])
       else
-        @out.print("0x%x" % @rd.read_byte)
+        @out.text("0x%x" % @rd.read_byte)
       end
     when :bits32
       if @verbose || tag != 0
-        @out.print("I32_%d %d" % [tag, @rd.read_raw_i32])
+        @out.text("I32_%d %d" % [tag, @rd.read_raw_i32])
       else
-        @out.print("%d" % @rd.read_raw_i32)
+        @out.text("%dl" % @rd.read_raw_i32)
       end
     when :bits64_long
       if @verbose || tag != 0
-        @out.print("I64_%d %d" % [tag, @rd.read_raw_i64])
+        @out.text("I64_%d %d" % [tag, @rd.read_raw_i64])
       else
-        @out.print("%d" % @rd.read_raw_i64)
+        @out.text("%dL" % @rd.read_raw_i64)
       end
     when :bits64_float
       if @verbose || tag != 0
-        @out.print("Fl_%d %f" % [tag, @rd.read_raw_float])
+        @out.text("Fl_%d %f" % [tag, @rd.read_raw_float])
       else
-        @out.print("%f" % @rd.read_raw_float)
+        @out.text("%f" % @rd.read_raw_float)
       end
     when :enum
       if @verbose
-        @out.print("Enum_%d" % tag)
+        @out.text("Enum_%d" % tag)
       else
-        @out.print("T%d" % tag)
+        @out.text("T%d" % tag)
       end
     when :bytes
       if @verbose || tag != 0
-        @out.print("B_%s" % @rd.read_raw_string.inspect)
+        @out.text("B_%s" % @rd.read_raw_string.inspect)
       else
-        @out.print(@rd.read_raw_string.inspect)
+        @out.text(@rd.read_raw_string.inspect)
       end
     when :invalid
       raise "invalid wire type"
@@ -218,39 +221,56 @@ class Inspect
     tag = ll_tag(prefix)
     _ = @rd.read_vint
     nelms = @rd.read_vint
-    if @verbose || tag != 0 
-      @out.print("T#{tag}#{left} ")
-    else
-      @out.print("#{left} ")
+    @out.group do
+      hd = (@verbose || tag != 0) ? "T#{tag} #{left}" : left
+      @out.text(hd)
+      @out.nest(hd.size) do
+        first = true
+        nelms.times do
+          if first
+            first = false
+          else
+            @out.text ";"
+            @out.breakable
+          end
+          doinspect(@rd.read_prefix)
+        end
+        @out.text(right)
+      end
     end
-    (nelms - 1).times{ doinspect(@rd.read_prefix);; @out.print("; ") }
-    doinspect(@rd.read_prefix)
-    @out.print(" #{right}")
   end
 
   def inspect_assoc(prefix)
     tag = ll_tag(prefix)
     _ = @rd.read_vint
     nelms = @rd.read_vint
-    @out.print("A#{tag} [")
-    (nelms - 1).times do
-      doinspect(@rd.read_prefix)
-      @out.print(", ")
-      doinspect(@rd.read_prefix)
-      @out.print("; ")
+    hd = "A#{tag} [ "
+    @out.text(hd)
+    @out.nest(hd.size) do
+      first = true
+      nelms.times do
+        if first
+          first = false
+        else
+          @out.text ";"
+          @out.breakable
+        end
+        doinspect(@rd.read_prefix)
+        @out.text ","
+        @out.breakable
+        doinspect(@rd.read_prefix)
+      end
     end
-    doinspect(@rd.read_prefix)
-    @out.print(", ")
-    doinspect(@rd.read_prefix)
+    @out.text(" ]")
   end
 end
 
 if __FILE__ == $0
   reader = Reader.new(ARGF)
   out = $stdout
-  inspector = Inspect.new(reader, out)
+  inspector = Inspect.new(reader, out, false)
   begin
-    loop { inspector.inspect }
+    loop { inspector.inspect; puts }
   rescue
     puts
   end
