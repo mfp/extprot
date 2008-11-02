@@ -32,7 +32,7 @@ class Reader
       b = read_byte
     end
 
-    x + b << e
+    x + (b << e)
   end
 
   alias_method :read_prefix, :read_vint
