@@ -1,5 +1,11 @@
 require "prettyprint"
 
+module Extprot
+
+class ExtprotError < StandardError; end
+class BadWireType < ExtprotError; end
+class UnknownTag < ExtprotError; end
+
 module Codec
   @@types = [ 
     :vint, :tuple, :bits8, :bytes, 
@@ -24,7 +30,7 @@ class Reader
 
   def read_vint
     b = read_byte
-    raise "EOF" unless b
+    raise EOFError unless b
     return b if b < 128
     x = e = 0
     while b >= 128 
@@ -53,11 +59,11 @@ class Reader
     p = read_prefix
     if ll_tag(p) != 0 then
       skip_value(p)
-      raise "unknown tag"
+      raise UnknownTag
     end
     if ll_type(p) != ty then
       skip_value(p)
-      raise "bad wire type"
+      raise BadWireType
     end
   end
 
@@ -69,7 +75,7 @@ class Reader
       b.call
     elsif ll_tag(p) != 0
       skip_value p
-      raise "unknown tag"
+      raise UnknownTag
     elsif llty == :tuple
       len = read_vint
       eot = offset(len)
@@ -78,22 +84,22 @@ class Reader
         p = read_prefix
         if ll_tag(p) != 0
           skip_to(eot)
-          raise "unknown tag"
+          raise UnknownTag
         end
         if ll_type(p) != ty
           skip_to(eot)
-          raise "bad_wire_type"
+          raise BadWireType
         end
         v = b.call
         skip_to(eot)
         v
       else
         skip_to(eot)
-        raise "bad wire type"
+        raise BadWireType
       end
     else
       skip_value(p)
-      raise "bad wire type"
+      raise BadWireType
     end
   end
 
@@ -105,7 +111,7 @@ class Reader
     when :bits64_float, :bits64_long; read_bytes(8)
     when :enum; 
     when :tuple, :htuple, :bytes, :assoc; @rd.read(read_vint)
-    when :invalid; raise "bad wire type"
+    when :invalid; raise BadWireType
     end
   end
 
@@ -213,7 +219,7 @@ class Inspect
         @out.text(@rd.read_raw_string.inspect)
       end
     when :invalid
-      raise "invalid wire type"
+      raise BadWireType
     end
   end
 
@@ -271,7 +277,8 @@ if __FILE__ == $0
   inspector = Inspect.new(reader, out, false)
   begin
     loop { inspector.inspect; puts }
-  rescue
-    puts
+  rescue EOFError
   end
 end
+
+end # module Extprot
