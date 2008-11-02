@@ -97,7 +97,25 @@ let read_raw_i64 = read_i64_bits
 
 let read_i64 t = Read_prim_type(t, Bits64_long, read_raw_i64 t)
 
-let read_raw_float t = Int64.float_of_bits (read_i64_bits t)
+let read_raw_float t =
+  IFDEF BIG_ENDIAN THEN
+    let a = read_byte t in
+    let b = read_byte t in
+    let c = read_byte t in
+    let d = read_byte t in
+    let e = read_byte t in
+    let f = read_byte t in
+    let g = read_byte t in
+    let h = read_byte t in
+      Int64.float_of_bits
+        ( to_i64 h         +!! (to_i64 g <!! 8) +!!
+         (to_i64 f <!! 16) +!! (to_i64 e <!! 24) +!!
+         (to_i64 d <!! 32) +!! (to_i64 c <!! 40) +!!
+         (to_i64 b <!! 48) +!! (to_i64 a <!! 56))
+  ELSE
+    Int64.float_of_bits (read_i64_bits t)
+  END
+
 
 let read_float t = Read_prim_type(t, Bits64_float, read_raw_float t)
 

@@ -2,8 +2,10 @@ USE_OCAMLFIND = true
 NATIVE_ENABLED = true
 BYTE_ENABLED = true
 
-OCAMLDEPFLAGS = -pp "camlp4orf"
-OCAMLFLAGS = -dtypes -pp "camlp4orf" -w A -warn-error A
+ENDIANNESS = LITTLE_ENDIAN
+
+OCAMLDEPFLAGS = -pp "camlp4orf -D$(ENDIANNESS)"
+OCAMLFLAGS = -dtypes -pp "camlp4orf -D$(ENDIANNESS)" -w A -warn-error A
 OCAMLOPTFLAGS = -S -inline 100
 OCAMLCFLAGS += -g
 OCAMLINCLUDES[] += $(ROOT)/runtime

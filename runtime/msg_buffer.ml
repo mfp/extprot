@@ -162,7 +162,19 @@ let write_int64 b n =
 
 let write_float b fl =
   add_vint b Codec.float_prefix;
-  write_int64_bits b (Int64.bits_of_float fl)
+  IFDEF BIG_ENDIAN THEN
+    let n = Int64.bits_of_float fl in
+      add_byte b (Int64.to_int ((n >!! 56) &!! 0xFFL));
+      add_byte b (Int64.to_int ((n >!! 48) &!! 0xFFL));
+      add_byte b (Int64.to_int ((n >!! 40) &!! 0xFFL));
+      add_byte b (Int64.to_int ((n >!! 32) &!! 0xFFL));
+      add_byte b (Int64.to_int ((n >!! 24) &!! 0xFFL));
+      add_byte b (Int64.to_int ((n >!! 16) &!! 0xFFL));
+      add_byte b (Int64.to_int ((n >!! 8)  &!! 0xFFL));
+      add_byte b (Int64.to_int (n &!! 0xFFL))
+  ELSE
+    write_int64_bits b (Int64.bits_of_float fl)
+  END
 
 let write_string b s =
   add_vint b Codec.string_prefix;
