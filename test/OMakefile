@@ -23,7 +23,7 @@ test_types.ml: $(GENERATOR) test_types.proto
     # $(GENERATOR) -g pretty_printer,reader,writer test_types.proto
     $(GENERATOR) test_types.proto
 
-$(CamlTargets test_types): $(ROOT)/runtime/extprot.cmxa
+$(CamlTargets $(removesuffix $(ls *.ml))): $(ROOT)/runtime/extprot.cmxa
 
 OCamlProgram(test, register_test $(TEST_MODULES) test)
 OCamlProgram(bm_01, test_types gen_data bm_01)

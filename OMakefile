@@ -18,8 +18,8 @@ CamlSources(mods) =
 	foreach(mod, $(mods))
 		$(addsuffixes .cmo .cmi .cmx .sig $(EXT_OBJ), $(mod)):
 
-CamlTargets(mod) =
-	return($(addsuffixes .cmo .cmi .cmx .o, $(mod)))
+CamlTargets(mods) =
+	return($(addsuffixes .cmo .cmi .cmx .o, $(mods)))
 
 .SUBDIRS: compiler runtime test
 
