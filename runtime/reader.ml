@@ -72,7 +72,7 @@ DEFINE Read_vint(t) =
     done;
     !x + (!b lsl !e)
 
-module String_reader : sig
+module String_reader' : sig
   include S
   val make : string -> int -> int -> t
   val close : t -> unit
@@ -131,14 +131,18 @@ struct
   INCLUDE "reader_impl.ml"
 end
 
+type io_reader_t =  { io : IO.input; mutable pos : int }
+
 module IO_reader : sig
-  include S
+  include S with type t = io_reader_t
   val from_io : IO.input -> t
   val from_string : string -> t
   val from_file : string -> t
+
+  val read_bytes : t -> string -> int -> int -> unit
 end =
 struct
-  type t = { io : IO.input; mutable pos : int }
+  type t = io_reader_t
   type position = int
 
   let from_io io = { io = io; pos = 0 }
@@ -196,4 +200,26 @@ struct
   let read_i64 t = EOF_wrap(read_i64, t)
   let read_float t = EOF_wrap(read_float, t)
   let read_string t = EOF_wrap(read_string, t)
+end
+
+module String_reader =
+struct
+  include String_reader'
+
+  let from_io_reader ch =
+    let hd = IO_reader.read_prefix ch in
+      if Codec.ll_type hd <> Codec.Tuple then
+        Error.bad_wire_type
+          ~message:$str:msgname$ ~ll_type:(Codec.ll_type hd) ();
+      let len = IO_reader.read_vint ch in
+      let m = Msg_buffer.create () in
+        Msg_buffer.add_vint m hd;
+        Msg_buffer.add_vint m len;
+        let off = Msg_buffer.length m in
+        let buf = String.create (len + off) in
+          String.blit (Msg_buffer.contents m) 0 buf 0 off;
+          IO_reader.read_bytes ch buf off len;
+          make buf 0 (String.length buf)
+
+  let from_io io = from_io_reader (IO_reader.from_io io)
 end
