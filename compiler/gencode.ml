@@ -210,6 +210,11 @@ module Make(Gen : GENCODE) =
 struct
   open Gen
 
+  let generators =
+    let names l = List.map fst l in
+      names Gen.typedecl_generators @ names Gen.msgdecl_generators |>
+        List.unique |> List.sort
+
   let generate_code ?(generators : string list option) (decls : declaration list) =
     let use_generator name = match generators with
         None -> true
