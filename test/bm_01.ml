@@ -39,40 +39,92 @@ let bm msg f x =
     eprintf "[%s] %8.5fs\n%!" msg dt;
     y
 
-let bms = ref `All
+let bm_wr_rd msg write open_rd read a =
+  eprintf "==== %s ====\n" msg;
+  let out = bm "write" write a in
+  let dts = Array.init !rounds (fun  _ -> snd (time read (open_rd out))) in
+    eprintf "[read] min: %8.5fs   avg: %8.5fs\n"
+       (Array.fold_left min max_float dts)
+       (Array.fold_left (+.) 0. dts /. float !rounds)
 
-let bm_wr_rd id msg write open_rd read a =
-    let run () =
-      eprintf "==== %s ====\n" msg;
-      let out = bm "write" write a in
-      let dts = Array.init !rounds (fun  _ -> snd (time read (open_rd out))) in
-        eprintf "[read] min: %8.5fs   avg: %8.5fs\n"
-           (Array.fold_left min max_float dts)
-           (Array.fold_left (+.) 0. dts /. float !rounds)
+let pr_size n = eprintf "** Serialized in %d bytes.\n%!" n
 
-    in match !bms with
-        `All -> run ()
-      | `Some l -> if List.mem id l then run ()
+let encode_to_msg_buf x =
+  let b = M.create () in
+    Array.iter (enc b) x;
+    pr_size (M.length b);
+    b
 
-let set_tests id = match !bms with
-    `All -> bms := `Some [id]
-  | `Some l -> bms := `Some (id :: l)
+let bm_extprot msg open_rd read x =
+  bm_wr_rd ("extprot " ^ msg) encode_to_msg_buf open_rd read x
+
+let benchmarks =
+  [
+    "string_reader", begin fun a ->
+      bm_extprot "String_reader"
+        (fun b ->
+           let s = M.contents b in
+             E.Reader.String_reader.make s 0 (String.length s))
+        (fun rd -> try while true do ignore (dec rd) done with End_of_file -> ())
+        a
+    end;
+
+    "io_reader", begin fun a ->
+      bm_extprot "IO_reader"
+        (fun b -> E.Reader.IO_reader.from_string (M.contents b))
+        (fun rd -> try while true do ignore (dec_io rd) done with End_of_file -> ())
+        a
+    end;
+
+    "marshal_array", begin fun a ->
+      bm_wr_rd "Marshal (array)"
+        (fun a -> let s = Marshal.to_string a [] in pr_size (String.length s); s)
+        (fun s -> s)
+        (fun s -> ignore (Marshal.from_string s 0))
+        a;
+    end;
+
+    "marshal", begin fun a ->
+      bm_wr_rd "Marshal (individual msgs)"
+        (fun a ->
+           let b = B.create 256 in
+             Array.iter (fun x -> B.add_string b (Marshal.to_string x [])) a;
+             pr_size (B.length b);
+             B.contents b)
+        (fun s -> s)
+        (fun s ->
+           let max = String.length s in
+           let rec loop n =
+             if n < max then begin
+               let len = Marshal.total_size s n in
+                 ignore (Marshal.from_string s n);
+                 loop (n + len)
+             end
+           in loop 0)
+        a
+    end;
+  ]
+
+let all_benchmarks = List.sort String.compare (List.map fst benchmarks)
+let bms_desc = String.concat ", " all_benchmarks
+let bms = ref None
+
+let help_msg =
+  "Usage: bm_01 [options] [benchmarks]\n\n\
+   Known benchmarks: " ^ bms_desc ^ "\n"
+
+let select_bm bm =
+  if not (List.mem_assoc bm benchmarks) then begin
+    eprintf "Unknown benchmark %S.\n\n" bm;
+    Arg.usage arg_spec help_msg;
+    exit (-1)
+  end;
+  match !bms with
+      None -> bms := Some [bm]
+    | Some l -> bms := Some (l @ [bm])
 
 let main () =
-  Arg.parse arg_spec set_tests
-    "Usage: bm_01 [options] [benchmarks]\n\n\
-     Known benchmarks: string_reader, io_reader, marshal, marshal_array\n";
-
-  let pr_size n = eprintf "** Serialized in %d bytes.\n%!" n in
-
-  let encode_to_msg_buf x =
-    let b = M.create () in
-      Array.iter (enc b) x;
-      pr_size (M.length b);
-      b in
-
-  let bm_extprot id msg open_rd read x =
-    bm_wr_rd id ("extprot " ^ msg) encode_to_msg_buf open_rd read x in
+  Arg.parse arg_spec select_bm help_msg;
 
   let a = match !in_file with
       None -> bm (sprintf "gen array of length %d" !len) make_array !len
@@ -82,8 +134,8 @@ let main () =
           match try Some (dec_io io) with End_of_file -> None with
               None -> Array.of_list (List.rev l)
             | Some t -> loop (t :: l)
-        in loop []
-  in
+        in loop [] in
+  let run_bm name = List.assoc name benchmarks a in
     Option.may
       (fun f ->
          let io = IO.output_channel (open_out f) in
@@ -91,41 +143,8 @@ let main () =
            IO.close_out io)
       !out_file;
 
-    bm_extprot "string_reader" "String_reader"
-      (fun b ->
-         let s = M.contents b in
-           E.Reader.String_reader.make s 0 (String.length s))
-      (fun rd -> try while true do ignore (dec rd) done with End_of_file -> ())
-      a;
+    List.iter run_bm (Option.default all_benchmarks !bms);
 
-    bm_extprot "io_reader" "IO_reader"
-      (fun b -> E.Reader.IO_reader.from_string (M.contents b))
-      (fun rd -> try while true do ignore (dec_io rd) done with End_of_file -> ())
-      a;
-
-    bm_wr_rd "marshal" "Marshal (array)"
-      (fun a -> let s = Marshal.to_string a [] in pr_size (String.length s); s)
-      (fun s -> s)
-      (fun s -> ignore (Marshal.from_string s 0))
-      a;
-
-    bm_wr_rd "marshal_array" "Marshal (individual msgs)"
-      (fun a ->
-         let b = B.create 256 in
-           Array.iter (fun x -> B.add_string b (Marshal.to_string x [])) a;
-           pr_size (B.length b);
-           B.contents b)
-      (fun s -> s)
-      (fun s ->
-         let max = String.length s in
-         let rec loop n =
-           if n < max then begin
-             let len = Marshal.total_size s n in
-               ignore (Marshal.from_string s n);
-               loop (n + len)
-           end
-         in loop 0)
-      a;
     match !dump with
         `No -> ()
       | `Binary -> print_string (M.contents (encode_to_msg_buf a))
