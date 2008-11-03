@@ -72,69 +72,8 @@ DEFINE Read_vint(t) =
     done;
     !x + (!b lsl !e)
 
-module String_reader' : sig
-  include S
-  val make : string -> int -> int -> t
-  val close : t -> unit
-end =
-struct
-  type t = { mutable buf : string; mutable last : int; mutable pos : int }
-  type position = int
-
-  let make s off len =
-    if off < 0 || len < 0 || off + len > String.length s then
-      invalid_arg "Reader.String_reader.make";
-    { buf = s; pos = off; last = off + len }
-
-  let close t = (* invalidate reader *)
-    t.buf <- "";
-    t.pos <- 1;
-    t.last <- 0
-
-  let read_byte t =
-    let pos = t.pos in
-      if pos < t.last then begin
-        let r = Char.code (String.unsafe_get t.buf pos) in
-          t.pos <- t.pos + 1;
-          r
-      end else raise End_of_file
-
-  let read_bytes t buf off len =
-    if off < 0 || len < 0 || off + len > String.length buf then
-      invalid_arg "Reader.String_reader.read_bytes";
-    if len > t.last - t.pos then raise End_of_file;
-    String.blit t.buf t.pos buf off len;
-    t.pos <- t.pos + len
-
-  let read_vint t = Read_vint(t)
-
-  let skip_value t p = match ll_type p with
-      Vint  -> ignore (read_vint t)
-    | Bits8 -> t.pos <- t.pos + 1
-    | Bits32 -> t.pos <- t.pos + 4
-    | Bits64_long | Bits64_float -> t.pos <- t.pos + 8
-    | Enum -> ()
-    | Tuple | Htuple | Bytes | Assoc -> let len = read_vint t in t.pos <- t.pos + len
-    | Invalid_ll_type -> Error.bad_wire_type ()
-
-  let offset t off =
-    let pos = off + t.pos in
-    (* only check if > because need to be able to skip to EOF, but not "past" it *)
-      if off < 0 then invalid_arg "Extprot.Reader.String_reader.offset";
-      if pos > t.last then raise End_of_file;
-      pos
-
-  let skip_to t pos =
-    if pos > t.last then raise End_of_file;
-    if pos > t.pos then t.pos <- pos
-
-  INCLUDE "reader_impl.ml"
-end
-
-type io_reader_t =  { io : IO.input; mutable pos : int }
-
 module IO_reader : sig
-  include S with type t = io_reader_t
+  include S
   val from_io : IO.input -> t
   val from_string : string -> t
   val from_file : string -> t
@@ -142,7 +81,7 @@ module IO_reader : sig
   val read_bytes : t -> string -> int -> int -> unit
 end =
 struct
-  type t = io_reader_t
+  type t =  { io : IO.input; mutable pos : int }
   type position = int
 
   let from_io io = { io = io; pos = 0 }
@@ -202,9 +141,20 @@ struct
   let read_string t = EOF_wrap(read_string, t)
 end
 
-module String_reader =
+module String_reader : sig
+  include S
+  val make : string -> int -> int -> t
+  val from_io_reader : IO_reader.t -> t
+  val from_io : IO.input -> t
+end =
 struct
-  include String_reader'
+  type t = { mutable buf : string; mutable last : int; mutable pos : int }
+  type position = int
+
+  let make s off len =
+    if off < 0 || len < 0 || off + len > String.length s then
+      invalid_arg "Reader.String_reader.make";
+    { buf = s; pos = off; last = off + len }
 
   let from_io_reader ch =
     let hd = IO_reader.read_prefix ch in
@@ -222,4 +172,48 @@ struct
           make buf 0 (String.length buf)
 
   let from_io io = from_io_reader (IO_reader.from_io io)
+
+  let close t = (* invalidate reader *)
+    t.buf <- "";
+    t.pos <- 1;
+    t.last <- 0
+
+  let read_byte t =
+    let pos = t.pos in
+      if pos < t.last then begin
+        let r = Char.code (String.unsafe_get t.buf pos) in
+          t.pos <- t.pos + 1;
+          r
+      end else raise End_of_file
+
+  let read_bytes t buf off len =
+    if off < 0 || len < 0 || off + len > String.length buf then
+      invalid_arg "Reader.String_reader.read_bytes";
+    if len > t.last - t.pos then raise End_of_file;
+    String.blit t.buf t.pos buf off len;
+    t.pos <- t.pos + len
+
+  let read_vint t = Read_vint(t)
+
+  let skip_value t p = match ll_type p with
+      Vint  -> ignore (read_vint t)
+    | Bits8 -> t.pos <- t.pos + 1
+    | Bits32 -> t.pos <- t.pos + 4
+    | Bits64_long | Bits64_float -> t.pos <- t.pos + 8
+    | Enum -> ()
+    | Tuple | Htuple | Bytes | Assoc -> let len = read_vint t in t.pos <- t.pos + len
+    | Invalid_ll_type -> Error.bad_wire_type ()
+
+  let offset t off =
+    let pos = off + t.pos in
+    (* only check if > because need to be able to skip to EOF, but not "past" it *)
+      if off < 0 then invalid_arg "Extprot.Reader.String_reader.offset";
+      if pos > t.last then raise End_of_file;
+      pos
+
+  let skip_to t pos =
+    if pos > t.last then raise End_of_file;
+    if pos > t.pos then t.pos <- pos
+
+  INCLUDE "reader_impl.ml"
 end
