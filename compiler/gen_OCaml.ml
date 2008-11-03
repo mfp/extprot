@@ -599,7 +599,35 @@ let add_message_reader bindings msgname mexpr c =
   let read_expr = Mk_normal_reader.read_message msgname llrec in
     {
       c with c_reader =
-         Some <:str_item< value $lid:"read_" ^ msgname$ s = $read_expr$ >>
+         Some <:str_item<
+                value $lid:"read_" ^ msgname$ s = $read_expr$;
+
+                value $lid:"io_read_" ^ msgname$ io =
+                  let ch = Extprot.Reader.IO_reader.from_io io in
+                  let hd = Extprot.Reader.IO_reader.read_prefix ch in begin
+                    if Extprot.Codec.ll_type hd <> Extprot.Codec.Tuple then
+                      Extprot.Error.bad_wire_type
+                        ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type hd) ()
+                    else ();
+                    let len = Extprot.Reader.IO_reader.read_vint ch in
+                    let m = Extprot.Msg_buffer.create () in begin
+                      Extprot.Msg_buffer.add_vint m hd;
+                      Extprot.Msg_buffer.add_vint m len;
+                      let off = Extprot.Msg_buffer.length m in
+                      let s = String.create (len + off) in begin
+                        String.blit (Extprot.Msg_buffer.contents m) 0 s 0 off;
+                        match IO.input io s off len with [
+                            n when n = len ->
+                              $lid:"read_" ^ msgname$
+                                (Extprot.Reader.String_reader.make s 0 (len + off))
+                          | _ -> raise End_of_file
+                        ]
+                      end
+                    end
+                  end;
+
+                value $lid:"fast_io_read_" ^ msgname$ = $lid:"io_read_" ^ msgname$;
+              >>
     }
 
 let add_message_io_reader bindings msgname mexpr c =
