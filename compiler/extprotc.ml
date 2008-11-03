@@ -19,8 +19,9 @@ let () =
   Option.may
     (fun file ->
        let decls = Parser.print_synerr Parser.parse_file file in
-       (* let bindings = Gencode.collect_bindings decls in *)
-         G.generate_code decls |> print_endline)
+       match Ptypes.check_declarations decls with
+           [] -> G.generate_code decls |> print_endline
+         | errors -> Ptypes.print_errors stderr errors)
     !file
 
 module PP = Gencode.Prettyprint

@@ -183,7 +183,7 @@ let print_errors ch =
     (function
          Repeated_binding s -> fprintf ch "Type binding %S is duplicated.\n" s
        | Unbound_type_variable (where, which) ->
-           fprintf ch "Type variable %S is unbound in %S.\n" which where
+           fprintf ch "Type %S is unbound in %S.\n" which where
        | Wrong_arity (which, wrong, where, correct) ->
-           fprintf ch "Type variable %S used with wrong arity (%d instead of %d) in %S.\n"
+           fprintf ch "Type %S used with wrong arity (%d instead of %d) in %S.\n"
              which wrong correct where)
