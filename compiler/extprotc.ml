@@ -2,25 +2,49 @@
 open Printf
 open Extprot_gen
 open ExtList
+open ExtString
 
 module G = Gencode.Make(Gen_OCaml)
 
 let (|>) x f = f x
+let (@@) f x = f x
 
 let file = ref None
+let output = ref None
+let generators = ref None
 
 let arg_spec =
   Arg.align
     [
+      "-o", Arg.String (fun f -> output := Some f), "FILE Set output file.";
+      "-g", Arg.String (fun gs -> generators := Some (String.nsplit gs ",")),
+        "LIST Generators to use (comma-separated).";
     ]
 
+let usage_msg =
+  sprintf
+    "\nUsage: extprotc [OPTIONS] <file>\n\n\
+     Known generators:\n\n\
+     %s\n\n\
+     Options:\n" @@
+    String.concat "\n" @@
+      List.map
+        (fun (lang, gens) -> sprintf "  %s: %s" lang @@ String.join ", " gens)
+        [
+          "OCaml", G.generators;
+        ]
+
 let () =
-  Arg.parse arg_spec (fun fname -> file := Some fname) "Usage: extprotc <file>";
+  Arg.parse arg_spec (fun fname -> file := Some fname) usage_msg;
   Option.may
     (fun file ->
+       let output = match !output with
+           None -> Filename.chop_extension file ^ ".ml"
+         | Some f -> f in
+       let och = open_out output in
        let decls = Parser.print_synerr Parser.parse_file file in
        match Ptypes.check_declarations decls with
-           [] -> G.generate_code decls |> print_endline
+           [] -> G.generate_code ?generators:!generators decls |> output_string och
          | errors -> Ptypes.print_errors stderr errors)
     !file
 

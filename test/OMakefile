@@ -20,7 +20,8 @@ OCAMLDEP_MODULES_ENABLED = false
 LocalOCamlGeneratedFiles(test_types.ml)
 
 test_types.ml: $(GENERATOR) test_types.proto
-    $(GENERATOR) test_types.proto > $@
+    # $(GENERATOR) -g pretty_printer,reader,writer test_types.proto
+    $(GENERATOR) test_types.proto
 
 $(CamlTargets test_types): $(ROOT)/runtime/extprot.cmxa
 
