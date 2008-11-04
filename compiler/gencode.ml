@@ -291,4 +291,27 @@ struct
     | #base_type_expr_core as x ->
         pp_base_type_expr_core pp_reduced_type_expr ppf x
 
+  let inspect_base_type_expr_core f ppf : 'a base_type_expr_core -> unit = function
+      `Tuple l -> pp ppf "`Tuple [@[<1> %a@ ]@]" (list f ",@ ") l
+    | `List t -> pp ppf "`List @[%a@]" f t
+    | `Array t -> pp ppf "`Array @[%a@]" f t
+    | #base_type_expr_simple as x -> pp_base_expr_simple ppf x
+
+  let pp_non_constant f ppf l =
+    list
+      (fun ppf (s, xs) -> pp ppf "@[%S, [@[<1> %a ]@]@]" s (list f ",@ ") xs)
+      ";@ "
+      ppf l
+
+  let inspect_sum_dtype f ppf s =
+    pp ppf "{@[<1>@ type_name = %S;@ constant = [@[<1>@ %a ]@];@ non_constant = [@[<1> %a ]@] }@]"
+      s.type_name
+      (list (pp' "%S") ",@ ") s.constant
+      (pp_non_constant f) s.non_constant
+
+  let rec inspect_reduced_type_expr ppf : reduced_type_expr -> unit = function
+    | `Message s -> pp ppf "`Message %S" s
+    | `Sum s -> pp ppf "@[<2>`Sum@ %a@]" (inspect_sum_dtype inspect_reduced_type_expr) s
+    | #base_type_expr_core as x ->
+        inspect_base_type_expr_core inspect_reduced_type_expr ppf x
 end
