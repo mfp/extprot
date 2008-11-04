@@ -22,9 +22,9 @@ Composed types:
  * Bytes: byte string
  * Assoc: list of (key, value) pairs
 
-Each value is serialized as two components:
+All values are serialized as two components:
 
-    [prefix] [value]
+    [prefix] [optional data]
 
 The prefix encodes the low-level type and the tag (0 for primitive
 types and tuples, or the tag of the disjoint union value).
@@ -136,8 +136,9 @@ for v = true, which can be analyzed as
     001     tag 0, wire-type 1 (Tuple)
     003     length in bytes of the rest of the message (after this byte)
     001     1 field
-    002     tag 0, wire-type 2 (Bits8)
-    001     bool true
+
+     002    tag 0, wire-type 2 (Bits8)
+     001    bool true
 
 For v = false, the message is encoded as 
 
@@ -158,18 +159,58 @@ the value
     
 is encoded as 
 
-    001 008 001 001 005 002 000 001 000 000
+    001 008 001 001 005 002 002 001 002 000
     
     001     tag 0, wire-type 1 (Tuple)
     008     length in bytes of the rest of the message (after this byte)
     001     1 field
+
+     001    tag 0, wire-type 1 (Tuple)
+     005    length in bytes of the rest of the tuple
+     002    2 elements
+
+      002   tag 0, wire-type 2 (Bits8)
+      001   bool true
+
+      002   tag 0, wire-type 2 (Bits8)
+      000   bool false
+
+### Sum types (disjoint unions)
+Constant constructors in a sum type are numbered starting from 0 in the order
+of appearance in the type definition: this is the value used in the tag.
+Non-constant constructors are also numbered from 0, in order of appearance.
+Each non-constant case is encoded with the Tuple low-level type and the
+corresponding tag.
+
+Example:
+
+    type maybe 'a = Unknown | Known 'a
+
+    message foo = { a : maybe<int>; b : maybe<bool> }
+
+The value
+
+    { a = Unknown; b = Known true }
+
+is encoded as
+
+    001 007 002 005 001 003 001 002 001
+
     001     tag 0, wire-type 1 (Tuple)
-    005     length in bytes of the rest of the tuple
-    002     4 elements
-    002     tag 0, wire-type 2 (Bits8)
-    001     bool true
-    002     tag 0, wire-type 2 (Bits8)
-    000     bool false
+    007     length in bytes of the rest of the message (after this byte)
+    002     2 fields
+
+     010    tag 0, wire-type 10 (Enum)
+
+     001    tag 0, wire-type 1 (Tuple)
+     003    length in bytes of the rest of the message (after this byte)
+     001    1 element
+
+      002    tag 0, wire-type 2 (Bits8)
+      001    bool true
+
+
+
 
 ### Lists and arrays
 
@@ -194,17 +235,22 @@ is encoded as
     001     tag 0, wire-type 1 (Tuple)
     012     length in bytes of the rest of the message (after this byte)
     001     1 field
-    005     tag 0, wire-type 5 (Htuple)
-    009     length in bytes of the rest of the tuple
-    004     4 elements
-    000     tag 0, wire-type 0 (Vint)
-    002     signed int 1
-    000     tag 0, wire-type 0 (Vint)
-    004     signed int 2
-    000     tag 0, wire-type 0 (Vint)
-    006     signed int 3
-    000     tag 0, wire-type 0 (Vint)
-    001     signed int -1
+
+     005    tag 0, wire-type 5 (Htuple)
+     009    length in bytes of the rest of the tuple
+     004    4 elements
+
+      000    tag 0, wire-type 0 (Vint)
+      002    signed int 1
+
+      000    tag 0, wire-type 0 (Vint)
+      004    signed int 2
+
+      000    tag 0, wire-type 0 (Vint)
+      006    signed int 3
+
+      000    tag 0, wire-type 0 (Vint)
+      001    signed int -1
 
 ### Nested messages
 
@@ -227,14 +273,13 @@ the outer Tuple type:
     008     length in bytes of the rest of the message (after this byte)
     002     2 fields
 
-    first field:
-        001     tag 0, wire-type 1 (Tuple)
-        003     length in bytes of the rest of the message (after this byte)
-        001     1 field
-        002     tag 0, wire-type 2 (Bits8)
-        001     bool true
+     001    tag 0, wire-type 1 (Tuple)
+     003    length in bytes of the rest of the message (after this byte)
+     001    1 field
 
-    second field:
-        000     tag 0, wire-type 0 (Vint)
-        001     signed int -1
+      002   tag 0, wire-type 2 (Bits8)
+      001   bool true
+
+     000    tag 0, wire-type 0 (Vint)
+     001    signed int -1
 
