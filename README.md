@@ -16,8 +16,27 @@ The protocols defined with extprot are:
 
 * extensible: types can be extended in several ways without breaking
   compatibility with existent producers/consumers
-* compact 
+* self-delimited: each message indicates its own length. This allows to
+  send a sequences of messages (streaming).
+* self-describing: a message can be decoded even without the protocol
+  definition. What you get is roughly equivalent to XML without the DTD.
+* compact
 * fast: can be deserialized one to two orders of magnitude faster than XML
+
+There are three parts to extprot, from lower to higher level:
+
+1. the [low-level encoding](doc/encoding.md)
+1. the [abstract syntax to define the protocol](doc/protocol-definition.md)
+1. the [mapping to the target language](doc/language-mapping.md)
+
+The [abstract syntax](doc/protocol-definition.md) is what the extprot user
+feeds to the extprotc compiler; it defines the protocol, and controls how it
+maps to both the low-level encoding and the [target language's data
+model](doc/language-mapping.md).
+
+The [low-level encoding](doc/encoding.md) is of interest to people who want to
+add support for additional target languages --- knowledge of the low-level
+encoding is obviously needed for the required runtime.
 
 ## Example
 
@@ -43,7 +62,7 @@ you'd do:
     puts "Got user #{user.id} #{user.name}"
 
 
-## Extensions
+## Protocol extensions
 
 The protocol can be extended in several ways, only a few of which will be
 shown here.
@@ -83,12 +102,12 @@ Imagine our application has got several user types:
 * paying user: we also want to record the end of the subscription period
 
 This can be captured in the following type definition:
- 
+
     type date = float (* time in seconds since the start of the epoch  *)
-    
-    type user_type = Free | Paying date 
+
+    type user_type = Free | Paying date
 		            (* could be written as  Paying float *)
-    
+
     message user = {
       id : int;
       name : string;
@@ -101,7 +120,7 @@ That's not all: we then decide that all users qualify for a discount rate one
 time starting from now.
 
     (* whether we will offer a discount rate in the next renewal *)
-    type discount = Yes | No 
+    type discount = Yes | No
 
     type user_type = Free | Paying date discount
 
@@ -121,7 +140,7 @@ least one" pattern happens often. We can use a polymorphic type to avoid
 having to type "(x * [x])" again and again:
 
     type one_or_more 'x = ('x * ['x])
-    
+
     message user = {
       id : int;
       name : string;
