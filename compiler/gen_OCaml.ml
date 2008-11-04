@@ -39,11 +39,16 @@ let foldr1 msg f g = function
         [] -> assert false
       | hd::tl -> List.fold_left (fun s x -> g x s) (f hd) tl
 
-let paSem_of_lidlist _loc l =
-  Ast.paSem_of_list @@ List.map (fun s -> <:patt< $lid:s$>>) l
+let paLids_of_strings _loc = List.map (fun s -> <:patt< $lid:s$ >>)
 
-let exSem_of_lidlist _loc l =
-  Ast.exSem_of_list @@ List.map (fun s -> <:expr< $lid:s$>>) l
+let exLids_of_strings _loc = List.map (fun s -> <:expr< $lid:s$ >>)
+
+let paCom_of_lidlist _loc l = Ast.paCom_of_list @@ paLids_of_strings _loc l
+
+let exTup_of_lidlist _loc l = match exLids_of_strings _loc l with
+    [] -> invalid_arg "exTup_of_lidlist"
+  | [e] -> e
+  | hd :: tl -> <:expr< ( $hd$, $Ast.exCom_of_list tl$ ) >>
 
 let patt_of_ll_type t =
   let _loc = Loc.mk "<genererated code @ patt_of_ll_type>" in
@@ -95,12 +100,20 @@ let generate_container bindings =
     | `Long_int -> <:ctyp< Int64.t >>
     | `Float -> <:ctyp< float >>
     | `String -> <:ctyp< string >>
-    | `List ty -> <:ctyp< list $ctyp_of_poly_texpr_core ty$ >>
-    | `Array ty -> <:ctyp< array $ctyp_of_poly_texpr_core ty$ >>
-    | `Tuple l ->
-        foldr1 "ctyp_of_poly_texpr_core `Tuple" ctyp_of_poly_texpr_core
-          (fun ptexpr tup -> <:ctyp< ( $ ctyp_of_poly_texpr_core ptexpr $ * $tup$ ) >>)
-          l
+    | `List ty -> <:ctyp< list ($ctyp_of_poly_texpr_core ty$) >>
+    | `Array ty -> <:ctyp< array ($ctyp_of_poly_texpr_core ty$) >>
+    | `Tuple l -> begin match l with
+          [] -> failwith "ctyp_of_poly_texpr_core: empty tuple"
+        | [_] -> failwith "ctyp_of_poly_texpr_core: 1-element tuple"
+        | [a; b] ->
+            <:ctyp< ( $ ctyp_of_poly_texpr_core a$ * $ctyp_of_poly_texpr_core b$ ) >>
+        | hd::tl ->
+            let tl' =
+              foldr1 "ctyp_of_poly_texpr_core `Tuple" ctyp_of_poly_texpr_core
+                (fun ptexpr tup -> <:ctyp< $ ctyp_of_poly_texpr_core ptexpr $ * $tup$ >>)
+                tl
+            in <:ctyp< ( $ ctyp_of_poly_texpr_core hd $ * $tl'$ ) >>
+      end
     | `Type (name, args) ->
         let t = List.fold_left (* apply *)
                   (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core ptexpr$ >>)
@@ -116,6 +129,7 @@ let generate_container bindings =
         let ty = match poly_beta_reduce_texpr bindings texpr with
             `Sum s -> begin
               let ty_of_const_texprs (const, ptexprs) =
+                (* eprintf "type %S, const %S, %d ptexprs\n" name const (List.length ptexprs); *)
                 let tys = List.map ctyp_of_poly_texpr_core ptexprs in
                   <:ctyp< $uid:const$ of $Ast.tyAnd_of_list tys$>>
 
@@ -249,10 +263,10 @@ struct
                        Array.init (List.length ptexprs) (sprintf "v%d")
           in
             <:match_case<
-              $uid:const$ $paSem_of_lidlist _loc params$ ->
+              $uid:const$ $paCom_of_lidlist _loc params$ ->
                 $pp_func "fprintf"$ pp
                 $str:String.capitalize tyname ^ "." ^ const ^ " %a"$
-                $pp_poly_texpr_core (`Tuple ptexprs)$ $exSem_of_lidlist _loc params$
+                $pp_poly_texpr_core (`Tuple ptexprs)$ ($exTup_of_lidlist _loc params$)
             >> in
         let constr_case constr =
           <:match_case<

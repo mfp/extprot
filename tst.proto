@@ -1,5 +1,6 @@
 
 type id = int
+type tuple4 'a 'b 'c 'd = ('a * 'b * 'c * 'd)
 type dim 'x =
    A int
  | B float
@@ -19,14 +20,14 @@ message metadata = {
 
 message doc =
    Normal {
-     id : id;
+     normal_id : id;
      mutable dim : dim<int>;
-     name : string;
+     normal_name : string;
      metadata : metadata
    }
  | Simple {
-     id : id;
-     name : string
+     simple_id : id;
+     simple_name : string
  }
 
 
