@@ -11,8 +11,8 @@ Basic types:
  * Vint: variable size integers, used for ints (see below)
  * Bits8: 8 bits, used for byte and bool
  * Bits32: 32 bits, currently unused
- * Bits64_long: 64 bits, 64-bit signed integers
- * Bits64_float: 64-bit doubles in IEEE 754 (IEC 559:1989) format
+ * Bits64\_long: 64 bits, 64-bit signed integers
+ * Bits64\_float: 64-bit doubles in IEEE 754 (IEC 559:1989) format
  * Enum: "nil value" (see below), constants in a disjoint type (aka. constant constructors)
 
 Composed types:
@@ -97,7 +97,7 @@ The signed integer "n" is encoded as a vint of value
 
 ## Fixed length values
 
-The Bits8, Bits32, Bits64_long, Bits64_float and Enum low-level types correspond to
+The Bits8, Bits32, Bits64\_long, Bits64\_float and Enum low-level types correspond to
 values of 8, 32, 64, 64, and 8 bits, which follow the prefix.
 
 ### bool
