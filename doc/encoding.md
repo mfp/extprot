@@ -51,15 +51,14 @@ You can find an
 
 Some examples:
 
-<table>
-  <tr> <td>integer value</td><td>encoding</td> </tr>
-  <tr> <td>0</td><td>0x00</td> </tr>
-  <tr> <td>1</td><td>0x01</td> </tr>
-  <tr> <td>127</td><td>0x7f</td> </tr>
-  <tr> <td>128</td><td>0x80 0x01</td> </tr>
-  <tr> <td>129</td><td>0x81 0x01</td> </tr>
-  <tr> <td>256</td><td>0x80 0x02</td> </tr>
-</table>
+     Integer value   Encoding (hex bytes)
+    --------------  ---------------------
+                 0                   0x00
+                 1                   0x01
+               127                   0x7f
+               128              0x80 0x01
+               129              0x81 0x01
+               256              0x80 0x02
 
 ## Prefixes
 
@@ -69,19 +68,19 @@ tag, using a vint.  The value of the prefix is
     tag << 4 | wire_type << 1
 
 These are the wire types:
-<table>
-  <tr> <td>type</td><td>wire type</td> </tr>
-  <tr> <td>Vint</td><td>0</td> </tr>
-  <tr> <td>Bits8</td><td>2</td> </tr>
-  <tr> <td>Bits32</td><td>4</td> </tr>
-  <tr> <td>Bits64_long</td><td>6</td> </tr>
-  <tr> <td>Bits64_float</td><td>8</td> </tr>
-  <tr> <td>Enum</td><td>10</td> </tr>
-  <tr> <td>Tuple</td><td>1</td> </tr>
-  <tr> <td>Bytes</td><td>3</td> </tr>
-  <tr> <td>Htuple</td><td>5</td> </tr>
-  <tr> <td>Assoc</td><td>7</td> </tr>
-</table>
+
+    Type              Wire type
+    --------------  -----------
+     Vint                    0
+     Bits8                   2
+     Bits32                  4
+     Bits64_long             6
+     Bits64_float            8
+     Enum                   10
+     Tuple                   1
+     Bytes                   3
+     Htuple                  5
+     Assoc                   7
 
 Note how the least-significant bit is 0 for all basic types, and 1 for all
 composed types. This means that whenever the LSB of the prefix is 1, the
