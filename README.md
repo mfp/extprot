@@ -16,12 +16,14 @@ The protocols created using extprot are:
 
 * extensible: types can be [extended in several ways](doc/extensions.md)
   without breaking compatibility with existent producers/consumers
-* self-delimited: each message indicates its own length. This allows to
-  send a sequences of messages (streaming).
+* self-delimited: each message indicates its own length. This allows you to
+  send sequences of messages (streaming) without having to add message
+  delimiters.
 * self-describing: a message can be decoded even without the protocol
   definition. What you get is roughly equivalent to XML without the DTD.
-* compact
-* fast: can be deserialized one to two orders of magnitude faster than XML
+* [compact](doc/benchmark.md)
+* fast: can be deserialized
+  [one to two orders of magnitude faster than XML](doc/benchmark.md)
 
 There are three parts to extprot, from lower to higher level:
 
@@ -72,6 +74,6 @@ you'd do:
 
 In OCaml, the message is simply a record:
 
-    let u = User.read_user stream in
+    let u = User.io_read_user stream in
       printf "User %S has got id %d\n" u.name u.id
 
