@@ -53,7 +53,7 @@ The value
     { id = 1; name = "J.R.R. Tolkien" }
 
 is serialized as (bytes in decimal notation plus ASCII characters between
-quotes) this 20-byte message:
+quotes) this 21-byte message:
 
     001 019 002 000 002 003 014 "J.R.R Tolkien"
 
