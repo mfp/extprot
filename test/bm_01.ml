@@ -5,10 +5,18 @@ module M = Extprot.Msg_buffer
 module E = Extprot
 module B = Buffer
 
-let make_array n = Array.init n (fun _ -> Gen_data.generate Gen_data.complex_rtt)
 let dec = C.read_complex_rtt
 let dec_io = C.io_read_complex_rtt
 let enc = C.write_complex_rtt
+let generate () = Gen_data.generate Gen_data.complex_rtt
+
+let make_array generate n =
+  let maxl = 10000 in
+  let a = Array.init (min maxl n) (fun _ -> generate ()) in match n with
+      n when n <= maxl -> a
+    | n ->
+        let rem = Array.sub a 0 (n mod maxl) in
+          Array.concat (rem :: Array.to_list (Array.make (n / maxl) a))
 
 let len = ref 50000
 let in_file = ref None
@@ -40,7 +48,7 @@ let bm msg f x =
     y
 
 let bm_wr_rd msg write open_rd read a =
-  eprintf "==== %s ====\n" msg;
+  eprintf "\n==== %s ====\n" msg;
   let out = bm "write" write a in
   let dts = Array.init !rounds (fun  _ -> snd (time read (open_rd out))) in
     eprintf "[read] min: %8.5fs   avg: %8.5fs\n"
@@ -78,7 +86,9 @@ let benchmarks =
 
     "marshal_array", begin fun a ->
       bm_wr_rd "Marshal (array)"
-        (fun a -> let s = Marshal.to_string a [] in pr_size (String.length s); s)
+        (fun a ->
+           let s = Marshal.to_string a [Marshal.No_sharing] in
+             pr_size (String.length s); s)
         (fun s -> s)
         (fun s -> ignore (Marshal.from_string s 0))
         a;
@@ -127,7 +137,7 @@ let main () =
   Arg.parse arg_spec select_bm help_msg;
 
   let a = match !in_file with
-      None -> bm (sprintf "gen array of length %d" !len) make_array !len
+      None -> bm (sprintf "gen array of length %d" !len) (make_array generate) !len
     | Some f ->
         let io = E.Reader.IO_reader.from_file f in
         let rec loop l =
