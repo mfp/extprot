@@ -121,7 +121,7 @@ constructor; they are numbered in the order of appearance in the type
 declaration, starting from 0. In the above example, Red has got tag 0, and
 Black tag 1.
 
-## 64-bit signed integers, 64-bit floating point values
+### 64-bit signed integers, 64-bit floating point values
 
 They are encoded using the Bits64\_long and Bits64\_float types.
 These two types are distinguished by their wire-types in order to be able to
@@ -223,8 +223,11 @@ is encoded as
 ### Lists and arrays
 
 Both
+
     message some_ints = { l : [ int ] }
+
 and
+
     message some_ints = { l : [| int |] }
 
 have the same encoding: in this case, the difference between lists and arrays
