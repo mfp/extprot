@@ -1,5 +1,5 @@
 
-The low-level encoding specifies how extprot low-level types are serialized. 
+The low-level encoding specifies how extprot low-level types are serialized.
 
 ## Wire types
 
@@ -45,8 +45,8 @@ integers.
 
 vints are an encoding of positive integers using little-endian order and
 7-bits per byte. The most-significant bit indicates whether the value
-continues (MSB = 1) or not (MSB = 0). 
-You can find an 
+continues (MSB = 1) or not (MSB = 0).
+You can find an
 [explanation of vints here](http://code.google.com/apis/protocolbuffers/docs/encoding.html#varints).
 
 Some examples:
@@ -63,9 +63,9 @@ Some examples:
 ## Prefixes
 
 The prefix encodes the low-level type using a numeric wire type and the
-tag, using a vint.  The value of the prefix is 
+tag, using a vint.  The value of the prefix is
 
-    tag << 4 | wire_type << 1
+    tag << 4 | wire_type
 
 These are the wire types:
 
@@ -88,7 +88,7 @@ length of the value follows as an vint.
 
 ## Encoding of signed integers (int)
 
-Signed integers (int in the abstract syntax) are encoded using 
+Signed integers (int in the abstract syntax) are encoded using
 [zigzag encoding](http://code.google.com/apis/protocolbuffers/docs/encoding.html#types).
 
 The signed integer "n" is encoded as a vint of value
@@ -121,6 +121,13 @@ constructor; they are numbered in the order of appearance in the type
 declaration, starting from 0. In the above example, Red has got tag 0, and
 Black tag 1.
 
+## 64-bit signed integers, 64-bit floating point values
+
+They are encoded using the Bits64\_long and Bits64\_float types.
+These two types are distinguished by their wire-types in order to be able to
+present more meaningful information when decoding in the absence of the
+protocol definition.
+
 ## Examples
 
 ### Simple messages
@@ -140,7 +147,7 @@ for v = true, which can be analyzed as
      002    tag 0, wire-type 2 (Bits8)
      001    bool true
 
-For v = false, the message is encoded as 
+For v = false, the message is encoded as
 
     001 003 001 002 000
 
@@ -153,14 +160,14 @@ Given
 
      message a_tuple = { v : (bool * bool) }
 
-the value  
+the value
 
-    { v = (true, false) }  
-    
-is encoded as 
+    { v = (true, false) }
+
+is encoded as
 
     001 008 001 001 005 002 002 001 002 000
-    
+
     001     tag 0, wire-type 1 (Tuple)
     008     length in bytes of the rest of the message (after this byte)
     001     1 field
@@ -176,6 +183,7 @@ is encoded as
       000   bool false
 
 ### Sum types (disjoint unions)
+
 Constant constructors in a sum type are numbered starting from 0 in the order
 of appearance in the type definition: this is the value used in the tag.
 Non-constant constructors are also numbered from 0, in order of appearance.
@@ -214,7 +222,7 @@ is encoded as
 
 ### Lists and arrays
 
-Both 
+Both
     message some_ints = { l : [ int ] }
 and
     message some_ints = { l : [| int |] }
@@ -261,7 +269,7 @@ Nested messages are encoded as any other type.
     message a_bool_and_int = { b : a_bool; i : int }
 
 The value
-  
+
     { b = { v = true }; i = -1 }
 
 is encoded by first encoding the nested message (see above), and then building
