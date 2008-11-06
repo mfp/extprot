@@ -1,5 +1,8 @@
 
-## Protocol extensions
+This document assumes knowledge of the
+[abstract syntax for protocol definition](protocol-definition.md).
+
+## Learn by example
 
 The protocol can be extended in several ways, a few of which are illustrated
 in the following example. We'll be extending this trivial protocol definition:
@@ -115,3 +118,73 @@ with the new type definition will know when a field is missing because the
 value will be set to None. Refer to the documentation on the
 [target language mappings](language-mapping.md) to see how this translates in
 the target language.
+
+## Primitive type expansion rule
+
+The bool, byte, int, long, float and string types can be expanded to a
+message, a tuple or a sum type whose first non-constant constructor carries as
+its first element a value of said primitive type.
+
+Example:
+
+    type dimension = int
+
+can be extended to
+
+    type variance = Unknown | Known int
+    type dimension = (int * variance)
+
+    (* alternatively *)
+
+    type dimension = Dim int variance
+
+    (* alternatively *)
+
+    message dimension = { value : int; variance : variance }
+
+The _Unknown_ constructor in the _variance_ type allows new readers to
+deserialize old data, as missing variance fields/elements will default to
+_Unknown_.
+
+## Reference
+
+We use this notation:
+
+* original protocol definition: P
+* extended protocol definition: P'
+* node using P in consumer role: R
+* node using P' in consumer role: R'
+* node using P in producer role: W
+* node using P' in producer role: W'
+
+When *x* produces data that is consumed by *y*, we note x -> y.
+
+Clearly,
+
+    W  -> R
+    W' -> R'
+
+are supported for any non-broken protocol.
+
+When W -> R' holds, we say the protocol is backward compatible (BC)
+When W' -> R holds, we say the protocol is forward compatible (FC).
+
+This table summarizes the extensions possible in extprot:
+                                                                       BC   FC
+    ----------------------------------------------------------------- ---- ----
+     adding fields to messages or elements to tuples/constructor
+         in general                                                         X
+         fields/elements of type with default value                    X    X
+
+     adding new constructor to sum type                                X
+
+     adding new constructor to message                                 X
+
+     extending primitive types to sum types, tuples or message
+
+       ... and adding new elements
+           general                                                          X
+           new elements of type with default value                     X    X
+
+       ... and adding new constructors                                 X
+
