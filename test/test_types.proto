@@ -23,7 +23,7 @@ message lists_arrays = { lint : [int]; abool : [| bool |] }
 
 message complex_rtt =
   A {
-    a1 : [ ( int * [|bool|] ) ];
+    a1 : [ ( int * [bool] ) ];
     a2 : [ sum_type<int, string, long> ]
     }
 | B {

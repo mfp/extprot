@@ -17,7 +17,7 @@ let rand_sum_type a b c =
 let rtt_a =
   let a1_elm =
     rand_int >>= fun n ->
-    rand_array rand_len rand_bool >>= fun a ->
+    rand_list rand_len rand_bool >>= fun a ->
       return (n, a) in
   let a2_elm = rand_sum_type rand_int (rand_string rand_len) rand_int64 in
     rand_list rand_len a1_elm >>= fun a1 ->
@@ -72,7 +72,7 @@ module Xml = struct
 
   let complex_rtt_to_xml x b = match x with
       A t -> tag "complex_rtt_A" begin fun b ->
-        list_to_xml (tuple2_to_xml int_to_xml (array_to_xml bool_to_xml)) t.a1 b;
+        list_to_xml (tuple2_to_xml int_to_xml (list_to_xml bool_to_xml)) t.a1 b;
         list_to_xml (sum_type_to_xml int_to_xml string_to_xml long_to_xml) t.a2 b
       end b
     | B t -> tag "complex_rtt_A" begin fun b ->

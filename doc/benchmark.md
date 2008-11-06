@@ -10,14 +10,13 @@ Short story:
 
 ## Benchmark: complex message
 
-Here's a complex protocol definition, with nested tuples, lists,
-arrays, and sum types:
+Here's a complex protocol definition, with nested tuples, lists, and sum types:
 
     type sum_type 'a 'b 'c = A 'a | B 'b | C 'c | D
 
     message complex_rtt =
       A {
-        a1 : [ ( int * [|bool|] ) ];
+        a1 : [ ( int * [bool] ) ];
         a2 : [ sum_type<int, string, long> ]
         }
     | B {
@@ -31,9 +30,9 @@ The value
       Complex_rtt.a1 =
        [
          ((-247634575),
-           [| true; false; false; false; true; true; false; false; true |]);
-         (3484, [| false; true; true; false; true; true; false; false |]);
-         ((-4), [| false; false; false; false; false; false; true |]) ];
+           [ true; false; false; false; true; true; false; false; true ]);
+         (3484, [ false; true; true; false; true; true; false; false ]);
+         ((-4), [ false; false; false; false; false; false; true ]) ];
       Complex_rtt.a2 =
        [ Sum_type.C 2896779717145980192L; Sum_type.C (-3674915657590371643L) ] }
 
