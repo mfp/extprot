@@ -24,6 +24,10 @@ let out_file = ref None
 let rounds = ref 2
 let dump = ref `No
 
+
+let () = Random.self_init ()
+let seed = ref (Random.int 0x3fffffff)
+
 let arg_spec =
   Arg.align
     [
@@ -31,6 +35,7 @@ let arg_spec =
       "-i", Arg.String (fun s -> in_file := Some s), "FILE Input data from specified file.";
       "-o", Arg.String (fun s -> out_file := Some s), "FILE Output data to specified file.";
       "-r", Arg.Set_int rounds, "INT Number of iterations for deserialization.";
+      "--seed", Arg.Set_int seed, "INT Seed for random generator.";
       "--dump", Arg.Unit (fun () -> dump := `PP), " Dump data in readable form to stdout.";
       "--dumpbin", Arg.Unit (fun () -> dump := `Binary), " Dump data in encoded form to stdout.";
       "--xml", Arg.Unit (fun () -> dump := `Xml), " Dump data in XML form to stdout.";
@@ -135,6 +140,8 @@ let select_bm bm =
 
 let main () =
   Arg.parse arg_spec select_bm help_msg;
+
+  Random.init !seed;
 
   let a = match !in_file with
       None -> bm (sprintf "gen array of length %d" !len) (make_array generate) !len
