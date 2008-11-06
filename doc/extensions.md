@@ -166,10 +166,12 @@ Clearly,
 
 are supported for any non-broken protocol.
 
-When W -> R' holds, we say the protocol is backward compatible (BC)
+When W -> R' holds, we say the protocol is backward compatible (BC).
+
 When W' -> R holds, we say the protocol is forward compatible (FC).
 
 This table summarizes the extensions possible in extprot:
+
                                                                        BC   FC
     ----------------------------------------------------------------- ---- ----
      adding fields to messages or elements to tuples/constructor
