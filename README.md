@@ -21,9 +21,11 @@ The protocols created using extprot are:
   delimiters.
 * self-describing: a message can be decoded even without the protocol
   definition. What you get is roughly equivalent to XML without the DTD.
-* [compact](doc/benchmark.md)
+* [compact](doc/benchmark.md): 2 to >6 times less space than XML, typically
+  2 to 4 times less space than individual, compressed XML messages.
 * fast: can be deserialized
-  [one to two orders of magnitude faster than XML](doc/benchmark.md)
+  [one to two orders of magnitude faster than XML](doc/benchmark.md), and
+  faster than it'd take to merely uncompress XML data.
 
 There are three parts to extprot, from lower to higher level:
 
