@@ -56,6 +56,7 @@ follows:
 
     type list_of_list_of_ints = [ [int] ]
     type list_of_arrays_of_ints = [ array_of_ints ]  (* also [ [| int |] ] *)
+    type list_of_int_pairs = [ (int * int) ]
 
 ### Sum types, aka. disjoint sums
 
@@ -68,7 +69,7 @@ and a radius:
     type shape =
         (* a triangle has got 3 vertices *)
         Triangle vertex vertex vertex
-	(* a circle has got a center and a radius *)
+        (* a circle has got a center and a radius *)
       | Circle vertex float
 
 In this example, "Triangle" and "Circle" are called
@@ -81,7 +82,8 @@ enumerations:
 
 ### Polymorphic types
 
-Type definitions can have type variables which must be instantiated later:
+Type definitions can have type variables which must be instantiated later;
+the names of the type variables are prefixed by a single quote:
 
     type pair 'a = ('a * 'a)
     type one_or_many 'a = ('a * [ 'a ])
@@ -106,6 +108,8 @@ Messages are also a valid type:
       contact_info : contact_info;
     }
 
+Messages are always monomorphic: they don't accept type parameters.
+
 ### Disjoin message unions
 
 The disjoint union of messages can be expressed with a syntax similar to
@@ -114,11 +118,15 @@ that of sum types:
     message shape =
         Triangle { a : vertex; b : vertex; c : vertex }
       | Circle { center : vertex; radius : float }
+      | Polygon { vertices : [vertex] }
 
 extprot only (de)serializes messages, not directly types, but the above could
 also be done in a roundabout way with
 
-    type shape = Triangle vertex vertex vertex | Circle vertex float
+    type shape =
+        Triangle vertex vertex vertex
+      | Circle vertex float
+      | Polygon [vertex]
 
     message element = { shape : shape }
 
