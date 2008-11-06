@@ -50,10 +50,9 @@ is serialized by extprot as the 110-byte message
 ### Deserialization speed
 
 200000 random messages (where all the lists, arrays and strings have a random
-length ranging from 0 to 9) are generating, totalling 16425500 bytes.
-The OCaml implementation of the extprot runtime deserializes them in 0.14s
-with an AMD Athlon(tm) 64 X2 6000+ processor, i.e., 780 ns per 81-byte message
-on average.
+length ranging from 0 to 9) are generated, totalling 16425500 bytes.
+The OCaml implementation of extprot deserializes them in 0.14s with an AMD
+Athlon(tm) 64 X2 6000+ processor, i.e., 780 ns per 81-byte message on average.
 
 ### Comparison to XML
 
@@ -151,18 +150,18 @@ ineffective as the size of the message decreases:
 
         extprot        XML          compressed XML    compressed extprot
     -------------- --------------- ----------------- --------------------
-        15		98		86		NO GAIN
-        19		117		103		NO GAIN
-        24		136		114		NO GAIN
-        31		157		126		NO GAIN
-        49		225		150		NO GAIN
-        78		385		185		NO GAIN
-        110		716		198		98
-        134		844		180		115
-        152		913		255		140
-        176		1040		256		158
-        218		1329		285		184
-        246		1493		311		198
+        15              98              86              NO GAIN
+        19              117             103             NO GAIN
+        24              136             114             NO GAIN
+        31              157             126             NO GAIN
+        49              225             150             NO GAIN
+        78              385             185             NO GAIN
+        110             716             198             98
+        134             844             180             115
+        152             913             255             140
+        176             1040            256             158
+        218             1329            285             184
+        246             1493            311             198
 
 ### Speed
 
