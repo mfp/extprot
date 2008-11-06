@@ -1,6 +1,7 @@
 
-extprot protocols are defined using an abstract syntax to define *messages*.
-Each message is composed of a number of *fields* of different *types*.
+extprot protocols define *messages* which are specified using an abstract
+syntax. Each message is composed of a number of *fields* of different
+*types*.
 
 Messages are defined as follows:
 
@@ -36,6 +37,10 @@ These are therefore valid type definitions:
 
 ## Composed types
 
+Recursive types are deliberately not supported. This restriction might be
+lifted in the future once the implications for target languages with limited
+type systems are understood.
+
 ### Tuples
 
 N elements of arbitrary types can be combined into a tuple:
@@ -57,6 +62,10 @@ follows:
     type list_of_list_of_ints = [ [int] ]
     type list_of_arrays_of_ints = [ array_of_ints ]  (* also [ [| int |] ] *)
     type list_of_int_pairs = [ (int * int) ]
+
+Note that there is no difference between lists and arrays in the
+[low-level encoding](encoding.md): they only serve as hints for
+the [mapping to the target language](language-mapping.md).
 
 ### Sum types, aka. disjoint sums
 
@@ -108,7 +117,20 @@ Messages are also a valid type:
       contact_info : contact_info;
     }
 
-Messages are always monomorphic: they don't accept type parameters.
+Messages are always monomorphic: they don't accept type parameters. This
+restriction might be lifted in the future.
+
+Message fields can be declared *mutable*:
+    message person = {
+      id : int;
+      username : string;
+      mutable name : string
+    }
+
+This doesn't affect the protocol, only the [mapping to the target
+language](doc/language-mapping.md): the _mutable_ keyword will control whether
+attribute writers (or an equivalent mechanism) are created in the generated
+code.
 
 ### Disjoin message unions
 
