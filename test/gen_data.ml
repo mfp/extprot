@@ -58,10 +58,10 @@ module Xml = struct
     tag "tuple" (fun buf -> f1 a buf; f2 b buf)
 
   let list_to_xml (f : 'a -> B.t -> unit) (l : 'a list) =
-    tag "list" (fun buf -> List.iter (fun x -> f x buf) l)
+    tag "htuple" (fun buf -> List.iter (fun x -> f x buf) l)
 
   let array_to_xml (f : 'a -> B.t -> unit) (a : 'a array) =
-    tag "array" (fun buf -> Array.iter (fun x -> f x buf) a)
+    tag "htuple" (fun buf -> Array.iter (fun x -> f x buf) a)
 
   let int_to_xml x = tag "int" (fun b -> add b "%d" x)
   let bool_to_xml x = tag "bool" (fun b -> add b "%s" (string_of_bool x))

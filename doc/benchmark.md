@@ -2,10 +2,11 @@
 Short story:
 
 * extprot protocols are fairly compact, taking often 5 times less
-  space than XML-based serializations (and half as much space as a gzipped XML
-  representation)
+  space than XML-based serializations, and as little as 4 times less than
+  a gzipped XML representation for small messages.
+
 * extprot is fast: it can deserialize one to two orders of magnitude faster
-  than XML.
+  than XML, and three times faster than gzip can decompress the XML data.
 
 ## Benchmark: complex message
 
@@ -60,40 +61,40 @@ Lacking a canonical XML serialization, there are many ways to serialize the
 structure as XML.
 
 For the above example (the 110-byte message), a straightforward mapping of
-low-level types to XML tags results in the following 716-byte XML message
+low-level types to XML tags results in the following 730-byte XML message
 (newlines and spaces added for readability, not included in the length):
 
     <complex_rtt_A>
-      <list>
+      <htuple>
         <tuple>
           <int>-247634575</int>
-          <array>
+          <htuple>
             <bool>true</bool><bool>false</bool><bool>false</bool>
             <bool>false</bool><bool>true</bool><bool>true</bool>
             <bool>false</bool><bool>false</bool><bool>true</bool>
-          </array>
+          </htuple>
         </tuple>
         <tuple>
           <int>3484</int>
-          <array>
+          <htuple>
             <bool>false</bool><bool>true</bool><bool>true</bool>
             <bool>false</bool><bool>true</bool><bool>true</bool>
             <bool>false</bool><bool>false</bool>
-          </array>
+          </htuple>
         </tuple>
         <tuple>
           <int>-4</int>
-          <array>
+          <htuple>
             <bool>false</bool><bool>false</bool><bool>false</bool>
             <bool>false</bool><bool>false</bool><bool>false</bool>
             <bool>true</bool>
-          </array>
+          </htuple>
         </tuple>
-      </list>
-      <list>
+      </htuple>
+      <htuple>
         <sum_C><long>2896779717145980192</long></sum_C>
         <sum_C><long>-3674915657590371643</long></sum_C>
-      </list>
+      </htuple>
     </complex_rtt_A>
 
 The XML doesn't include any information the extprot serialization doesn't
@@ -101,36 +102,36 @@ The XML doesn't include any information the extprot serialization doesn't
 the extprot protocol.
 
 In this case, the XML representation takes 6.5 times more space than extprot.
-We could bring it down to around 300 bytes (a mere 3 times more than extprot)
+We could bring it down to around 260 bytes (a mere 2.5 times more than extprot)
 by using something like the following, at the cost of some ambiguity and
 additional complexity in the lexer for data sections:
 
     <complex_rtt_A>
-      <list>
-        <tuple>
+      <ht>
+        <t>
            -247634575
-          <array> t f f f t t f f t </array>
-        </tuple>
-        <tuple>
+          <ht> t f f f t t f f t </ht>
+        </t>
+        <t>
            3484
-          <array> f t t f t t f f </array>
-        </tuple>
-        <tuple>
+          <ht> f t t f t t f f </ht>
+        </t>
+        <t>
            -4
-          <array> f f f f f f t </array>
-        </tuple>
-      </list>
-      <list>
+          <ht> f f f f f f t </ht>
+        </t>
+      </ht>
+      <ht>
         <sum_C> 2896779717145980192 </sum_C>
         <sum_C> -3674915657590371643 </sum_C>
-      </list>
+      </ht>
     </complex_rtt_A>
 
 ### Space
 
 Averaged over 100000 messages, the quotient is
 
-    47487011 / 8095530 = 5.87
+    48556801 / 8158040 = 5.95
 
 Compression is often mentioned as a solution to XML's verbosity. Indeed, if
 compressed as a whole with GZip, the 100000 messages take but 5MB, below the
@@ -142,26 +143,29 @@ compressed as a whole with GZip, the 100000 messages take but 5MB, below the
 
 (2) is illustrated in the next section; (1) is inherent to the nature of
 adaptive compressors: unless the message is long enough, there's not enough
-data to build an adapted model. The 716-byte XML message shown above
-compresses to 198 bytes with gzip -9 (165 bytes in the second, condensed
+data to build an adapted model. The 730-byte XML message shown above
+compresses to 190 bytes with gzip -9 (150 bytes in the second, condensed
 version): significantly less, but still far from the 110 bytes for
 uncompressed extprot (98 when compressed). Compression becomes increasingly
 ineffective as the size of the message decreases:
 
         extprot        XML          compressed XML    compressed extprot
     -------------- --------------- ----------------- --------------------
-        15              98              86              NO GAIN
-        19              117             103             NO GAIN
-        24              136             114             NO GAIN
-        31              157             126             NO GAIN
-        49              225             150             NO GAIN
-        78              385             185             NO GAIN
-        110             716             198             98
-        134             844             180             115
-        152             913             255             140
-        176             1040            256             158
-        218             1329            285             184
-        246             1493            311             198
+        15              102             82              NO GAIN
+        19              121             98              NO GAIN
+        24              147             108             NO GAIN
+        31              161             121             NO GAIN
+        49              229             148             NO GAIN
+        78              399             172             NO GAIN
+        110             730             190             98
+        134             866             164             115
+        152             931             244             140
+        176             1064            247             158
+        218             1353            272             184
+        246             1517            303             198
+
+gzip was used for the compression, as it gives better results overall than
+_compress_, despite the header.
 
 ### Speed
 
@@ -171,10 +175,10 @@ computer with the OCaml extprot implementation (as of 2008-11-05):
         description                                            CPU time
     -------------------------------------------------     ----------------------
      extprot serialization (completely unoptimized)          260 ms
-     gzip compression of XML representation                 1080 ms
-     extprot deserialization                                  75 ms (average)
-     gzip decompression of XML representation                220 ms
-     parsing XML data with expat, no callbacks              1090 ms (best of 10)
+     gzip compression of XML representation                 1100 ms
+     extprot deserialization                                  73 ms (average)
+     gzip decompression of XML representation                205 ms
+     parsing XML data with expat, no callbacks              1060 ms (best of 10)
        (i.e., no proper deserialization)
 
 Parsing the XML data alone, without actually reconstructing the data
