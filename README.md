@@ -79,3 +79,13 @@ In OCaml, the message is simply a record:
     let u = User.io_read_user stream in
       printf "User %S has got id %d\n" u.name u.id
 
+## Usage
+
+1. Write a
+   [protocol definition using extprot's abstract
+   syntax](doc/protocol-definition.md): myprotocol.proto
+
+1. Run the extprotc compiler to generate [the code needed to read, write, and
+   inspect the messages defined in the protocol](doc/language-mapping.md).
+
+1. Use it from your application code.
