@@ -86,6 +86,9 @@ In OCaml, the message is simply a record:
    syntax](doc/protocol-definition.md): myprotocol.proto
 
 1. Run the extprotc compiler to generate [the code needed to read, write, and
-   inspect the messages defined in the protocol](doc/language-mapping.md).
+   inspect the messages defined in the protocol](doc/language-mapping.md):
+   `extprotc myprotocol.proto` (generates the code, e.g. `myprotocol.ml` for
+   OCaml).  More [information about the generated code can be found
+   here](doc/language-mapping.md).
 
 1. Use it from your application code.
