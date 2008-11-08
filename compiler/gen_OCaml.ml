@@ -45,6 +45,11 @@ let exLids_of_strings _loc = List.map (fun s -> <:expr< $lid:s$ >>)
 
 let paCom_of_lidlist _loc l = Ast.paCom_of_list @@ paLids_of_strings _loc l
 
+let new_lid =
+  let n = ref 0 in fun base ->
+    incr n;
+    base ^ "_" ^ string_of_int !n
+
 let exTup_of_lidlist _loc l = match exLids_of_strings _loc l with
     [] -> invalid_arg "exTup_of_lidlist"
   | [e] -> e
@@ -455,12 +460,13 @@ struct
       | Htuple (kind, llty) ->
           let e = match kind with
               List ->
-                <:expr<
-                  let rec loop acc = fun [
-                      0 -> List.rev acc
-                    | n -> let v = $read llty$ in loop [v :: acc] (n - 1)
-                  ] in loop [] nelms
-                >>
+                let loop = new_lid "loop" in
+                  <:expr<
+                    let rec $lid:loop$ acc = fun [
+                        0 -> List.rev acc
+                      | n -> let v = $read llty$ in $lid:loop$ [v :: acc] (n - 1)
+                    ] in $lid:loop$ [] nelms
+                  >>
               | Array ->
                   <:expr<
                     match nelms with [
