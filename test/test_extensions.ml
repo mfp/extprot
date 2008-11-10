@@ -19,6 +19,33 @@ let raises_extprot_err ?msg (f : 'a -> unit) x =
       | Some m -> assert_failure ("Extprot_error expected: " ^ m)
   with Extprot.Error.Extprot_error _ -> ()
 
+let default_value_tests = "default_values" >::: [
+  "sum type" >:: begin fun () ->
+    check_roundtrip Msg2a.pp_msg2a Msg2.write_msg2 Msg2a.read_msg2a
+      { Msg2.a = 123 } { Msg2a.a = 123; b = Sum_type.D }
+  end;
+
+  "nested message" >:: begin fun () ->
+    check_roundtrip Msg2b.pp_msg2b Msg2.write_msg2 Msg2b.read_msg2b
+      { Msg2.a = 123 } { Msg2b.a = 123; b = { Simple_sum.v = Sum_type.D } }
+  end;
+
+  "lists and arrays" >:: begin fun () ->
+    check_roundtrip Msg2c.pp_msg2c Msg2.write_msg2 Msg2c.read_msg2c
+      { Msg2.a = 123 } { Msg2c.a = 123; b = []; c = [||] };
+
+    check_roundtrip Msg2c.pp_msg2c Msg2c0.write_msg2c0 Msg2c.read_msg2c
+      { Msg2c0.a = 123; b = [1;2;3] } { Msg2c.a = 123; b = [1;2;3]; c = [||] };
+  end;
+
+  "tuples" >:: begin fun () ->
+    let simple_sum = { Simple_sum.v = Sum_type.D } in
+      check_roundtrip Msg3a.pp_msg3a Msg3.write_msg3 Msg3a.read_msg3a
+        { Msg3.v0 = 123 } { Msg3a.v0 = 123; v1 = (simple_sum, simple_sum); v2 = [] };
+  end
+
+]
+
 let () = Register_test.register "extensions"
   [
     "default msg constructor" >:: begin fun () ->
@@ -68,6 +95,5 @@ let () = Register_test.register "extensions"
         { Msg1.a = 123 } { Msg1c.a = Int_or_stuff.Int 123 };
     end;
 
+    default_value_tests;
   ]
-
-

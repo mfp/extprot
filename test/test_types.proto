@@ -38,3 +38,13 @@ message msg1b = A { a : int; a' : int } | B { b : string; b' : string }
 type int_or_stuff 'a = Int int | Stuff 'a
 
 message msg1c = { a : int_or_stuff<string> }
+
+message msg2 = { a : int }
+message msg2a = { a : int; b : sum_type<bool, byte, int> }
+message msg2b = { a : int; b : simple_sum }
+message msg2c = { a : int; b : [ int ]; c : [| byte |] }
+message msg2c0 = { a : int; b : [ int ] }
+
+type silly_tuple = ( simple_sum * simple_sum )
+message msg3 = { v0 : int }
+message msg3a = { v0 : int; v1 : silly_tuple; v2 : [ int ] }
