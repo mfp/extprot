@@ -14,16 +14,18 @@ type container = {
   c_io_reader : Ast.str_item option;
   c_pretty_printer : Ast.str_item option;
   c_writer : Ast.str_item option;
+  c_default_func : Ast.str_item option;
 }
 
-let empty_container name ty_str_item =
+let empty_container name ?default_func ty_str_item =
   {
     c_name = name;
     c_types = Some ty_str_item;
     c_reader = None;
     c_io_reader = None;
     c_pretty_printer = None;
-    c_writer = None
+    c_writer = None;
+    c_default_func = default_func;
   }
 
 let (|>) x f = f x
@@ -58,6 +60,21 @@ let exTup_of_lidlist _loc l = match exLids_of_strings _loc l with
 let patt_of_ll_type t =
   let _loc = Loc.mk "<genererated code @ patt_of_ll_type>" in
     <:patt< Extprot.Codec.$uid:Extprot.Codec.string_of_low_level_type t$ >>
+
+let rec default_value = let _loc = Loc.ghost in function
+    Vint _ | Bitstring32 | Bitstring64 _ | Bytes -> None
+    | Sum ([], _) -> None
+    | Sum (c :: _, _) -> (* first constant constructor = default*)
+        Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
+    | Htuple (List, _) -> Some <:expr< [] >>
+    | Htuple (Array, _) -> Some <:expr< [| |] >>
+    | Message name ->
+        Some <:expr< ! $uid:String.capitalize name$.$lid:name ^ "_default"$ () >>
+    | Tuple tys ->
+        let vals = List.map default_value tys in match List.mem None vals with
+            true -> None
+          | false ->
+              Some <:expr< ( $Ast.exCom_of_list @@ List.map Option.get vals$ ) >>
 
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
@@ -128,8 +145,41 @@ let generate_container bindings =
     | `Type_arg n -> <:ctyp< '$n$ >>
 
   in function
-      Message_decl (msgname, mexpr) ->
-        Some (empty_container msgname (message_types msgname mexpr))
+      Message_decl (msgname, mexpr) -> begin
+        let default_record fields =
+          let fs =
+            List.map
+              (fun (name, _, llty) -> match default_value llty with
+                   None -> None
+                 | Some v -> Some (name, v))
+              fields
+          in match List.mem None fs with
+                true -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
+              | false ->
+                  let assigns =
+                    List.map
+                      (function
+                           None ->
+                             failwith "bug in generate_container: no default value"
+                         | Some (name, v) -> <:rec_binding< $lid:name$ = $v$ >>)
+                      fs
+                  in <:expr< { $Ast.rbSem_of_list assigns$ } >> in
+
+        let default_func = match Gencode.low_level_msg_def bindings mexpr with
+            Record_single fields ->
+              <:str_item<
+                value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
+                  ref (fun () -> $ default_record fields $)
+              >>
+          | Record_sum ((constr, fields) :: _) ->
+              <:str_item<
+                value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
+                  ref (fun () -> $uid:String.capitalize constr$ $ default_record fields $)
+              >>
+          | Record_sum [] -> failwith "bug in generate_container: empty Record_sum list"
+        in
+          Some (empty_container msgname ~default_func (message_types msgname mexpr))
+      end
     | Type_decl (name, params, texpr) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
             `Sum s -> begin
@@ -176,12 +226,17 @@ let string_of_ast f ast =
     Format.fprintf fmt "@[<v0>%a@]@." (f o) ast;
     Buffer.contents b
 
+let default_function = function
+    None -> None
+  | Some _ -> assert false
+
 let generate_code containers =
   let _loc = loc "<generated code>" in
   let container_of_str_item c =
     <:str_item<
        module $String.capitalize c.c_name$ = struct
          $maybe_str_item c.c_types$;
+         $maybe_str_item c.c_default_func$;
          $maybe_str_item c.c_pretty_printer$;
          $maybe_str_item c.c_reader$;
          $maybe_str_item c.c_io_reader$;
@@ -372,7 +427,9 @@ struct
             (* TODO: handle missing elements when expanding the primitive type to
              * a Tuple; needs default values *)
             (* | ty :: tys -> ... *)
-            | _ -> bad_type_case
+            | _ -> bad_type_case in
+          let tys_with_defvalues =
+            List.map (fun llty -> (llty, default_value llty)) lltys
           in <:expr<
                let t = $RD.reader_func `Read_prefix$ s in
                  match Extprot.Codec.ll_type t with [
@@ -380,7 +437,7 @@ struct
                        let len = $RD.reader_func `Read_vint$ s in
                        let eot = $RD.reader_func `Offset$ s len in
                        let nelms = $RD.reader_func `Read_vint$ s in
-                       let v = $read_tuple_elms (lltys_without_defaults lltys)$ in begin
+                       let v = $read_tuple_elms tys_with_defvalues$ in begin
                          $RD.reader_func `Skip_to$ s eot;
                          v
                        end
@@ -501,8 +558,8 @@ struct
     let _loc = Loc.mk "<generated code @ record_case>" in
     let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno (name, _, llty) ?default expr =
-      let rescue_match_case = match default with
+    let read_field fieldno (name, _, llty) expr =
+      let rescue_match_case = match default_value llty with
           None ->
             <:match_case<
               Extprot.Error.Extprot_error (e, loc) ->
@@ -515,14 +572,14 @@ struct
         | Some expr ->
             <:match_case<
                 Extprot.Error.Extprot_error
-                  (Extprot.Error.Bad_format ((Extprot.Error.Bad_wire_type _) as e), loc) ->
+                  ((Extprot.Error.Bad_format (Extprot.Error.Bad_wire_type _) as e), loc) ->
                     Extprot.Error.failwith_location
                       ~message:$str:msgname$
                       ~constructor:$str:constr_name$
                       ~field:$str:name$
                       e loc
               | Extprot.Error.Extprot_error _ -> $expr$ >> in
-      let default_value = match default with
+      let default = match default_value llty with
           Some expr -> expr
         | None ->
             <:expr< Extprot.Error.missing_field
@@ -539,7 +596,7 @@ struct
                  $read_field msgname constr_name name llty$
                with [$rescue_match_case$]
              else
-                 $default_value$
+                 $default$
            in $expr$
         >> in
 
