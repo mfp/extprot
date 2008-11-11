@@ -46,6 +46,9 @@ type node = (int * color * silly_tuple)
 
 message msg1d = { a : node }
 
+type node2 = Node int color silly_tuple
+message msg1e = { a : node2 }
+
 message msg2 = { a : int }
 message msg2a = { a : int; b : sum_type<bool, byte, int> }
 message msg2b = { a : int; b : simple_sum }

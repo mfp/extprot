@@ -103,5 +103,14 @@ let () = Register_test.register "extensions"
           { Msg1d.a = (123, Color.Red, tup) }
     end;
 
+    "primitive type to non-constant variant" >:: begin fun () ->
+      let simple_sum_default = { Simple_sum.v = Sum_type.D } in
+      let tup = (simple_sum_default, simple_sum_default) in
+
+      check_roundtrip Msg1e.pp_msg1e Msg1.write_msg1 Msg1e.read_msg1e
+        { Msg1.a = 123 }
+        { Msg1e.a = Node2.Node (123, Color.Red, tup)  }
+    end;
+
     default_value_tests;
   ]

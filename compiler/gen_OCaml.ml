@@ -519,6 +519,21 @@ struct
                     >>
                 | None -> bad_type_case
               end
+            | (c, ty :: tys) :: _ -> begin match RD.raw_rd_func ty with
+                  Some (mc, reader_expr) ->
+                    let defaults = List.map default_value tys in
+                      if List.mem None defaults then
+                        bad_type_case
+                      else
+                        let defs = List.map Option.get defaults in
+                            <:match_case<
+                                $mc$ ->
+                                   $uid:String.capitalize c.const_type$.$uid:c.const_name$
+                                     ($reader_expr$ s, $Ast.exCom_of_list defs$)
+                              | $bad_type_case$
+                            >>
+                | None -> bad_type_case
+              end
             | _ -> bad_type_case
           in
             <:expr< let t = $RD.reader_func `Read_prefix$ s in
