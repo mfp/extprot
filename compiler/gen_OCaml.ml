@@ -74,7 +74,10 @@ let rec default_value = let _loc = Loc.ghost in function
         let vals = List.map default_value tys in match List.mem None vals with
             true -> None
           | false ->
-              Some <:expr< ( $Ast.exCom_of_list @@ List.map Option.get vals$ ) >>
+              match List.map Option.get vals with
+                  [] -> failwith "default_value: empty tuple"
+                | [_] -> failwith "default_value: tuple with only 1 element"
+                | hd::tl -> Some <:expr< ($hd$, $Ast.exCom_of_list tl$) >>
 
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
