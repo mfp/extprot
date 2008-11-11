@@ -26,8 +26,9 @@ Suppose we find out some time later we also need the email and the age:
 
 Adding new fields this way means that older readers can consume data from new
 producers. If we also want new consumers to read old data, they have to cope
-with the possibility that the new fields be missing, using disjoint unions
-(sum types) as explained below. For now, let's keep things simple.
+with the possibility that the new fields be missing, by using default values
+for them (the easiest way to do so is to use disjoint unions, aka. sum types,
+as explained below). For now, let's keep things simple.
 
 ### New tuple elements
 
@@ -121,9 +122,9 @@ the target language.
 
 ## Primitive type expansion rule
 
-The bool, byte, int, long, float and string types can be expanded to a
-message, a tuple or a sum type whose first non-constant constructor carries as
-its first element a value of said primitive type.
+The bool, byte, int, long, float and string types can be promoted to a tuple
+or a sum type whose first non-constant constructor carries as its first
+element a value of said primitive type.
 
 Example:
 
@@ -137,10 +138,6 @@ can be extended to
     (* alternatively *)
 
     type dimension = Dim int variance
-
-    (* alternatively *)
-
-    message dimension = { value : int; variance : variance }
 
 The _Unknown_ constructor in the _variance_ type allows new readers to
 deserialize old data, as missing variance fields/elements will default to
@@ -190,3 +187,42 @@ This table summarizes the extensions possible in extprot:
 
        ... and adding new constructors                                 X
 
+## Default values
+
+The default values is defined for each type inductively: the default value of ...
+
+* a sum type is its first constant contructor.
+* a list is the empty list.
+* an array is the empty array.
+* a tuple is a tuple consisting of the default values of its types, if they
+  are all defined.
+* the default value of a message is the first message variant with the fields
+  having the default values corresponding to their types (if they are all
+  defined)
+
+Otherwise, the type/message has got no default value.
+
+### Examples
+
+             type                                  default value
+    --------------------------------- -----------------------------------------
+     type a = A int | B | C            B
+
+     type b = (a * a)                  (B, B)
+
+     type c = [b]                      []       (empty list)
+
+     type d = [|c|]                    [||]     (empty array)
+
+     message m = { v1 : c; v2 : b }    { v1 = []; v2 = (B, B) }
+
+     message n = { a : a; m : m }      { a = B; m = { v1 = []; v2 = (B, B) } }
+
+     type id = int                     undefined
+
+     type nodef1 = (a * int)           undefined
+
+     message p = { v : int }           undefined
+
+See the [target language documentation](language-mapping.md) for more
+information about the mapping of the default value to the target language.
