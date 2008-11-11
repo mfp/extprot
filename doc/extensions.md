@@ -139,9 +139,9 @@ can be extended to
 
     type dimension = Dim int variance
 
-The _Unknown_ constructor in the _variance_ type allows new readers to
+The `Unknown` constructor in the `variance` type allows new readers to
 deserialize old data, as missing variance fields/elements will default to
-_Unknown_.
+`Unknown`.
 
 ## Reference
 
@@ -196,9 +196,9 @@ The default values is defined for each type inductively: the default value of ..
 * an array is the empty array.
 * a tuple is a tuple consisting of the default values of its types, if they
   are all defined.
-* the default value of a message is the first message variant with the fields
-  having the default values corresponding to their types (if they are all
-  defined)
+* a message is the first message variant with the fields
+  having the default values corresponding to their types, if they are all
+  defined.
 
 Otherwise, the type/message has got no default value.
 
