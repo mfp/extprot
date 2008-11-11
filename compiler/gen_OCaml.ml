@@ -61,6 +61,18 @@ let patt_of_ll_type t =
   let _loc = Loc.mk "<genererated code @ patt_of_ll_type>" in
     <:patt< Extprot.Codec.$uid:Extprot.Codec.string_of_low_level_type t$ >>
 
+let maybe_all f = function
+    [] -> None
+  | hd :: tl ->
+      let init = Option.map (fun x -> [x]) (f hd) in
+      let l = List.fold_left (fun s x -> match s with
+                                  None -> None
+                                | Some l -> match f x with
+                                      None -> None
+                                    | Some y -> Some (y :: l))
+                init tl
+      in Option.map List.rev l
+
 let rec default_value = let _loc = Loc.ghost in function
     Vint _ | Bitstring32 | Bitstring64 _ | Bytes -> None
     | Sum ([], _) -> None
@@ -70,14 +82,11 @@ let rec default_value = let _loc = Loc.ghost in function
     | Htuple (Array, _) -> Some <:expr< [| |] >>
     | Message name ->
         Some <:expr< ! $uid:String.capitalize name$.$lid:name ^ "_default"$ () >>
-    | Tuple tys ->
-        let vals = List.map default_value tys in match List.mem None vals with
-            true -> None
-          | false ->
-              match List.map Option.get vals with
-                  [] -> failwith "default_value: empty tuple"
-                | [_] -> failwith "default_value: tuple with only 1 element"
-                | hd::tl -> Some <:expr< ($hd$, $Ast.exCom_of_list tl$) >>
+    | Tuple tys -> match maybe_all default_value tys with
+          None -> None
+        | Some [] -> failwith "default_value: empty tuple"
+        | Some [_] -> failwith "default_value: tuple with only 1 element"
+        | Some (hd::tl) -> Some <:expr< ($hd$, $Ast.exCom_of_list tl$) >>
 
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
@@ -150,23 +159,17 @@ let generate_container bindings =
   in function
       Message_decl (msgname, mexpr) -> begin
         let default_record fields =
-          let fs =
-            List.map
-              (fun (name, _, llty) -> match default_value llty with
-                   None -> None
-                 | Some v -> Some (name, v))
+          let default_values =
+            maybe_all
+              (fun (name, _, llty) ->
+                 Option.map (fun v -> (name, v)) (default_value llty))
               fields
-          in match List.mem None fs with
-                true -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
-              | false ->
-                  let assigns =
-                    List.map
-                      (function
-                           None ->
-                             failwith "bug in generate_container: no default value"
-                         | Some (name, v) -> <:rec_binding< $lid:name$ = $v$ >>)
-                      fs
-                  in <:expr< { $Ast.rbSem_of_list assigns$ } >> in
+          in match default_values with
+              None -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
+            | Some l ->
+                let assigns =
+                  List.map (fun (name, v) -> <:rec_binding< $lid:name$ = $v$ >>) l
+                in <:expr< { $Ast.rbSem_of_list assigns$ } >> in
 
         let default_func = match Gencode.low_level_msg_def bindings mexpr with
             Record_single fields ->
@@ -430,16 +433,14 @@ struct
             (* handle missing elements when expanding the primitive type to
              * a Tuple; needs default values *)
             | ty :: tys -> begin match RD.raw_rd_func ty with
-                  Some (mc, reader_expr) ->
-                    let defaults = List.map default_value tys in
-                      if List.mem None defaults then
-                        bad_type_case
-                      else
-                        let defs = List.map Option.get defaults in
-                            <:match_case<
-                                $mc$ -> ($reader_expr$ s, $Ast.exCom_of_list defs$)
-                              | $bad_type_case$
-                            >>
+                | Some (mc, reader_expr) -> begin match maybe_all default_value tys with
+                      None -> bad_type_case
+                    | Some defs ->
+                        <:match_case<
+                            $mc$ -> ($reader_expr$ s, $Ast.exCom_of_list defs$)
+                          | $bad_type_case$
+                        >>
+                  end
                 | None -> bad_type_case
               end
             | _ -> (* can't happen *) bad_type_case in
@@ -520,18 +521,16 @@ struct
                 | None -> bad_type_case
               end
             | (c, ty :: tys) :: _ -> begin match RD.raw_rd_func ty with
-                  Some (mc, reader_expr) ->
-                    let defaults = List.map default_value tys in
-                      if List.mem None defaults then
-                        bad_type_case
-                      else
-                        let defs = List.map Option.get defaults in
-                            <:match_case<
-                                $mc$ ->
-                                   $uid:String.capitalize c.const_type$.$uid:c.const_name$
-                                     ($reader_expr$ s, $Ast.exCom_of_list defs$)
-                              | $bad_type_case$
-                            >>
+                  Some (mc, reader_expr) -> begin match maybe_all default_value tys with
+                      None -> bad_type_case
+                    | Some defs ->
+                        <:match_case<
+                            $mc$ ->
+                               $uid:String.capitalize c.const_type$.$uid:c.const_name$
+                                 ($reader_expr$ s, $Ast.exCom_of_list defs$)
+                          | $bad_type_case$
+                        >>
+                  end
                 | None -> bad_type_case
               end
             | _ -> bad_type_case
