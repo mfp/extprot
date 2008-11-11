@@ -93,6 +93,14 @@ let () = Register_test.register "extensions"
     "primitive type to tuple" >:: begin fun () ->
       check_roundtrip Msg1c.pp_msg1c Msg1.write_msg1 Msg1c.read_msg1c
         { Msg1.a = 123 } { Msg1c.a = Int_or_stuff.Int 123 };
+
+      let simple_sum_default = { Simple_sum.v = Sum_type.D } in
+      let tup = (simple_sum_default, simple_sum_default) in
+
+        check_roundtrip
+          Msg1d.pp_msg1d Msg1.write_msg1 Msg1d.read_msg1d
+          { Msg1.a = 123 }
+          { Msg1d.a = (123, Color.Red, tup) }
     end;
 
     default_value_tests;

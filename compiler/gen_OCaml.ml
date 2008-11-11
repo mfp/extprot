@@ -427,10 +427,22 @@ struct
                     <:match_case< $mc$ -> $reader_expr$ s | $bad_type_case$ >>
                 | None -> bad_type_case
               end
-            (* TODO: handle missing elements when expanding the primitive type to
+            (* handle missing elements when expanding the primitive type to
              * a Tuple; needs default values *)
-            (* | ty :: tys -> ... *)
-            | _ -> bad_type_case in
+            | ty :: tys -> begin match RD.raw_rd_func ty with
+                  Some (mc, reader_expr) ->
+                    let defaults = List.map default_value tys in
+                      if List.mem None defaults then
+                        bad_type_case
+                      else
+                        let defs = List.map Option.get defaults in
+                            <:match_case<
+                                $mc$ -> ($reader_expr$ s, $Ast.exCom_of_list defs$)
+                              | $bad_type_case$
+                            >>
+                | None -> bad_type_case
+              end
+            | _ -> (* can't happen *) bad_type_case in
           let tys_with_defvalues =
             List.map (fun llty -> (llty, default_value llty)) lltys
           in <:expr<
