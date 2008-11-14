@@ -2,7 +2,10 @@ open Camlp4.PreCast
 open Printf
 open Syntax
 
-type type_options = [ `Ocaml of (string * string) list ] list
+type type_options = [
+  `Global of (string * string) list
+| `OCaml of (string * string) list
+] list
 
 type base_type_expr_simple = [
     `Bool of type_options

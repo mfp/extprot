@@ -9,6 +9,13 @@ message simple_string = { v : string }
 type tuple 'a 'b = ('a * 'b)
 message simple_tuple = { v : tuple<int, bool> }
 
+type digest = string
+  options {
+    "ocaml" = {
+      "type" = "Util.Digest.t, Util.Digest.from_string, Util.Digest.to_string"
+    }
+  }
+
 message msg_sum =
     A { b : bool }
   | B { i : int }

@@ -18,6 +18,18 @@ let sum_of_constructor_list l =
       List.filter_map (function Non_constant (s, l) -> Some (s, l) | _ -> None) l;
   }
 
+let options opts =
+  let global =
+    List.filter_map
+      (function `Simple (n, v) -> Some (n, v) | _ -> None)
+      opts in
+  let specific = List.filter_map
+                   (function
+                      | `Complex ("OCaml", l) -> Some (`OCaml l)
+                      | `Simple _ | `Complex _ -> None)
+                   opts
+  in `Global global :: specific
+
 EXTEND Gram
   GLOBAL: declarations;
 
@@ -28,15 +40,26 @@ EXTEND Gram
 
   declaration :
     [ "message"
-        [ "message"; name = a_LIDENT; "="; e = msg_expr -> Message_decl (name, e, []) ]
+        [ "message"; name = a_LIDENT; "="; e = msg_expr; opts = type_options ->
+            Message_decl (name, e, opts) ]
     | "type"
         [ "type"; name = a_LIDENT;
           par = LIST0 [ "'"; n = a_LIDENT -> type_param_of_string n];
-          "="; e = type_expr ->
+          "="; e = type_expr; opts = type_options ->
             let e = match e with
                 `Sum (s, opts) -> `Sum ({ s with type_name = name }, opts)
               | e -> e
-            in Type_decl (name, par, e, []) ] ];
+            in Type_decl (name, par, e, opts) ] ];
+
+  type_options :
+    [ [ -> []
+      | "options"; "{"; l = LIST0 [type_option_values] SEP ";"; "}" -> options l ] ];
+
+  type_option_values :
+    [ [ name = a_STRING; "="; value = a_STRING -> `Simple (name, value)
+      | name = a_STRING; "="; "{";
+        l = LIST0 [n = a_STRING; "="; v = a_STRING -> (n, v)] SEP ";"; "}" ->
+          `Complex (name, l) ] ];
 
   type_expr :
     [ "top"
@@ -89,6 +112,7 @@ EXTEND Gram
 
   a_LIDENT: [ [ `LIDENT s -> s ] ];
   a_UIDENT: [ [ `UIDENT s -> s ] ];
+  a_STRING: [ [ `STRING (_, s) -> s ] ];
 
 END
 
