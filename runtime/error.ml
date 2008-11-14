@@ -9,6 +9,7 @@ type location =
 type format_error =
     Bad_wire_type of Types.low_level_type option
   | Unknown_tag of int
+  | Conversion_error of exn
 
 type extprot_error =
     Missing_tuple_element of int
@@ -34,6 +35,8 @@ let pp_format_error pp = function
            (fun pp ty -> PP.fprintf pp "%s" (Types.string_of_low_level_type ty)))
         ty
   | Unknown_tag n -> PP.fprintf pp "Unknown_tag %d" n
+  | Conversion_error exn ->
+      PP.fprintf pp "Conversion_error (%s)" (Printexc.to_string exn)
 
 let pp_extprot_error pp (e, loc) = match e with
     Missing_tuple_element elmno ->
@@ -68,3 +71,6 @@ let bad_wire_type ?message ?constructor ?field ?ll_type () =
 
 let unknown_tag ?message ?constructor ?field tag =
   bad_format (Unknown_tag tag) (location ~message ~constructor ~field ())
+
+let conversion_error ?message ?constructor ?field exn =
+  bad_format (Conversion_error exn) (location ~message ~constructor ~field ())

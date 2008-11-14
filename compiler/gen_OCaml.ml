@@ -485,7 +485,13 @@ struct
     and lltys_without_defaults = List.map (fun x -> (x, None))
 
     and wrap_reader opts expr = match get_type_info opts with
-        Some (_, fromf, _) -> <:expr< $fromf$ $expr$ >>
+        Some (_, fromf, _) ->
+          <:expr<
+            try
+              $fromf$ $expr$
+            with [ Extprot.Error.Extprot_error _ as e -> raise e
+                 | e -> Extprot.Error.conversion_error e]
+          >>
       | None -> expr
 
     and read = function
@@ -755,7 +761,14 @@ end
 let rec raw_rd_func reader_func =
   let _loc = Loc.ghost in
   let wrap opts readerf = match get_type_info opts with
-        Some (_, fromf, _) -> <:expr< (fun s -> $fromf$ ($readerf$ s)) >>
+        Some (_, fromf, _) ->
+          <:expr<
+            (fun s ->
+               try
+                 $fromf$ ($readerf$ s)
+               with [ Extprot.Error.Extprot_error _ as e -> raise e
+                    | e -> Extprot.Error.conversion_error e])
+          >>
       | None -> readerf in
   let patt = patt_of_ll_type in
   let module C = Extprot.Codec in function
