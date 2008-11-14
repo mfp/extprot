@@ -8,14 +8,14 @@ let (|>) x f = f x
 type tag = int
 
 type low_level =
-    Vint of vint_meaning
-  | Bitstring32
-  | Bitstring64 of b64_meaning
-  | Bytes
-  | Sum of constructor list * (constructor * low_level list) list
-  | Tuple of low_level list
-  | Htuple of htuple_meaning * low_level
-  | Message of string
+    Vint of vint_meaning * type_options
+  | Bitstring32 of type_options
+  | Bitstring64 of b64_meaning * type_options
+  | Bytes of type_options
+  | Sum of constructor list * (constructor * low_level list) list * type_options
+  | Tuple of low_level list * type_options
+  | Htuple of htuple_meaning * low_level * type_options
+  | Message of string * type_options
 
 and constructor = {
   const_tag : tag;
@@ -162,17 +162,17 @@ let rec iter_message f =
 let low_level_msg_def bindings (msg : message_expr) =
 
   let rec low_level_of_rtexp : reduced_type_expr -> low_level = function
-      `Bool _ -> Vint Bool
-    | `Byte _ -> Vint Int8
-    | `Int _ -> Vint Int
-    | `Long_int _ -> Bitstring64 Long
-    | `Float _ -> Bitstring64 Float
-    | `String _ -> Bytes
-    | `Tuple (l, _) -> Tuple (List.map low_level_of_rtexp (l :> reduced_type_expr list))
-    | `List (ty, _) -> Htuple (List, low_level_of_rtexp (reduced_type_expr ty))
-    | `Array (ty, _) -> Htuple (Array, low_level_of_rtexp (reduced_type_expr ty))
-    | `Message (s, _) -> Message s
-    | `Sum (sum, _) ->
+      `Bool opts -> Vint (Bool, opts)
+    | `Byte opts -> Vint (Int8, opts)
+    | `Int opts -> Vint (Int, opts)
+    | `Long_int opts -> Bitstring64 (Long, opts)
+    | `Float opts -> Bitstring64 (Float, opts)
+    | `String opts -> Bytes opts
+    | `Tuple (l, opts) -> Tuple (List.map low_level_of_rtexp (l :> reduced_type_expr list), opts)
+    | `List (ty, opts) -> Htuple (List, low_level_of_rtexp (reduced_type_expr ty), opts)
+    | `Array (ty, opts) -> Htuple (Array, low_level_of_rtexp (reduced_type_expr ty), opts)
+    | `Message (s, opts) -> Message (s, opts)
+    | `Sum (sum, opts) ->
         let constant =
           List.mapi
             (fun i s -> { const_tag = i; const_name = s; const_type = sum.type_name })
@@ -183,7 +183,7 @@ let low_level_msg_def bindings (msg : message_expr) =
                ({ const_tag = i; const_name = const; const_type = sum.type_name},
                 List.map low_level_of_rtexp tys))
             sum.non_constant
-        in Sum (constant, non_constant) in
+        in Sum (constant, non_constant, opts) in
 
   let low_level_field ty =
     type_expr ty |> beta_reduce_texpr bindings |> low_level_of_rtexp

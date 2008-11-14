@@ -74,15 +74,15 @@ let maybe_all f = function
       in Option.map List.rev l
 
 let rec default_value = let _loc = Loc.ghost in function
-    Vint _ | Bitstring32 | Bitstring64 _ | Bytes -> None
-    | Sum ([], _) -> None
-    | Sum (c :: _, _) -> (* first constant constructor = default*)
+    Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> None
+    | Sum ([], _, _) -> None
+    | Sum (c :: _, _, _) -> (* first constant constructor = default*)
         Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
-    | Htuple (List, _) -> Some <:expr< [] >>
-    | Htuple (Array, _) -> Some <:expr< [| |] >>
-    | Message name ->
+    | Htuple (List, _, _) -> Some <:expr< [] >>
+    | Htuple (Array, _, _) -> Some <:expr< [| |] >>
+    | Message (name, _) ->
         Some <:expr< ! $uid:String.capitalize name$.$lid:name ^ "_default"$ () >>
-    | Tuple tys -> match maybe_all default_value tys with
+    | Tuple (tys, _) -> match maybe_all default_value tys with
           None -> None
         | Some [] -> failwith "default_value: empty tuple"
         | Some [_] -> failwith "default_value: tuple with only 1 element"
@@ -414,14 +414,14 @@ struct
     and lltys_without_defaults = List.map (fun x -> (x, None))
 
     and read = function
-        Vint Bool -> <:expr< $RD.reader_func `Read_bool$ s >>
-      | Vint Int -> <:expr< $RD.reader_func `Read_rel_int$ s >>
-      | Vint Int8 -> <:expr< $RD.reader_func `Read_i8$ s >>
-      | Bitstring32 -> <:expr< $RD.reader_func `Read_i32$ s >>
-      | Bitstring64 Long -> <:expr< $RD.reader_func `Read_i64$ s >>
-      | Bitstring64 Float -> <:expr< $RD.reader_func `Read_float$ s >>
-      | Bytes -> <:expr< $RD.reader_func `Read_string$ s >>
-      | Tuple lltys ->
+        Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
+      | Vint (Int, _) -> <:expr< $RD.reader_func `Read_rel_int$ s >>
+      | Vint (Int8, _) -> <:expr< $RD.reader_func `Read_i8$ s >>
+      | Bitstring32 _ -> <:expr< $RD.reader_func `Read_i32$ s >>
+      | Bitstring64 (Long, _) -> <:expr< $RD.reader_func `Read_i64$ s >>
+      | Bitstring64 (Float, _) -> <:expr< $RD.reader_func `Read_float$ s >>
+      | Bytes _ -> <:expr< $RD.reader_func `Read_string$ s >>
+      | Tuple (lltys, _) ->
           let bad_type_case =
             <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
           let other_cases = match lltys with
@@ -460,7 +460,7 @@ struct
                    | $other_cases$
                  ]
              >>
-      | Sum (constant, non_constant) ->
+      | Sum (constant, non_constant, _) ->
           let constant_match_cases =
             List.map
               (fun c ->
@@ -541,9 +541,9 @@ struct
                 | $other_cases$
               ]
             >>
-      | Message name ->
+      | Message (name, _) ->
           <:expr< $uid:String.capitalize name$.$lid:RD.read_msg_func name$ s >>
-      | Htuple (kind, llty) ->
+      | Htuple (kind, llty, _) ->
           let e = match kind with
               List ->
                 let loop = new_lid "loop" in
@@ -680,13 +680,13 @@ end
 let rec raw_rd_func reader_func =
   let patt = patt_of_ll_type in
   let module C = Extprot.Codec in function
-      Vint Bool -> Some (patt C.Bits8, reader_func `Read_raw_bool)
-    | Vint Int8 -> Some (patt C.Bits8, reader_func `Read_raw_i8)
-    | Vint Int -> Some (patt C.Vint, reader_func `Read_raw_rel_int)
-    | Bitstring32 -> Some (patt C.Bits32, reader_func `Read_raw_i32)
-    | Bitstring64 Long -> Some (patt C.Bits64_long, reader_func `Read_raw_i64)
-    | Bitstring64 Float -> Some (patt C.Bits64_float, reader_func `Read_raw_float)
-    | Bytes -> Some (patt C.Bytes, reader_func `Read_raw_string)
+      Vint (Bool, _) -> Some (patt C.Bits8, reader_func `Read_raw_bool)
+    | Vint (Int8, _) -> Some (patt C.Bits8, reader_func `Read_raw_i8)
+    | Vint (Int, _) -> Some (patt C.Vint, reader_func `Read_raw_rel_int)
+    | Bitstring32 _ -> Some (patt C.Bits32, reader_func `Read_raw_i32)
+    | Bitstring64 (Long, _) -> Some (patt C.Bits64_long, reader_func `Read_raw_i64)
+    | Bitstring64 (Float, _) -> Some (patt C.Bits64_float, reader_func `Read_raw_float)
+    | Bytes _ -> Some (patt C.Bytes, reader_func `Read_raw_string)
     | Sum _ | Tuple _ | Htuple _ | Message _ -> None
 
 let add_message_reader bindings msgname mexpr c =
@@ -738,13 +738,13 @@ let add_message_io_reader bindings msgname mexpr c =
 let rec write_field fname =
   let _loc = Loc.mk "<generated code @ write>" in
   let simple_write_func = function
-      Vint Bool -> "write_bool"
-    | Vint Int -> "write_relative_int"
-    | Vint Int8 -> "write_int8"
-    | Bitstring32 -> "write_int32"
-    | Bitstring64 Long -> "write_int64"
-    | Bitstring64 Float -> "write_float"
-    | Bytes -> "write_string"
+      Vint (Bool, _) -> "write_bool"
+    | Vint (Int, _) -> "write_relative_int"
+    | Vint (Int8, _) -> "write_int8"
+    | Bitstring32 _ -> "write_int32"
+    | Bitstring64 (Long, _) -> "write_int64"
+    | Bitstring64 (Float, _) -> "write_float"
+    | Bytes _ -> "write_string"
     | Tuple _ | Sum _ | Htuple _ | Message _ -> assert false in
 
   let rec write_values tag var_tys =
@@ -779,12 +779,12 @@ let rec write_field fname =
       >>
 
   and write v = function
-      Vint _ | Bitstring32 | Bitstring64 _ | Bytes as llty ->
+      Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ as llty ->
           <:expr< Extprot.Msg_buffer.$lid:simple_write_func llty$ aux $v$ >>
-    | Message name ->
+    | Message (name, _) ->
         <:expr< $uid:String.capitalize name$.$lid:"write_" ^ name$ aux $v$ >>
-    | Tuple lltys -> write_tuple 0 v lltys
-    | Htuple (kind, llty) ->
+    | Tuple (lltys, _) -> write_tuple 0 v lltys
+    | Htuple (kind, llty, _) ->
         let iter_f = match kind with
             Array -> <:expr< Array.iter >>
           | List -> <:expr< List.iter >>
@@ -802,7 +802,7 @@ let rec write_field fname =
                 Extprot.Msg_buffer.add_buffer aux abuf
               }
          >>
-    | Sum (constant, non_constant) ->
+    | Sum (constant, non_constant, _) ->
         let constant_match_cases =
           List.map
             (fun c ->
