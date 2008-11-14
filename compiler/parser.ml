@@ -25,10 +25,14 @@ let options opts =
       opts in
   let specific = List.filter_map
                    (function
-                      | `Complex ("OCaml", l) -> Some (`OCaml l)
+                      | `Complex (name, l)
+                          when String.lowercase name = "ocaml" -> Some (`OCaml l)
                       | `Simple _ | `Complex _ -> None)
-                   opts
-  in `Global global :: specific
+                   opts in
+  let ret = `Global global :: specific in
+    (* printf "Type options (top-level %d):\n" (List.length opts); *)
+    (* dump_type_options ret; *)
+    ret
 
 EXTEND Gram
   GLOBAL: declarations;

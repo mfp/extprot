@@ -12,9 +12,11 @@ message simple_tuple = { v : tuple<int, bool> }
 type digest = string
   options {
     "ocaml" = {
-      "type" = "Util.Digest.t, Util.Digest.from_string, Util.Digest.to_string"
+      "type" = "Digest_type.t, Digest_type.from_string, Digest_type.to_string"
     }
   }
+
+message simple_digest = { digest : digest }
 
 message msg_sum =
     A { b : bool }

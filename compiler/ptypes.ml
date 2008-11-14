@@ -7,6 +7,15 @@ type type_options = [
 | `OCaml of (string * string) list
 ] list
 
+let dump_type_options l =
+  let pr_list name l =
+    printf "%s options:\n" name;
+    List.iter (fun (k, v) -> printf "%s.%S = %S\n" name k v) l in
+  let dump_opt = function
+      `Global l -> pr_list "Global" l
+    | `OCaml l -> pr_list "OCaml" l
+  in List.iter dump_opt l
+
 type base_type_expr_simple = [
     `Bool of type_options
   | `Byte of type_options

@@ -85,13 +85,29 @@ let beta_reduce_sum self bindings s opts =
 
 let merge_options opt1 opt2 = opt2 @ opt1
 
+let merge_rtexpr_options (rtexpr : reduced_type_expr) (opts : type_options)
+      : reduced_type_expr =
+  let m = merge_options in match rtexpr with
+      `Array (t, opts2) -> `Array (t, m opts opts2)
+    | `Bool opts2 -> `Bool (m opts opts2)
+    | `Byte opts2 -> `Byte (m opts opts2)
+    | `Float opts2 -> `Float (m opts opts2)
+    | `Int opts2 -> `Int (m opts opts2)
+    | `List (t, opts2) -> `List (t, opts2)
+    | `Long_int opts2 -> `Long_int (m opts opts2)
+    | `Message (n, opts2) -> `Message (n, m opts opts2)
+    | `String opts2 -> `String (m opts opts2)
+    | `Sum (t, opts2) -> `Sum (t, m opts opts2)
+    | `Tuple (l, opts2) -> `Tuple (l, m opts opts2)
+
 let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
   let aux bindings x : reduced_type_expr = match x with
       `Sum (s, opts) -> beta_reduce_sum beta_reduce_texpr bindings s opts
     | `Type_param p ->
         let name = string_of_type_param p in begin match smap_find name bindings with
             Some (Message_decl (name, _, opts)) -> `Message (name, opts)
-          | Some (Type_decl (_, [], exp, _)) -> beta_reduce_texpr bindings exp
+          | Some (Type_decl (_, [], exp, opts)) ->
+              merge_rtexpr_options (beta_reduce_texpr bindings exp) opts
           | Some (Type_decl (_, _, _, _)) ->
               failwithfmt "beta_reduce_texpr: wrong arity for higher-order type %S" name;
               assert false
@@ -106,7 +122,7 @@ let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
             let bindings =
               update_bindings bindings (List.map string_of_type_param params)
                 (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty, opts)) args)
-            in beta_reduce_texpr bindings exp
+            in merge_rtexpr_options (beta_reduce_texpr bindings exp) opts2
         | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
                   assert false
   in beta_reduce_aux aux beta_reduce_texpr bindings texpr
@@ -194,10 +210,12 @@ let collect_bindings =
   List.fold_left (fun m decl -> SMap.add (declaration_name decl) decl m) SMap.empty
 
 type 'container msgdecl_generator =
-    bindings -> string -> message_expr -> 'container -> 'container
+    bindings -> string -> message_expr -> type_options ->
+    'container -> 'container
 
 type 'container typedecl_generator =
-    bindings -> string -> type_param list -> type_expr -> 'container -> 'container
+    bindings -> string -> type_param list -> type_expr -> type_options ->
+    'container -> 'container
 
 module type GENCODE =
 sig
@@ -231,17 +249,17 @@ struct
         generate_container bindings decl |>
           Option.map begin fun cont ->
             match decl with
-               Type_decl (name, params, expr, _) ->
+               Type_decl (name, params, expr, opts) ->
                  List.fold_left
                    (fun cont (gname, f) ->
-                      if use_generator gname then f bindings name params expr cont
+                      if use_generator gname then f bindings name params expr opts cont
                       else cont)
                    cont
                    Gen.typedecl_generators
-             | Message_decl (name, expr, _) ->
+             | Message_decl (name, expr, opts) ->
                  List.fold_left
                    (fun cont (gname, f) ->
-                      if use_generator gname then f bindings name expr cont
+                      if use_generator gname then f bindings name expr opts cont
                       else cont)
                    cont
                    Gen.msgdecl_generators

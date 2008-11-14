@@ -8,6 +8,7 @@ OCAML_LIBS[] +=
     $(ROOT)/runtime/extprot
 
 TEST_MODULES[] =
+    digest_type
     test_types
     gen_data
     util
@@ -26,7 +27,7 @@ test_types.ml: $(GENERATOR) test_types.proto
 $(CamlTargets $(removesuffix $(ls *.ml))): $(ROOT)/runtime/extprot.cmxa
 
 OCamlProgram(test, register_test $(TEST_MODULES) test)
-OCamlProgram(bm_01, test_types gen_data bm_01)
+OCamlProgram(bm_01, digest_type test_types gen_data bm_01)
 OCamlProgram(prettyprint, prettyprint)
 
 section

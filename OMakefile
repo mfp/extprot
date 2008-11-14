@@ -5,7 +5,7 @@ BYTE_ENABLED = true
 ENDIANNESS = LITTLE_ENDIAN
 
 OCAMLDEPFLAGS = -pp "camlp4orf -D$(ENDIANNESS)"
-OCAMLFLAGS = -dtypes -pp "camlp4orf -D$(ENDIANNESS)" -w A -warn-error A
+OCAMLFLAGS = -dtypes -pp "camlp4orf -D$(ENDIANNESS)" -w Az -warn-error Az
 OCAMLOPTFLAGS = -S -inline 100
 OCAMLCFLAGS += -g
 OCAMLINCLUDES[] += $(ROOT)/runtime

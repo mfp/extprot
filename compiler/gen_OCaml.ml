@@ -6,6 +6,7 @@ open Camlp4
 open PreCast
 open Ast
 open ExtList
+open ExtString
 
 type container = {
   c_name : string;
@@ -88,6 +89,62 @@ let rec default_value = let _loc = Loc.ghost in function
         | Some [_] -> failwith "default_value: tuple with only 1 element"
         | Some (hd::tl) -> Some <:expr< ($hd$, $Ast.exCom_of_list tl$) >>
 
+let lookup_option ?(global = false) name opts =
+  let select l =
+    Some
+      (List.filter_map
+         (function (n, v) when n = name -> Some v | (_ , _) -> None) l) in
+  let values =
+    List.concat @@
+    List.filter_map
+      (function
+         | `Global l when global -> select l
+         | `OCaml l -> select l
+         | _ -> None)
+      opts
+  in List.fold_left (fun _ x -> Some x) None values
+
+let bad_option ?msg name v = match msg with
+    Some m ->
+      Printf.ksprintf failwith "Bad OCaml option value for %S: %S --- %s" name v m
+  | None ->
+      Printf.ksprintf failwith "Bad OCaml option value for %S: %S" name v
+
+exception Bad_option of string
+
+let ctyp_of_path path = match List.rev @@ String.nsplit path "." with
+    [] -> raise (Bad_option "Empty ctyp path")
+  | ty :: mods ->
+      let _loc = Loc.ghost in
+        (* TODO: check that path is correct *)
+        List.fold_left
+          (fun ctyp m -> <:ctyp< $uid:m$.$id:Ast.ident_of_ctyp ctyp$ >>)
+          <:ctyp< $lid:ty$ >>
+          mods
+
+let expr_of_path expr = match List.rev @@ String.nsplit expr "." with
+    [] -> raise (Bad_option "Empty expr")
+  | e :: mods ->
+      let _loc = Loc.ghost in
+        (* TODO: check that path is correct *)
+        List.fold_left
+          (fun e m -> let m = <:expr< $uid:m$ >> in <:expr< $m$.$e$ >>)
+          <:expr< $lid:e$ >>
+          mods
+
+let get_type_info opts = match lookup_option "type" opts with
+    None -> None
+  | Some v -> match List.map String.strip @@ String.nsplit v "," with
+        [ty; from_fun; to_fun] -> begin
+          try
+            Some (ctyp_of_path ty, expr_of_path from_fun, expr_of_path to_fun)
+          with Bad_option msg -> bad_option ~msg "type" v
+        end
+      | _ -> bad_option "type" v
+
+let get_type default opts =
+  Option.map_default (fun (ctyp, _, _) -> ctyp) default (get_type_info opts)
+
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
 
@@ -128,32 +185,38 @@ let generate_container bindings =
     type_expr expr |> reduce_to_poly_texpr_core bindings |> ctyp_of_poly_texpr_core
 
   and ctyp_of_poly_texpr_core = function
-      `Bool _ -> <:ctyp< bool >>
-    | `Byte _ -> <:ctyp< int >>
-    | `Int _ -> <:ctyp< int >>
-    | `Long_int _ -> <:ctyp< Int64.t >>
-    | `Float _ -> <:ctyp< float >>
-    | `String _ -> <:ctyp< string >>
-    | `List (ty, _) -> <:ctyp< list ($ctyp_of_poly_texpr_core ty$) >>
-    | `Array (ty, _) -> <:ctyp< array ($ctyp_of_poly_texpr_core ty$) >>
-    | `Tuple (l, _) -> begin match l with
+      `Bool opts -> get_type <:ctyp< bool >> opts
+    | `Byte opts -> get_type <:ctyp< int >> opts
+    | `Int opts -> get_type <:ctyp< int >> opts
+    | `Long_int opts -> get_type <:ctyp< Int64.t >> opts
+    | `Float opts -> get_type <:ctyp< float >> opts
+    | `String opts -> get_type <:ctyp< string >> opts
+    | `List (ty, opts) -> get_type <:ctyp< list ($ctyp_of_poly_texpr_core ty$) >> opts
+    | `Array (ty, opts) -> get_type <:ctyp< array ($ctyp_of_poly_texpr_core ty$) >> opts
+    | `Tuple (l, opts) -> begin match l with
           [] -> failwith "ctyp_of_poly_texpr_core: empty tuple"
         | [_] -> failwith "ctyp_of_poly_texpr_core: 1-element tuple"
         | [a; b] ->
-            <:ctyp< ( $ ctyp_of_poly_texpr_core a$ * $ctyp_of_poly_texpr_core b$ ) >>
+            get_type
+              <:ctyp< ( $ ctyp_of_poly_texpr_core a$ * $ctyp_of_poly_texpr_core b$ ) >>
+              opts
         | hd::tl ->
             let tl' =
               foldr1 "ctyp_of_poly_texpr_core `Tuple" ctyp_of_poly_texpr_core
                 (fun ptexpr tup -> <:ctyp< $ ctyp_of_poly_texpr_core ptexpr $ * $tup$ >>)
                 tl
-            in <:ctyp< ( $ ctyp_of_poly_texpr_core hd $ * $tl'$ ) >>
+            in get_type
+                 <:ctyp< ( $ ctyp_of_poly_texpr_core hd $ * $tl'$ ) >>
+                 opts
       end
-    | `Type (name, args, _) ->
+    | `Type (name, args, opts) ->
         let t = List.fold_left (* apply *)
                   (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core ptexpr$ >>)
                   <:ctyp< $uid:String.capitalize name$.$lid:name$ >>
                   args
-        in (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
+        in get_type
+             (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
+             opts
     | `Type_arg n -> <:ctyp< '$n$ >>
 
   in function
@@ -186,7 +249,7 @@ let generate_container bindings =
         in
           Some (empty_container msgname ~default_func (message_types msgname mexpr))
       end
-    | Type_decl (name, params, texpr, _) ->
+    | Type_decl (name, params, texpr, opts) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
             `Sum (s, _) -> begin
               let ty_of_const_texprs (const, ptexprs) =
@@ -211,7 +274,9 @@ let generate_container bindings =
                          const s.non_constant
             end
           | #poly_type_expr_core ->
-              reduce_to_poly_texpr_core bindings texpr |> ctyp_of_poly_texpr_core in
+              get_type
+                (reduce_to_poly_texpr_core bindings texpr |> ctyp_of_poly_texpr_core)
+                opts in
         let params =
           List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params
         in
@@ -309,12 +374,12 @@ struct
           args
     | `Type_arg n -> <:expr< $lid:"pp_" ^ n$ >>
 
-  let add_msgdecl_pretty_printer bindings msgname mexpr c =
+  let add_msgdecl_pretty_printer bindings msgname mexpr opts c =
     let expr = pp_message bindings msgname mexpr in
       { c with c_pretty_printer =
           Some <:str_item< value $lid:"pp_" ^ msgname$ pp = $expr$ >> }
 
-  let add_typedecl_pretty_printer bindings tyname typarams texpr c =
+  let add_typedecl_pretty_printer bindings tyname typarams texpr opts c =
     let wrap expr =
       List.fold_right
         (fun typaram e ->
@@ -347,7 +412,13 @@ struct
         in <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
       end
       | #poly_type_expr_core ->
-          reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
+          let ppfunc_expr =
+            reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
+          in match get_type_info opts with
+              None -> ppfunc_expr
+            | Some (_, _, tof) ->
+                <:expr< fun ppf -> fun x -> $ppfunc_expr$ ppf ($tof$ x) >>
+
     in
       { c with c_pretty_printer =
           Some <:str_item< value $lid:"pp_" ^ tyname$ = $wrap expr$ >> }
@@ -413,15 +484,19 @@ struct
 
     and lltys_without_defaults = List.map (fun x -> (x, None))
 
+    and wrap_reader opts expr = match get_type_info opts with
+        Some (_, fromf, _) -> <:expr< $fromf$ $expr$ >>
+      | None -> expr
+
     and read = function
-        Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
-      | Vint (Int, _) -> <:expr< $RD.reader_func `Read_rel_int$ s >>
-      | Vint (Int8, _) -> <:expr< $RD.reader_func `Read_i8$ s >>
-      | Bitstring32 _ -> <:expr< $RD.reader_func `Read_i32$ s >>
-      | Bitstring64 (Long, _) -> <:expr< $RD.reader_func `Read_i64$ s >>
-      | Bitstring64 (Float, _) -> <:expr< $RD.reader_func `Read_float$ s >>
-      | Bytes _ -> <:expr< $RD.reader_func `Read_string$ s >>
-      | Tuple (lltys, _) ->
+        Vint (Bool, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_bool$ s >>
+      | Vint (Int, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_rel_int$ s >>
+      | Vint (Int8, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_i8$ s >>
+      | Bitstring32 opts -> wrap_reader opts <:expr< $RD.reader_func `Read_i32$ s >>
+      | Bitstring64 (Long, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_i64$ s >>
+      | Bitstring64 (Float, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_float$ s >>
+      | Bytes opts -> wrap_reader opts <:expr< $RD.reader_func `Read_string$ s >>
+      | Tuple (lltys, opts) ->
           let bad_type_case =
             <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
           let other_cases = match lltys with
@@ -446,7 +521,7 @@ struct
             | _ -> (* can't happen *) bad_type_case in
           let tys_with_defvalues =
             List.map (fun llty -> (llty, default_value llty)) lltys
-          in <:expr<
+          in wrap_reader opts <:expr<
                let t = $RD.reader_func `Read_prefix$ s in
                  match Extprot.Codec.ll_type t with [
                      Extprot.Codec.Tuple ->
@@ -460,7 +535,7 @@ struct
                    | $other_cases$
                  ]
              >>
-      | Sum (constant, non_constant, _) ->
+      | Sum (constant, non_constant, opts) ->
           let constant_match_cases =
             List.map
               (fun c ->
@@ -535,15 +610,15 @@ struct
               end
             | _ -> bad_type_case
           in
-            <:expr< let t = $RD.reader_func `Read_prefix$ s in
+            wrap_reader opts <:expr< let t = $RD.reader_func `Read_prefix$ s in
               match Extprot.Codec.ll_type t with [
                 $Ast.mcOr_of_list match_cases$
                 | $other_cases$
               ]
             >>
-      | Message (name, _) ->
-          <:expr< $uid:String.capitalize name$.$lid:RD.read_msg_func name$ s >>
-      | Htuple (kind, llty, _) ->
+      | Message (name, opts) ->
+          wrap_reader opts <:expr< $uid:String.capitalize name$.$lid:RD.read_msg_func name$ s >>
+      | Htuple (kind, llty, opts) ->
           let e = match kind with
               List ->
                 let loop = new_lid "loop" in
@@ -567,7 +642,7 @@ struct
                           end
                     ]
                   >>
-          in <:expr<
+          in wrap_reader opts <:expr<
                 let t = $RD.reader_func `Read_prefix$ s in
                   match Extprot.Codec.ll_type t with [
                       Extprot.Codec.Htuple ->
@@ -678,18 +753,29 @@ struct
 end
 
 let rec raw_rd_func reader_func =
+  let _loc = Loc.ghost in
+  let wrap opts readerf = match get_type_info opts with
+        Some (_, fromf, _) -> <:expr< (fun s -> $fromf$ ($readerf$ s)) >>
+      | None -> readerf in
   let patt = patt_of_ll_type in
   let module C = Extprot.Codec in function
-      Vint (Bool, _) -> Some (patt C.Bits8, reader_func `Read_raw_bool)
-    | Vint (Int8, _) -> Some (patt C.Bits8, reader_func `Read_raw_i8)
-    | Vint (Int, _) -> Some (patt C.Vint, reader_func `Read_raw_rel_int)
-    | Bitstring32 _ -> Some (patt C.Bits32, reader_func `Read_raw_i32)
-    | Bitstring64 (Long, _) -> Some (patt C.Bits64_long, reader_func `Read_raw_i64)
-    | Bitstring64 (Float, _) -> Some (patt C.Bits64_float, reader_func `Read_raw_float)
-    | Bytes _ -> Some (patt C.Bytes, reader_func `Read_raw_string)
+      Vint (Bool, opts) ->
+        Some (patt C.Bits8, wrap opts @@ reader_func `Read_raw_bool)
+    | Vint (Int8, opts) ->
+        Some (patt C.Bits8, wrap opts @@ reader_func `Read_raw_i8)
+    | Vint (Int, opts) ->
+        Some (patt C.Vint, wrap opts @@ reader_func `Read_raw_rel_int)
+    | Bitstring32 opts ->
+        Some (patt C.Bits32, wrap opts @@ reader_func `Read_raw_i32)
+    | Bitstring64 (Long, opts) ->
+        Some (patt C.Bits64_long, wrap opts @@ reader_func `Read_raw_i64)
+    | Bitstring64 (Float, opts) ->
+        Some (patt C.Bits64_float, wrap opts @@ reader_func `Read_raw_float)
+    | Bytes opts ->
+        Some (patt C.Bytes, wrap opts @@ reader_func `Read_raw_string)
     | Sum _ | Tuple _ | Htuple _ | Message _ -> None
 
-let add_message_reader bindings msgname mexpr c =
+let add_message_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings mexpr in
   let module Mk_normal_reader =
@@ -716,7 +802,7 @@ let add_message_reader bindings msgname mexpr c =
               >>
     }
 
-let add_message_io_reader bindings msgname mexpr c =
+let add_message_io_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_io_reader>" in
   let llrec = Gencode.low_level_msg_def bindings mexpr in
   let module Mk_io_reader =
@@ -778,13 +864,19 @@ let rec write_field fname =
           $write_values tag var_tys$
       >>
 
+  and wrap_value opts expr = match get_type_info opts with
+        Some (_, _, tof) -> <:expr< $tof$ $expr$ >>
+      | None -> expr
+
   and write v = function
-      Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ as llty ->
-          <:expr< Extprot.Msg_buffer.$lid:simple_write_func llty$ aux $v$ >>
+      Vint (_, opts) | Bitstring32 opts | Bitstring64 (_, opts)
+    | Bytes opts as llty ->
+        <:expr< Extprot.Msg_buffer.$lid:simple_write_func llty$
+                  aux $wrap_value opts v$ >>
     | Message (name, _) ->
         <:expr< $uid:String.capitalize name$.$lid:"write_" ^ name$ aux $v$ >>
-    | Tuple (lltys, _) -> write_tuple 0 v lltys
-    | Htuple (kind, llty, _) ->
+    | Tuple (lltys, opts) -> write_tuple 0 (wrap_value opts v) lltys
+    | Htuple (kind, llty, opts) ->
         let iter_f = match kind with
             Array -> <:expr< Array.iter >>
           | List -> <:expr< List.iter >>
@@ -793,7 +885,8 @@ let rec write_field fname =
             let write_elm aux v = $write <:expr< v >> llty$ in
             let nelms = ref 0 in
             let abuf = Extprot.Msg_buffer.create () in do {
-                $iter_f$ (fun v -> do { write_elm abuf v; incr nelms } ) $v$;
+                $iter_f$ (fun v -> do { write_elm abuf v; incr nelms } )
+                         $wrap_value opts v$;
                 Extprot.Msg_buffer.add_htuple_prefix aux 0;
                 Extprot.Msg_buffer.add_vint aux
                   (Extprot.Msg_buffer.length abuf +
@@ -860,14 +953,14 @@ let rec write_message msgname =
           List.mapi (fun i (c, fs) -> (i, c, fs)) l
         in <:expr< match msg with [ $match_cases$ ] >>
 
-let add_message_writer bindings msgname mexpr c =
+let add_message_writer bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_writer>" in
   let llrec = Gencode.low_level_msg_def bindings mexpr in
   let write_expr = write_message msgname llrec in
   let writer = <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$ >> in
     { c with c_writer = Some writer }
 
-let msgdecl_generators =
+let msgdecl_generators : (string * _ msgdecl_generator) list =
   [
     "reader", add_message_reader;
     "io_reader", add_message_io_reader;
@@ -875,7 +968,7 @@ let msgdecl_generators =
     "pretty_printer", Pretty_print.add_msgdecl_pretty_printer;
   ]
 
-let typedecl_generators =
+let typedecl_generators : (string * _ typedecl_generator) list =
   [
     "pretty_printer", Pretty_print.add_typedecl_pretty_printer;
   ]
