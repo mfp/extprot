@@ -2,6 +2,7 @@
 open OUnit
 open Printf
 module E = Extprot
+module PP = E.Pretty_print
 open Test_types
 
 let check_write ?msg expected f v () =
@@ -25,7 +26,6 @@ let wrap_printer f x = String.concat "\n" [""; f x; ""]
 
 module Probabilistic =
 struct
-  module PP = E.Pretty_print
   open Extprot.Random_gen
   open Util
 
@@ -387,3 +387,30 @@ let () =
 
     ]
 
+
+let () =
+  Register_test.register "error recovery"
+    [
+      "skip to EOM on error (conversion)" >:: begin fun () ->
+        (* we write an extended message with extra fields to make sure they are
+         * skipped when there's an error in the conversion function for the
+         * original message definition *)
+        let digests =
+          List.map (fun digest -> { Simple_digest2.digest = digest; extra = "whatever" })
+            [ Digest_type.bad_digest; Digest_type.from_string "foo" ] in
+        let s = String.concat "" @@
+                List.map (Util.encode Simple_digest2.write_simple_digest2) digests in
+        let reader = E.Reader.String_reader.make s 0 (String.length s) in
+          begin
+            try
+              ignore (Simple_digest.read_simple_digest reader);
+              assert_failure
+                "Should raise exception for conversion error in Digest_type.from_string"
+            with _ -> ()
+          end;
+          assert_equal
+            ~printer:(wrap_printer (PP.pp Simple_digest.pp_simple_digest))
+            { Simple_digest.digest = Digest_type.from_string "foo" }
+            (Simple_digest.read_simple_digest reader)
+      end
+    ]

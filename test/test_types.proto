@@ -17,6 +17,7 @@ type digest = string
   }
 
 message simple_digest = { digest : digest }
+message simple_digest2 = { digest : digest; extra : string }
 
 message msg_sum =
     A { b : bool }

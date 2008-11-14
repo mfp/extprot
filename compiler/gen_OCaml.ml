@@ -730,10 +730,13 @@ struct
           let len = $RD.reader_func `Read_vint$ s in
           let eom = $RD.reader_func `Offset$ s len in
           let nelms = $RD.reader_func `Read_vint$ s in
-          let v = $e$ in begin
-            $RD.reader_func `Skip_to$ s eom;
-            v
-          end >>
+            try
+              let v = $e$ in begin
+                $RD.reader_func `Skip_to$ s eom;
+                v
+              end
+            with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
+      >>
 
   let rec read_message msgname =
     let _loc = Loc.mk "<generated code @ read_message>" in
