@@ -128,15 +128,15 @@ let generate_container bindings =
     type_expr expr |> reduce_to_poly_texpr_core bindings |> ctyp_of_poly_texpr_core
 
   and ctyp_of_poly_texpr_core = function
-      `Bool -> <:ctyp< bool >>
-    | `Byte -> <:ctyp< int >>
-    | `Int -> <:ctyp< int >>
-    | `Long_int -> <:ctyp< Int64.t >>
-    | `Float -> <:ctyp< float >>
-    | `String -> <:ctyp< string >>
-    | `List ty -> <:ctyp< list ($ctyp_of_poly_texpr_core ty$) >>
-    | `Array ty -> <:ctyp< array ($ctyp_of_poly_texpr_core ty$) >>
-    | `Tuple l -> begin match l with
+      `Bool _ -> <:ctyp< bool >>
+    | `Byte _ -> <:ctyp< int >>
+    | `Int _ -> <:ctyp< int >>
+    | `Long_int _ -> <:ctyp< Int64.t >>
+    | `Float _ -> <:ctyp< float >>
+    | `String _ -> <:ctyp< string >>
+    | `List (ty, _) -> <:ctyp< list ($ctyp_of_poly_texpr_core ty$) >>
+    | `Array (ty, _) -> <:ctyp< array ($ctyp_of_poly_texpr_core ty$) >>
+    | `Tuple (l, _) -> begin match l with
           [] -> failwith "ctyp_of_poly_texpr_core: empty tuple"
         | [_] -> failwith "ctyp_of_poly_texpr_core: 1-element tuple"
         | [a; b] ->
@@ -148,7 +148,7 @@ let generate_container bindings =
                 tl
             in <:ctyp< ( $ ctyp_of_poly_texpr_core hd $ * $tl'$ ) >>
       end
-    | `Type (name, args) ->
+    | `Type (name, args, _) ->
         let t = List.fold_left (* apply *)
                   (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core ptexpr$ >>)
                   <:ctyp< $uid:String.capitalize name$.$lid:name$ >>
@@ -157,7 +157,7 @@ let generate_container bindings =
     | `Type_arg n -> <:ctyp< '$n$ >>
 
   in function
-      Message_decl (msgname, mexpr) -> begin
+      Message_decl (msgname, mexpr, _) -> begin
         let default_record fields =
           let default_values =
             maybe_all
@@ -186,9 +186,9 @@ let generate_container bindings =
         in
           Some (empty_container msgname ~default_func (message_types msgname mexpr))
       end
-    | Type_decl (name, params, texpr) ->
+    | Type_decl (name, params, texpr, _) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
-            `Sum s -> begin
+            `Sum (s, _) -> begin
               let ty_of_const_texprs (const, ptexprs) =
                 (* eprintf "type %S, const %S, %d ptexprs\n" name const (List.length ptexprs); *)
                 let tys = List.map ctyp_of_poly_texpr_core ptexprs in
@@ -288,21 +288,21 @@ struct
     type_expr texpr |> reduce_to_poly_texpr_core bindings |> pp_poly_texpr_core
 
   and pp_poly_texpr_core = function
-      `Bool -> pp_func "pp_bool"
-    | `Byte -> pp_func "pp_int"
-    | `Int -> pp_func "pp_int"
-    | `Long_int -> pp_func "pp_int64"
-    | `Float -> pp_func "pp_float"
-    | `String -> pp_func "pp_string"
-    | `List ty -> <:expr< $pp_func "pp_list"$ $pp_poly_texpr_core ty$ >>
-    | `Array ty -> <:expr< $pp_func "pp_array"$ $pp_poly_texpr_core ty$ >>
-    | `Tuple [ty] -> pp_poly_texpr_core ty
-    | `Tuple l ->
+      `Bool _ -> pp_func "pp_bool"
+    | `Byte _ -> pp_func "pp_int"
+    | `Int _ -> pp_func "pp_int"
+    | `Long_int _ -> pp_func "pp_int64"
+    | `Float _ -> pp_func "pp_float"
+    | `String _ -> pp_func "pp_string"
+    | `List (ty, _) -> <:expr< $pp_func "pp_list"$ $pp_poly_texpr_core ty$ >>
+    | `Array (ty, _) -> <:expr< $pp_func "pp_array"$ $pp_poly_texpr_core ty$ >>
+    | `Tuple ([ty], _) -> pp_poly_texpr_core ty
+    | `Tuple (l, _) ->
         List.fold_left
           (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
           (pp_func ("pp_tuple" ^ string_of_int (List.length l)))
           l
-    | `Type (name, args) ->
+    | `Type (name, args, _) ->
         List.fold_left
           (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
           <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
@@ -323,7 +323,7 @@ struct
         expr in
 
     let expr = match poly_beta_reduce_texpr bindings texpr with
-      `Sum s -> begin
+      `Sum (s, opts) -> begin
         let constr_ptexprs_case (const, ptexprs) =
           let params = Array.to_list @@
                        Array.init (List.length ptexprs) (sprintf "v%d")
@@ -332,7 +332,7 @@ struct
               $uid:const$ $paCom_of_lidlist _loc params$ ->
                 $pp_func "fprintf"$ pp
                 $str:String.capitalize tyname ^ "." ^ const ^ " %a"$
-                $pp_poly_texpr_core (`Tuple ptexprs)$ ($exTup_of_lidlist _loc params$)
+                $pp_poly_texpr_core (`Tuple (ptexprs, opts))$ ($exTup_of_lidlist _loc params$)
             >> in
         let constr_case constr =
           <:match_case<

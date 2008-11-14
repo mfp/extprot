@@ -2,20 +2,22 @@ open Camlp4.PreCast
 open Printf
 open Syntax
 
+type type_options = [ `Ocaml of (string * string) list ] list
+
 type base_type_expr_simple = [
-    `Bool
-  | `Byte
-  | `Int
-  | `Long_int
-  | `Float
-  | `String
+    `Bool of type_options
+  | `Byte of type_options
+  | `Int of type_options
+  | `Long_int of type_options
+  | `Float of type_options
+  | `String of type_options
 ]
 
 type 'a base_type_expr_core = [
     base_type_expr_simple
-  | `Tuple of 'a list
-  | `List of 'a
-  | `Array of 'a
+  | `Tuple of 'a list * type_options
+  | `List of 'a * type_options
+  | `Array of 'a * type_options
 ]
 
 module Type_param : sig
@@ -35,14 +37,14 @@ include Type_param
 
 type base_type_expr = [
     base_type_expr base_type_expr_core
-  | `App of string * base_type_expr list
+  | `App of string * base_type_expr list * type_options
   | `Type_param of type_param
 ]
 
 type type_expr = [
     base_type_expr
   (* | `Record of (string * bool * base_type_expr) list *)
-  | `Sum of base_type_expr sum_data_type
+  | `Sum of base_type_expr sum_data_type * type_options
 ]
 
 and 'a sum_data_type = {
@@ -56,17 +58,17 @@ type base_message_expr = [ `Record of (string * bool * base_type_expr) list ]
 type message_expr = [ base_message_expr | `Sum of (string * base_message_expr) list ]
 
 type declaration =
-    Message_decl of string * message_expr
-  | Type_decl of string * type_param list * type_expr
+    Message_decl of string * message_expr * type_options
+  | Type_decl of string * type_param list * type_expr * type_options
 
 let base_type_expr e = (e :> base_type_expr)
 let type_expr e = (e :> type_expr)
 
-let declaration_name = function Message_decl (n, _) | Type_decl (n, _, _) -> n
+let declaration_name = function Message_decl (n, _, _) | Type_decl (n, _, _, _) -> n
 
 let declaration_arity = function
     Message_decl _ -> 0
-  | Type_decl (_, l, _) -> List.length l
+  | Type_decl (_, l, _, _) -> List.length l
 
 module SSet = Set.Make(struct type t = string let compare = String.compare end)
 module SMap = Map.Make(struct type t = string let compare = String.compare end)
@@ -85,16 +87,16 @@ let free_type_variables decl : string list =
     | `Type_param n ->
         let s = string_of_type_param n in
           if List.mem s known then [] else [s]
-    | `App (n, tys) ->
+    | `App (n, tys, _) ->
         let l = concat_map (free_vars known) tys in
           if List.mem n known then l else n :: l
-    | `Tuple l -> concat_map (free_vars known) l
-    | `List t | `Array t -> free_vars known t
+    | `Tuple (l, _) -> concat_map (free_vars known) l
+    | `List (t, _) | `Array (t, _) -> free_vars known t
     | #base_type_expr_simple -> [] in
 
   let rec type_free_vars known : type_expr -> string list = function
       #base_type_expr as x -> free_vars known x
-    | `Sum sum ->
+    | `Sum (sum, _) ->
         concat_map
           (fun (_, l) -> concat_map (type_free_vars known) (l :> type_expr list))
           sum.non_constant in
@@ -106,8 +108,8 @@ let free_type_variables decl : string list =
         concat_map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l in
 
   match decl with
-      Message_decl (name, m) -> msg_free_vars [name] m
-    | Type_decl (name, tvars, e) ->
+      Message_decl (name, m, _) -> msg_free_vars [name] m
+    | Type_decl (name, tvars, e, _) ->
         type_free_vars (name :: List.map string_of_type_param tvars) e
 
 let check_declarations decls =
@@ -146,9 +148,9 @@ let check_declarations decls =
 
           let rec fold_base_ty acc : base_type_expr -> error list = function
               #base_type_expr_simple | `Type_param _ -> acc
-            | `Tuple l -> List.fold_left fold_base_ty acc l
-            | `List t | `Array t -> fold_base_ty acc t
-            | `App (s, params) ->
+            | `Tuple (l, _) -> List.fold_left fold_base_ty acc l
+            | `List (t, _) | `Array (t, _) -> fold_base_ty acc t
+            | `App (s, params, _) ->
                 let expected = List.length params in
                   begin match smap_find s arities with
                       None -> acc
@@ -166,14 +168,14 @@ let check_declarations decls =
 
           let fold_ty acc : type_expr -> error list = function
               #base_type_expr as bty -> fold_base_ty acc bty
-            | `Sum sum ->
+            | `Sum (sum, _) ->
                 List.fold_left
                   (fun acc (_, l) -> List.fold_left fold_base_ty acc l)
                   acc sum.non_constant
 
           in match decl with
-              Message_decl (_, msg) -> loop (fold_msg errs msg) arities tl
-            | Type_decl (_, _, ty) -> loop (fold_ty errs ty) arities tl
+              Message_decl (_, msg, _) -> loop (fold_msg errs msg) arities tl
+            | Type_decl (_, _, ty, _) -> loop (fold_ty errs ty) arities tl
     in loop [] SMap.empty l
 
   in dup_errors decls @ unbound_type_vars decls @ wrong_type_arities decls

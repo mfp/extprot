@@ -48,11 +48,11 @@ let inspect_decls decls bindings =
   prerr_newline ();
   List.iter
     (function
-         Ptypes.Message_decl (name, mexpr) ->
+         Ptypes.Message_decl (name, mexpr, _) ->
            Format.fprintf Format.err_formatter "Message %S:@.@." name;
            Gencode.iter_message (print_field bindings) mexpr;
            Format.fprintf Format.err_formatter "---@.@."
-       | Ptypes.Type_decl (_, _, _) -> ())
+       | Ptypes.Type_decl _ -> ())
     decls
 
 let () =

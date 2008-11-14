@@ -28,23 +28,23 @@ EXTEND Gram
 
   declaration :
     [ "message"
-        [ "message"; name = a_LIDENT; "="; e = msg_expr -> Message_decl (name, e) ]
+        [ "message"; name = a_LIDENT; "="; e = msg_expr -> Message_decl (name, e, []) ]
     | "type"
         [ "type"; name = a_LIDENT;
           par = LIST0 [ "'"; n = a_LIDENT -> type_param_of_string n];
           "="; e = type_expr ->
             let e = match e with
-                `Sum s -> `Sum { s with type_name = name }
+                `Sum (s, opts) -> `Sum ({ s with type_name = name }, opts)
               | e -> e
-            in Type_decl (name, par, e) ] ];
+            in Type_decl (name, par, e, []) ] ];
 
   type_expr :
     [ "top"
-      [ l = LIST1 [ const_declarations ] SEP "|" -> `Sum (sum_of_constructor_list l)
+      [ l = LIST1 [ const_declarations ] SEP "|" -> `Sum (sum_of_constructor_list l, [])
       (* | r = record -> r  *)
       ]
     | "simple"
-      [ t = type_expr_simple -> (t : base_type_expr :> type_expr) ] ];
+      [ t = type_expr_simple -> (t : base_type_expr :> type_expr)] ] ;
 
   const_declarations :
     [ [ n = a_UIDENT; t = const_params -> Non_constant (n, t)
@@ -56,25 +56,25 @@ EXTEND Gram
   type_expr_simple :
     [ "top"
 
-        [ "["; t = SELF; "]" -> `List t
-        | "[|"; t = SELF; "|]" -> `Array t
+        [ "["; t = SELF; "]" -> `List (t, [])
+        | "[|"; t = SELF; "|]" -> `Array (t, [])
         | tup = tuple -> `Tuple tup
         | n = a_LIDENT; "<"; targs = LIST1 [ type_expr_simple ] SEP ","; ">" ->
-            `App (n, targs)
+            `App (n, targs, [])
         | "'"; n = a_LIDENT -> `Type_param (type_param_of_string n)
-        | n = a_LIDENT -> `App (n, [])
+        | n = a_LIDENT -> `App (n, [], [])
         ]
 
     | "simple"
-        [ "bool" -> `Bool
-        | "byte" -> `Byte
-        | "int" -> `Int
-        | "long" -> `Long_int
-        | "float" -> `Float
-        | "string" -> `String ] ];
+        [ "bool" -> `Bool []
+        | "byte" -> `Byte []
+        | "int" -> `Int []
+        | "long" -> `Long_int []
+        | "float" -> `Float []
+        | "string" -> `String [] ] ] ;
 
   tuple :
-    [ [ "("; l = LIST1 [ type_expr_simple ] SEP "*"; ")" -> l ] ];
+    [ [ "("; l = LIST1 [ type_expr_simple ] SEP "*"; ")" -> (l, [])] ] ;
 
   record :
     [ [ "{"; l = LIST1 [ field ] SEP ";"; "}" -> `Record l ] ];

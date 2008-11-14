@@ -44,19 +44,19 @@ and htuple_meaning =
 
 type reduced_type_expr = [
     reduced_type_expr base_type_expr_core
-  | `Sum of reduced_type_expr sum_data_type
-  | `Message of string
+  | `Sum of reduced_type_expr sum_data_type * type_options
+  | `Message of string * type_options
 ]
 
 type poly_type_expr_core = [
     poly_type_expr_core base_type_expr_core
-  | `Type of string * poly_type_expr_core list (* polymorphic sum type name, type args *)
+  | `Type of string * poly_type_expr_core list * type_options (* polymorphic sum type name, type args *)
   | `Type_arg of string
 ]
 
 type poly_type_expr = [
   poly_type_expr_core
-  | `Sum of poly_type_expr_core sum_data_type
+  | `Sum of poly_type_expr_core sum_data_type * type_options
 ]
 
 let reduced_type_expr e = (e :> reduced_type_expr)
@@ -70,39 +70,42 @@ let update_bindings bindings params args =
 
 let rec beta_reduce_aux f self (bindings : bindings) = function
   | #base_type_expr_simple as x -> x
-  | `Tuple l -> `Tuple (List.map (self bindings) (l :> type_expr list))
-  | `List t -> `List (self bindings (type_expr t))
-  | `Array t -> `Array (self bindings (type_expr t))
+  | `Tuple (l, opts) -> `Tuple (List.map (self bindings) (l :> type_expr list), opts)
+  | `List (t, opts) -> `List (self bindings (type_expr t), opts)
+  | `Array (t, opts) -> `Array (self bindings (type_expr t), opts)
   | (`Sum _ | `App _ | `Type_param _) as x -> f bindings x
 
-let beta_reduce_sum self bindings s =
+let beta_reduce_sum self bindings s opts =
   let non_const =
     List.map
       (fun (const, tys) ->
          (const, List.map (self bindings) (tys :> type_expr list)))
       s.non_constant
-  in `Sum { s with non_constant = non_const }
+  in `Sum ({ s with non_constant = non_const }, opts)
+
+let merge_options opt1 opt2 = opt2 @ opt1
 
 let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
   let aux bindings x : reduced_type_expr = match x with
-      `Sum s -> beta_reduce_sum beta_reduce_texpr bindings s
+      `Sum (s, opts) -> beta_reduce_sum beta_reduce_texpr bindings s opts
     | `Type_param p ->
         let name = string_of_type_param p in begin match smap_find name bindings with
-            Some (Message_decl (name, _)) -> `Message name
-          | Some (Type_decl (_, [], exp)) -> beta_reduce_texpr bindings exp
-          | Some (Type_decl (_, _, _)) ->
+            Some (Message_decl (name, _, opts)) -> `Message (name, opts)
+          | Some (Type_decl (_, [], exp, _)) -> beta_reduce_texpr bindings exp
+          | Some (Type_decl (_, _, _, _)) ->
               failwithfmt "beta_reduce_texpr: wrong arity for higher-order type %S" name;
               assert false
           | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
                     assert false
         end
 
-    | `App (name, args) -> match smap_find name bindings with
-          Some (Message_decl _) -> `Message name
-        | Some (Type_decl (_, params, exp)) ->
+    | `App (name, args, opts) -> match smap_find name bindings with
+          Some (Message_decl (_, _, opts2)) -> `Message (name, merge_options opts opts2)
+        | Some (Type_decl (_, params, exp, opts2)) ->
+            let opts = merge_options opts opts2 in
             let bindings =
               update_bindings bindings (List.map string_of_type_param params)
-                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args)
+                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty, opts)) args)
             in beta_reduce_texpr bindings exp
         | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
                   assert false
@@ -117,12 +120,14 @@ let rec reduce_to_poly_texpr_core bindings (texpr : type_expr) : poly_type_expr_
         (* there shouldn't be any of these left *)
         assert false
     | `Type_param p -> `Type_arg (type_param_name p)
-    | `App (name, args) -> match smap_find name bindings with
-          Some (Message_decl _) -> `Type (name, [])
-        | Some (Type_decl (name, _, `Sum _)) ->
-            `Type (name, List.map (self bindings) (args :> type_expr list))
-        | Some (Type_decl (name, _, _)) ->
-            `Type (name, List.map (self bindings) (args :> type_expr list))
+    | `App (name, args, opts) -> match smap_find name bindings with
+          Some (Message_decl (_, _, opts2)) -> `Type (name, [], merge_options opts opts2)
+        | Some (Type_decl (name, _, `Sum _, opts2)) ->
+            `Type (name, List.map (self bindings) (args :> type_expr list),
+                   merge_options opts opts2)
+        | Some (Type_decl (name, _, _, opts2)) ->
+            `Type (name, List.map (self bindings) (args :> type_expr list),
+                   merge_options opts opts2)
             (* let bindings = *)
               (* update_bindings bindings (List.map string_of_type_param params) *)
                 (* (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args) *)
@@ -134,7 +139,7 @@ let rec reduce_to_poly_texpr_core bindings (texpr : type_expr) : poly_type_expr_
 let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
   (* must expand top-level `Sum!
     * otherwise the expr for type foo = A | B becomes `Type foo *)
-    `Sum s -> beta_reduce_sum reduce_to_poly_texpr_core bindings s
+    `Sum (s, opts) -> beta_reduce_sum reduce_to_poly_texpr_core bindings s opts
   | s -> (reduce_to_poly_texpr_core bindings s :> poly_type_expr)
 
 let rec map_message f =
@@ -157,17 +162,17 @@ let rec iter_message f =
 let low_level_msg_def bindings (msg : message_expr) =
 
   let rec low_level_of_rtexp : reduced_type_expr -> low_level = function
-      `Bool -> Vint Bool
-    | `Byte -> Vint Int8
-    | `Int -> Vint Int
-    | `Long_int -> Bitstring64 Long
-    | `Float -> Bitstring64 Float
-    | `String -> Bytes
-    | `Tuple l -> Tuple (List.map low_level_of_rtexp (l :> reduced_type_expr list))
-    | `List ty -> Htuple (List, low_level_of_rtexp (reduced_type_expr ty))
-    | `Array ty -> Htuple (Array, low_level_of_rtexp (reduced_type_expr ty))
-    | `Message s -> Message s
-    | `Sum sum ->
+      `Bool _ -> Vint Bool
+    | `Byte _ -> Vint Int8
+    | `Int _ -> Vint Int
+    | `Long_int _ -> Bitstring64 Long
+    | `Float _ -> Bitstring64 Float
+    | `String _ -> Bytes
+    | `Tuple (l, _) -> Tuple (List.map low_level_of_rtexp (l :> reduced_type_expr list))
+    | `List (ty, _) -> Htuple (List, low_level_of_rtexp (reduced_type_expr ty))
+    | `Array (ty, _) -> Htuple (Array, low_level_of_rtexp (reduced_type_expr ty))
+    | `Message (s, _) -> Message s
+    | `Sum (sum, _) ->
         let constant =
           List.mapi
             (fun i s -> { const_tag = i; const_name = s; const_type = sum.type_name })
@@ -226,14 +231,14 @@ struct
         generate_container bindings decl |>
           Option.map begin fun cont ->
             match decl with
-               Type_decl (name, params, expr) ->
+               Type_decl (name, params, expr, _) ->
                  List.fold_left
                    (fun cont (gname, f) ->
                       if use_generator gname then f bindings name params expr cont
                       else cont)
                    cont
                    Gen.typedecl_generators
-             | Message_decl (name, expr) ->
+             | Message_decl (name, expr, _) ->
                  List.fold_left
                    (fun cont (gname, f) ->
                       if use_generator gname then f bindings name expr cont
@@ -261,21 +266,21 @@ struct
       | x::xs -> elt ppf x; loop xs
 
   let pp_base_expr_simple ppf : base_type_expr_simple -> unit = function
-      `Bool -> pp ppf "Bool"
-    | `Byte -> pp ppf "Byte"
-    | `Int -> pp ppf "Int"
-    | `Long_int -> pp ppf "Long_int"
-    | `Float -> pp ppf "Float"
-    | `String -> pp ppf "String"
+      `Bool _ -> pp ppf "Bool"
+    | `Byte _ -> pp ppf "Byte"
+    | `Int _ -> pp ppf "Int"
+    | `Long_int _ -> pp ppf "Long_int"
+    | `Float _ -> pp ppf "Float"
+    | `String _ -> pp ppf "String"
 
   let pp_base_type_expr_core f ppf : 'a base_type_expr_core -> unit = function
-      `Tuple l -> pp ppf "@[<1>(%a)@]" (list f " *@ ") l
-    | `List t -> pp ppf "@[<1>[%a]@]" f t
-    | `Array t -> pp ppf "@[<1>[|%a|]@]" f t
+      `Tuple (l, _) -> pp ppf "@[<1>(%a)@]" (list f " *@ ") l
+    | `List (t, _) -> pp ppf "@[<1>[%a]@]" f t
+    | `Array (t, _) -> pp ppf "@[<1>[|%a|]@]" f t
     | #base_type_expr_simple as x -> pp_base_expr_simple ppf x
 
   let rec pp_reduced_type_expr ppf : reduced_type_expr -> unit = function
-      `Sum s -> begin match s.non_constant with
+      `Sum (s, _) -> begin match s.non_constant with
           [] -> pp ppf "@[<1>%a@]" (list (pp' "%s") "@ | ") s.constant
         | non_const ->
             let pp_non_constant ppf cases =
@@ -287,14 +292,14 @@ struct
               | _ -> pp ppf "@[<1>%a@ | %a@]" (list (pp' "%s") "@ | ") s.constant
                        pp_non_constant non_const
       end
-    | `Message s -> pp ppf "msg:%S" s
+    | `Message (s, _) -> pp ppf "msg:%S" s
     | #base_type_expr_core as x ->
         pp_base_type_expr_core pp_reduced_type_expr ppf x
 
   let inspect_base_type_expr_core f ppf : 'a base_type_expr_core -> unit = function
-      `Tuple l -> pp ppf "`Tuple [@[<1> %a@ ]@]" (list f ",@ ") l
-    | `List t -> pp ppf "`List @[%a@]" f t
-    | `Array t -> pp ppf "`Array @[%a@]" f t
+      `Tuple (l, _) -> pp ppf "`Tuple [@[<1> %a@ ]@]" (list f ",@ ") l
+    | `List (t, _) -> pp ppf "`List @[%a@]" f t
+    | `Array (t, _) -> pp ppf "`Array @[%a@]" f t
     | #base_type_expr_simple as x -> pp_base_expr_simple ppf x
 
   let pp_non_constant f ppf l =
@@ -310,8 +315,8 @@ struct
       (pp_non_constant f) s.non_constant
 
   let rec inspect_reduced_type_expr ppf : reduced_type_expr -> unit = function
-    | `Message s -> pp ppf "`Message %S" s
-    | `Sum s -> pp ppf "@[<2>`Sum@ %a@]" (inspect_sum_dtype inspect_reduced_type_expr) s
+    | `Message (s, _) -> pp ppf "`Message %S" s
+    | `Sum (s, _) -> pp ppf "@[<2>`Sum@ %a@]" (inspect_sum_dtype inspect_reduced_type_expr) s
     | #base_type_expr_core as x ->
         inspect_base_type_expr_core inspect_reduced_type_expr ppf x
 end
