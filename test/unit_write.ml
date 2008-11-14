@@ -124,6 +124,17 @@ struct
         done
       end;
 
+      "abstract type (Digest_type.t)" >:: begin fun () ->
+        let check v =
+          check_roundtrip
+            Simple_digest.write_simple_digest Simple_digest.read_simple_digest
+            (PP.pp Simple_digest.pp_simple_digest)
+            { Simple_digest.digest = v }
+        in for i = 0 to iterations / 10 do
+          check (Digest_type.random ())
+        done
+      end;
+
       "sum type" >:: begin fun () ->
         let check v =
           check_roundtrip
