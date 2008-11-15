@@ -146,6 +146,7 @@ module String_reader : sig
   val make : string -> int -> int -> t
   val from_io_reader : IO_reader.t -> t
   val from_io : IO.input -> t
+  val from_string : string -> t
 end =
 struct
   type t = { mutable buf : string; mutable last : int; mutable pos : int }
@@ -155,6 +156,8 @@ struct
     if off < 0 || len < 0 || off + len > String.length s then
       invalid_arg "Reader.String_reader.make";
     { buf = s; pos = off; last = off + len }
+
+  let from_string s = make s 0 (String.length s)
 
   let from_io_reader ch =
     let hd = IO_reader.read_prefix ch in

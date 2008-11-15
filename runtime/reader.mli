@@ -56,6 +56,7 @@ end
 module String_reader : sig
   include S
   val make : string -> int -> int -> t
+  val from_string : string -> t
   val from_io_reader : IO_reader.t -> t
   val from_io : IO.input -> t
   val close : t -> unit

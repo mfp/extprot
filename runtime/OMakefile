@@ -1,6 +1,7 @@
 
 EXTPROT_RUNTIME_OBJS[] =
 	codec
+	conv
 	error
 	inspect_msg
 	monad
