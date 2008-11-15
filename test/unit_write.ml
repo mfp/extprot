@@ -6,9 +6,7 @@ module PP = E.Pretty_print
 open Test_types
 
 let check_write ?msg expected f v () =
-  let b = E.Msg_buffer.create () in
-    f b v;
-    assert_equal ?msg ~printer:(sprintf "%S") expected (E.Msg_buffer.contents b)
+  assert_equal ?msg ~printer:(sprintf "%S") expected (E.Conv.serialize f v)
 
 let bits n shift =
   Char.chr (Int64.to_int (Int64.logand (Int64.shift_right_logical n shift) 0xFFL))

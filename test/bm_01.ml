@@ -75,9 +75,7 @@ let benchmarks =
   [
     "string_reader", begin fun a ->
       bm_extprot "String_reader"
-        (fun b ->
-           let s = M.contents b in
-             E.Reader.String_reader.make s 0 (String.length s))
+        (fun b -> E.Reader.String_reader.from_string (M.contents b))
         (fun rd -> try while true do ignore (dec rd) done with End_of_file -> ())
         a
     end;

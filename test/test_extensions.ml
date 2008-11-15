@@ -71,7 +71,7 @@ let () = Register_test.register "extensions"
           (fun i -> Msg1b.write_msg1b b (Msg1b.A { Msg1b.a = i; Msg1b.a' = -i; }))
           a;
         let s = M.contents b in
-        let io = Extprot.Reader.String_reader.make s 0 (String.length s) in
+        let io = Extprot.Reader.String_reader.from_string s in
           Array.iter
             (fun n -> match Msg1a.read_msg1a io with
                  Msg1a.B _ -> assert_failure "Should get Msg1a.A _."

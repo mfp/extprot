@@ -5,12 +5,8 @@ open OUnit
 
 let (@@) f x = f x
 
-let encode f v =
-  let b = E.Msg_buffer.create () in
-    f b v;
-    E.Msg_buffer.contents b
-
-let decode f s = f @@ E.Reader.String_reader.make s 0 (String.length s)
+let encode = E.Conv.serialize
+let decode = E.Conv.deserialize
 
 let unwrap_extprot_error f x =
   try f x
