@@ -1,6 +1,5 @@
 
 open Printf
-open Extprot_gen
 open ExtList
 open ExtString
 

@@ -1,3 +1,6 @@
+OCAMLINCLUDES[] += $(BASE)/runtime
+OCAML_LIBS[] =
+	$(BASE)/runtime/extprot
 
 EXTPROT_OBJS[] =
 	parser
@@ -6,21 +9,13 @@ EXTPROT_OBJS[] =
 	gen_OCaml
 
 section
-	section
-		OCAMLFLAGS += -for-pack Extprot_gen
-		CamlSources($(EXTPROT_OBJS))
-	section
-		OCAMLFLAGS += -for-pack Extprot_gen -w e
-		CamlSources(parser)
-	OCamlPackage(extprot_gen, $(EXTPROT_OBJS))
-	OCamlLibrary(extprot_gen, extprot_gen)
+	OCAMLFLAGS += -w e
+	CamlSources(parser)
 
-section
-	OCAML_LIBS = $(ROOT)/runtime/extprot extprot_gen
-	OCAMLPACKS += camlp4.lib
-	OCamlProgram(extprotc, extprotc)
+OCAMLPACKS += camlp4.lib
+OCamlProgram(extprotc, $(EXTPROT_OBJS) extprotc)
 
-.DEFAULT: extprot_gen.cma extprot_gen.cmxa extprotc
+.DEFAULT: extprotc$(EXE)
 
 .PHONY: clean
 clean:

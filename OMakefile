@@ -8,7 +8,6 @@ OCAMLDEPFLAGS = -pp "camlp4orf -D$(ENDIANNESS)"
 OCAMLFLAGS = -dtypes -pp "camlp4orf -D$(ENDIANNESS)" -w Az -warn-error Az
 OCAMLOPTFLAGS = -S -inline 100
 OCAMLCFLAGS += -g
-OCAMLINCLUDES[] += $(ROOT)/runtime
 
 OCAMLPACKS[] =
 	camlp4
@@ -20,6 +19,8 @@ CamlSources(mods) =
 
 CamlTargets(mods) =
 	return($(addsuffixes .cmo .cmi .cmx .o, $(mods)))
+
+BASE = $(dir .)
 
 .SUBDIRS: compiler runtime test
 
