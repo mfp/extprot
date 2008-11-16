@@ -112,13 +112,19 @@ let bad_option ?msg name v = match msg with
 
 exception Bad_option of string
 
+let ident_of_ctyp ty =
+  let _loc = Loc.ghost in
+    try
+      <:ctyp< $id:Ast.ident_of_ctyp ty$ >>
+    with Invalid_argument _ -> ty
+
 let ctyp_of_path path = match List.rev @@ String.nsplit path "." with
     [] -> raise (Bad_option "Empty ctyp path")
   | ty :: mods ->
       let _loc = Loc.ghost in
         (* TODO: check that path is correct *)
         List.fold_left
-          (fun ctyp m -> <:ctyp< $uid:m$.$id:Ast.ident_of_ctyp ctyp$ >>)
+          (fun ctyp m -> ident_of_ctyp <:ctyp< $uid:m$.$id:Ast.ident_of_ctyp ctyp$ >>)
           <:ctyp< $lid:ty$ >>
           mods
 
@@ -153,6 +159,22 @@ let generate_container bindings =
 
   let typedef name ?(params = []) ctyp =
       <:str_item< type $typedecl name ~params ctyp $ >> in
+
+  let type_equals ~params ty tyname =
+    let applied =
+      ident_of_ctyp @@
+      List.fold_left
+        (fun ty tyvar -> <:ctyp< $ty$ $tyvar$ >>)
+        (ctyp_of_path tyname) params
+    in ident_of_ctyp <:ctyp< $applied$ == $ident_of_ctyp ty$ >> in
+
+  let maybe_type_equals opts ~params ty =
+    match lookup_option "type_equals" opts with
+        None -> ty
+      | Some tyname  ->
+          try
+            type_equals ~params ty (String.strip tyname)
+          with Bad_option msg -> bad_option ~msg "type_equals" tyname in
 
   let rec message_types msgname = function
       `Record l ->
@@ -257,7 +279,7 @@ let generate_container bindings =
                 let tys = List.map ctyp_of_poly_texpr_core ptexprs in
                   <:ctyp< $uid:const$ of $Ast.tyAnd_of_list tys$>>
 
-              in match s.constant with
+              in let sum_ty = match s.constant with
                   [] -> foldl1 "generate_container Type_decl `Sum"
                           ty_of_const_texprs
                           (fun ctyp c -> <:ctyp< $ctyp$ | $ty_of_const_texprs c$ >>)
@@ -272,15 +294,18 @@ let generate_container bindings =
                     in List.fold_left
                          (fun ctyp c -> <:ctyp< $ctyp$ | $ty_of_const_texprs c$ >>)
                          const s.non_constant
+              in <:ctyp< [ $sum_ty$ ] >>
             end
           | #poly_type_expr_core ->
               get_type
                 (reduce_to_poly_texpr_core bindings texpr |> ctyp_of_poly_texpr_core)
                 opts in
         let params =
-          List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params
+          List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params in
+        let type_rhs =
+          maybe_type_equals opts ~params ty
         in
-          Some (empty_container name <:str_item< type $typedecl name ~params ty$ >>)
+          Some (empty_container name (typedef name ~params type_rhs))
 
 let loc = Camlp4.PreCast.Loc.mk
 
