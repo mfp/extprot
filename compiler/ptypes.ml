@@ -2,10 +2,7 @@ open Camlp4.PreCast
 open Printf
 open Syntax
 
-type type_options = [
-  `Global of (string * string) list
-| `OCaml of (string * string) list
-] list
+type type_options = (string * string) list
 
 let dump_type_options l =
   let pr_list name l =

@@ -89,20 +89,11 @@ let rec default_value = let _loc = Loc.ghost in function
         | Some [_] -> failwith "default_value: tuple with only 1 element"
         | Some (hd::tl) -> Some <:expr< ($hd$, $Ast.exCom_of_list tl$) >>
 
-let lookup_option ?(global = false) name opts =
-  let select l =
-    Some
-      (List.filter_map
-         (function (n, v) when n = name -> Some v | (_ , _) -> None) l) in
-  let values =
-    List.concat @@
-    List.filter_map
-      (function
-         | `Global l when global -> select l
-         | `OCaml l -> select l
-         | _ -> None)
-      opts
-  in List.fold_left (fun _ x -> Some x) None values
+let lookup_option name ?(global = false) (opts : type_options) =
+  let pick n = (global && n = name || n = "ocaml." ^ name) in
+    List.fold_left (fun _ x -> Some x) None @@
+    List.filter_map (function (n, v) when pick n -> Some v | _ -> None) @@
+    opts
 
 let bad_option ?msg name v = match msg with
     Some m ->

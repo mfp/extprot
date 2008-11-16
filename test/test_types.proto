@@ -10,11 +10,8 @@ type tuple 'a 'b = ('a * 'b)
 message simple_tuple = { v : tuple<int, bool> }
 
 type digest = string
-  options {
-    "ocaml" = {
-      "type" = "Digest_type.t, Digest_type.from_string, Digest_type.to_string"
-    }
-  }
+  options
+    "ocaml.type" = "Digest_type.t, Digest_type.from_string, Digest_type.to_string"
 
 message simple_digest = { digest : digest }
 message simple_digest2 = { digest : digest; extra : string }

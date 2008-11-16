@@ -18,22 +18,6 @@ let sum_of_constructor_list l =
       List.filter_map (function Non_constant (s, l) -> Some (s, l) | _ -> None) l;
   }
 
-let options opts =
-  let global =
-    List.filter_map
-      (function `Simple (n, v) -> Some (n, v) | _ -> None)
-      opts in
-  let specific = List.filter_map
-                   (function
-                      | `Complex (name, l)
-                          when String.lowercase name = "ocaml" -> Some (`OCaml l)
-                      | `Simple _ | `Complex _ -> None)
-                   opts in
-  let ret = `Global global :: specific in
-    (* printf "Type options (top-level %d):\n" (List.length opts); *)
-    (* dump_type_options ret; *)
-    ret
-
 EXTEND Gram
   GLOBAL: declarations;
 
@@ -57,13 +41,10 @@ EXTEND Gram
 
   type_options :
     [ [ -> []
-      | "options"; "{"; l = LIST0 [type_option_values] SEP ";"; "}" -> options l ] ];
+      | "options"; l = LIST0 [type_option_values] -> l ] ];
 
   type_option_values :
-    [ [ name = a_STRING; "="; value = a_STRING -> `Simple (name, value)
-      | name = a_STRING; "="; "{";
-        l = LIST0 [n = a_STRING; "="; v = a_STRING -> (n, v)] SEP ";"; "}" ->
-          `Complex (name, l) ] ];
+    [ [ name = a_STRING; "="; value = a_STRING -> (name, value) ] ];
 
   type_expr :
     [ "top"
