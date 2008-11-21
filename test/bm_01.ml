@@ -7,6 +7,7 @@ module B = Buffer
 
 let dec = C.read_complex_rtt
 let dec_io = C.io_read_complex_rtt
+let dec_io_fast = C.fast_io_read_complex_rtt
 let enc = C.write_complex_rtt
 let generate () = Gen_data.generate Gen_data.complex_rtt
 
@@ -84,6 +85,13 @@ let benchmarks =
       bm_extprot "IO_reader"
         (fun b -> E.Reader.IO_reader.from_string (M.contents b))
         (fun rd -> try while true do ignore (dec_io rd) done with End_of_file -> ())
+        a
+    end;
+
+    "io_reader (fast)", begin fun a ->
+      bm_extprot "IO_reader (buffered)"
+        (fun b -> E.Reader.IO_reader.from_string (M.contents b))
+        (fun rd -> try while true do ignore (dec_io_fast rd) done with End_of_file -> ())
         a
     end;
 
