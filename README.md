@@ -1,4 +1,8 @@
 
+Note: the latest documentation can be found in [extprot's git
+repository](http://github.com/mfp/extprot/tree/master).
+**Click on `README.md` in the directory view so that relative links work.**
+
 ## Introduction
 
 extprot allows you to create compact, efficient, extensible, binary protocols
