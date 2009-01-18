@@ -22,12 +22,12 @@ CamlTargets(mods) =
 
 BASE = $(dir .)
 
-.SUBDIRS: compiler runtime test
-
 %.sig: %.ml %.cmo
 	$(OCAMLFIND) $(OCAMLC) -package $(concat \,, $(OCAMLPACKS)) \
 	    $(mapprefix -I, $(OCAMLINCLUDES)) \
 	    $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
+
+.SUBDIRS: compiler runtime test
 
 extprotc: compiler/extprotc
 	cp $^ $@
