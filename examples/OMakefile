@@ -1,0 +1,24 @@
+OCAMLFLAGS += -w Aelz
+
+OCAMLINCLUDES += $(BASE)/runtime
+OCAML_LIBS[] += $(BASE)/runtime/extprot
+
+GENERATOR = $(BASE)/extprotc
+
+OCAMLDEP_MODULES_ENABLED = false
+LocalOCamlGeneratedFiles(grafff.ml)
+
+grafff.ml: $(GENERATOR) grafff.proto
+    # $(GENERATOR) -g pretty_printer,reader,writer grafff.proto
+    $(GENERATOR) grafff.proto
+
+$(CamlTargets $(removesuffix $(ls *.ml))): $(BASE)/runtime/extprot.cmxa
+
+OCamlProgram(test_grafff, grafff test_grafff)
+
+.PHONY: examples
+examples: test_grafff
+
+.PHONY: clean
+clean:
+	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot

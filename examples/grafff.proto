@@ -1,0 +1,43 @@
+
+(* grafff 0.0.1 *) 
+type point = (int * int)   (* pixel coordinates *)
+
+message shape = 
+  Polygon { vertices : [ point ] }   (* list of points *)
+| Circle { center : point; radius : int }
+
+message grafff = { objects : [ (shape * byte) ] } (* list of shapes *)
+
+(***************************************************************************)
+
+(* grafff 1.0 *)
+(* this protocol is a compatible extension of grafff; we'd normally just
+   modify the original grafff message, but it is done separately here in order to
+   use both at once in the same program and verify that we indeed get
+   compatibility *)
+
+type brush = 
+    Default
+  | Calligraphic int  (* size in pixels *)
+  | Hello_Kitty int   (* size of head in pixels *)
+
+message grafff1 = { objects : [ (shape * byte * brush) ] }
+
+(***************************************************************************)
+
+(* Grafff 2.0 *)
+(* extends grafff 1.0 *)
+
+(*
+type opt_byte = Unset | Set byte
+type color = { byte; opt_byte; saturation : opt_byte }
+
+type filling = No_filling | Alpha_filling byte
+message grafff2 = { objects : [ (shape * color * brush * filling) ] }
+*)
+
+type opt_byte = Unset | Set byte
+type color = ( byte * opt_byte * opt_byte )
+
+type filling = No_filling | Alpha_filling byte
+message grafff2 = { objects : [ (shape * color * brush * filling) ] }

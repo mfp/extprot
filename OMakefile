@@ -27,7 +27,7 @@ BASE = $(dir .)
 	    $(mapprefix -I, $(OCAMLINCLUDES)) \
 	    $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
 
-.SUBDIRS: compiler runtime test
+.SUBDIRS: compiler examples runtime test
 
 extprotc: compiler/extprotc
 	cp $^ $@
