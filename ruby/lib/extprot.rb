@@ -34,64 +34,49 @@ class Assoc < Hash
   end
 end
 
-class Reader
-  include Codec
-
-  def initialize(io); @io = io end
-  def read_bytes(n); @io.read(n) end
-  def read_byte; @io.readchar end
-  def read_raw_bool; read_byte != 0 end
-  def read_raw_i8; read_byte end
-  def read_raw_rel_int; n = read_vint; (n >> 1) ^ -(n & 1) end
-  def read_raw_i32; read_bytes(4).unpack("V")[0] end
-  def read_raw_i64; read_bytes(8).unpack("q")[0] end
-  def read_raw_float; read_bytes(8).unpack("E") end
-  def read_raw_string; len = read_vint; read_bytes(len) end
-
-  def read_vint
-    b = read_byte
-    raise EOFError unless b
-    return b if b < 128
-    x = e = 0
-    while b >= 128
-      x += (b - 128) << e
-      e += 7
-      b = read_byte
-    end
-    x + (b << e)
-  end
-  alias_method :read_prefix, :read_vint
-end
-
 class Decoder
   include Codec
 
-  def initialize(reader); @rd = reader end
+  def initialize(io); @io = io end
 
   def read_value
-    prefix = @rd.read_prefix
+    prefix = read_prefix
     tag = ll_tag(prefix)
     case ll_type(prefix)
     when :tuple; t = read_htuple(prefix); r = Tuple.new(t); r.tag = t.tag; r
     when :htuple; read_htuple(prefix)
     when :assoc; read_assoc(prefix)
-    when :vint; @rd.read_raw_rel_int
-    when :bits8; @rd.read_byte
-    when :bits32; @rd.read_raw_i32
-    when :bits64_long; @rd.read_raw_i64
-    when :bits64_float; @rd.read_raw_float
+    when :vint; n = read_vint; (n >> 1) ^ -(n & 1)
+    when :bits8; @io.readchar
+    when :bits32; @io.read(4).unpack("V")[0]
+    when :bits64_long; @io.read(8).unpack("q")[0]
+    when :bits64_float; @io.read(8).unpack("E")
     when :enum; Enum.new(tag)
-    when :bytes; @rd.read_raw_string
+    when :bytes; len = read_vint; @io.read(len)
     when :invalid; raise BadWireType
     end
   end
 
   private
 
+  def read_vint
+    b = @io.readchar
+    raise EOFError unless b
+    return b if b < 128
+    x = e = 0
+    while b >= 128
+      x += (b - 128) << e
+      e += 7
+      b = @io.readchar
+    end
+    x + (b << e)
+  end
+  alias_method :read_prefix, :read_vint
+
   def read_htuple(prefix)
     tag = ll_tag(prefix)
-    _ = @rd.read_vint
-    nelms = @rd.read_vint
+    _ = read_vint
+    nelms = read_vint
     a = Array.new(nelms)
     nelms.times{|i| a[i] = read_value }
     r = HTuple.new(a)
@@ -101,8 +86,8 @@ class Decoder
 
   def read_assoc(prefix)
     tag = ll_tag(prefix)
-    _ = @rd.read_vint
-    nelms = @rd.read_vint
+    _ = read_vint
+    nelms = read_vint
     r = {}
     nelms.times do |i|
       k = read_value
@@ -116,7 +101,7 @@ end
 end # module Extprot
 
 if __FILE__ == $0
-  decoder = Extprot::Decoder.new(Extprot::Reader.new(ARGF))
+  decoder = Extprot::Decoder.new(ARGF)
   begin
     loop { decoder.read_value; puts }
   rescue EOFError
