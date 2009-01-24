@@ -4,98 +4,103 @@ module Extprot
 class ExtprotError < StandardError; end
 class BadWireType < ExtprotError; end
 
-module Codec
-  @@types = [
-    :vint, :tuple, :bits8, :bytes,
-    :bits32, :htuple, :bits64_long, :assoc,
-    :bits64_float, :invalid, :enum, :invalid,
-    :invalid, :invalid, :invalid, :invalid
-  ]
-
-  def ll_type(n); @@types[n & 0xf] end
-  def ll_tag(n); n >> 4 end
-
-  module_function :ll_type, :ll_tag
-end
-
-class HTuple < Array; attr_accessor :tag end
-class Enum < Struct.new(:tag); def inspect; "E#{tag}" end end
-
-class Tuple < Array
+class HTuple < Array
   attr_accessor :tag
-  def inspect; "T#{tag} " + super end
+  def initialize(a, t); super(a); @tag = t end
 end
+
+class Enum < Struct.new(:tag); def inspect; "E#{tag}" end; def to_i; tag end end
+class Tuple < HTuple; def inspect; "T#{tag} " + super end end
 
 class Assoc < Hash
   attr_accessor :tag
-  def initialize(h,t)
-    update!(h)
-    @tag = t
+  def initialize(h,t); update!(h); @tag = t end
+end
+
+module Readers
+  module Aux
+    def ll_tag(n); n >> 4 end
+    def read_vint(io)
+      b = io.readchar
+      return b if b < 128
+      x = e = 0
+      while b >= 128
+        x += (b - 128) << e
+        e += 7
+        b = io.readchar
+      end
+      x + (b << e)
+    end
+    alias_method :read_prefix, :read_vint
+  end
+
+  # We essentially have to do functions[prefix & 0xf].call(prefix, io)
+  # The fastest way is to use polymorphism (case is O(n), Proc#call is too slow)
+  class << self; include Aux end
+  class Base; class << self; include Aux end end
+  class Vint < Base; def self.read(_, io); n = read_vint(io); (n >> 1) ^ -(n & 1) end end
+  class Bits8 < Base; def self.read(_, io); io.readchar end end
+  class Bits32 < Base;def self.read(_, io); io.read(4).unpack("V")[0] end end
+  class Bits64_long < Base; def self.read(_, io); io.read(8).unpack("q")[0] end end
+  class Bits64_float < Base; def self.read(_, io); io.read(8).unpack("E") end end
+  class Enum < Base; def self.read(prefix, io); ::Extprot::Enum.new(ll_tag(prefix)) end end
+  class Bytes < Base; def self.read(_, io); len = read_vint(io); io.read(len) end end
+  class Invalid < Base; def self.read(_, io); raise BadWireType end end
+
+  class Tuple_base < Base
+    def self.read_array(prefix, io)
+      tag = ll_tag(prefix)
+      _ = read_vint(io)
+      nelms = read_vint(io)
+      a = Array.new(nelms)
+      nelms.times{|i| a[i] = Readers.read_value(io)}
+      [tag, a]
+    end
+  end
+
+  class Tuple < Tuple_base
+    def self.read(prefix, io)
+      tag, a = read_array(prefix, io)
+      ::Extprot::Tuple.new(a, tag)
+    end
+  end
+
+  class HTuple < Tuple_base
+    def self.read(prefix, io)
+      tag, a = read_array(prefix, io)
+      ::Extprot::HTuple.new(a, tag)
+    end
+  end
+
+  class Assoc < Base
+    def self.read(prefix, io)
+      tag = ll_tag(prefix)
+      _ = read_vint
+      nelms = read_vint
+      r = {}
+      nelms.times do |i|
+        k = read_value
+        v = read_value
+        r[k] = v
+      end
+      ::Extprot::Assoc.new(r, tag)
+    end
+  end
+
+  LL_TYPES = [
+    Vint, Tuple, Bits8, Bytes, Bits32, HTuple, Bits64_long, Assoc,
+    Bits64_float, Invalid, Enum, Invalid, Invalid, Invalid, Invalid, Invalid,
+  ]
+
+  def self.read_value(io)
+    prefix = read_prefix(io)
+    LL_TYPES[prefix & 0xf].read(prefix, io)
   end
 end
 
 class Decoder
-  include Codec
-
   def initialize(io); @io = io end
-
-  def read_value
-    prefix = read_prefix
-    tag = ll_tag(prefix)
-    case ll_type(prefix)
-    when :tuple; t = read_htuple(prefix); r = Tuple.new(t); r.tag = t.tag; r
-    when :htuple; read_htuple(prefix)
-    when :assoc; read_assoc(prefix)
-    when :vint; n = read_vint; (n >> 1) ^ -(n & 1)
-    when :bits8; @io.readchar
-    when :bits32; @io.read(4).unpack("V")[0]
-    when :bits64_long; @io.read(8).unpack("q")[0]
-    when :bits64_float; @io.read(8).unpack("E")
-    when :enum; Enum.new(tag)
-    when :bytes; len = read_vint; @io.read(len)
-    when :invalid; raise BadWireType
-    end
-  end
-
-  private
-
-  def read_vint
-    b = @io.readchar
-    raise EOFError unless b
-    return b if b < 128
-    x = e = 0
-    while b >= 128
-      x += (b - 128) << e
-      e += 7
-      b = @io.readchar
-    end
-    x + (b << e)
-  end
-  alias_method :read_prefix, :read_vint
-
-  def read_htuple(prefix)
-    tag = ll_tag(prefix)
-    _ = read_vint
-    nelms = read_vint
-    a = Array.new(nelms)
-    nelms.times{|i| a[i] = read_value }
-    r = HTuple.new(a)
-    r.tag = tag
-    r
-  end
-
-  def read_assoc(prefix)
-    tag = ll_tag(prefix)
-    _ = read_vint
-    nelms = read_vint
-    r = {}
-    nelms.times do |i|
-      k = read_value
-      v = read_value
-      r[k] = v
-    end
-    Assoc.new(r, tag)
-  end
+  def read_value; Readers.read_value(@io) end
 end
 
 end # module Extprot
@@ -103,8 +108,7 @@ end # module Extprot
 if __FILE__ == $0
   decoder = Extprot::Decoder.new(ARGF)
   begin
-    loop { decoder.read_value; puts }
+    loop { decoder.read_value }
   rescue EOFError
   end
 end
-
