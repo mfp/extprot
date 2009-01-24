@@ -4,12 +4,18 @@ module Extprot
 class ExtprotError < StandardError; end
 class BadWireType < ExtprotError; end
 
+class Enum
+  attr_accessor :tag
+  def initialize(tag); @tag = tag end
+  def inspect; "E#{tag}" end
+  def to_i; tag end
+end
+
 class HTuple < Array
   attr_accessor :tag
   def initialize(a, t); super(a); @tag = t end
 end
 
-class Enum < Struct.new(:tag); def inspect; "E#{tag}" end; def to_i; tag end end
 class Tuple < HTuple; def inspect; "T#{tag} " + super end end
 
 class Assoc < Hash
