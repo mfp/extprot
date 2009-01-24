@@ -85,7 +85,12 @@ EXTEND Gram
     [ [ "("; l = LIST1 [ type_expr_simple ] SEP "*"; ")" -> (l, [])] ] ;
 
   record :
-    [ [ "{"; l = LIST1 [ field ] SEP ";"; "}" -> `Record l ] ];
+    [ [ "{"; l = field_list; "}" -> `Record l ] ];
+
+  field_list :
+    [ [ t1 = field; ";"; t2 = SELF -> t1 :: t2
+      | t1 = field; ";" -> [t1]
+      | t1 = field -> [t1] ] ];
 
   field :
     [ [ n = a_LIDENT; ":"; ty = type_expr_simple -> (n, false, ty)
