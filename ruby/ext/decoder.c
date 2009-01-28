@@ -24,6 +24,18 @@ static ID id_or, id_shl, id_read, id_readchar;
 
 #define IO_Read_vint(io) (io_read_vint(io))
 
+static char
+bad_length(unsigned char *ptr, unsigned len)
+{
+ return (ptr + len < ptr);
+}
+
+static char
+bound_error(unsigned char *ptr, unsigned char *end, unsigned len)
+{
+ return (bad_length(ptr, len) || ptr + len > end);
+}
+
 static unsigned char *
 read_vint(unsigned char *ptr, unsigned char *end, unsigned int *dst)
 {
@@ -69,18 +81,18 @@ file_read_vint(FILE *fp, unsigned int *n)
  return 0;
 }
 
-static int
+static unsigned int
 io_read_vint(VALUE io)
 {
  VALUE b;
  unsigned int x = 0, e = 0;
 
- b = FIX2INT(rb_funcall(io, id_readchar, 0));
+ b = FIX2UINT(rb_funcall(io, id_readchar, 0));
  if(b < 128) return b;
  while(b >= 128) {
      x += (b - 128) << e;
      e += 7;
-     b = FIX2INT(rb_funcall(io, id_readchar, 0));
+     b = FIX2UINT(rb_funcall(io, id_readchar, 0));
  }
 
  return (x + (b << e));
@@ -91,7 +103,7 @@ do_read_value(unsigned char *ptr, unsigned char *end, VALUE *dst)
 {
  unsigned int prefix, n, tag, len, nelms, wtype;
 
-#define Read_check(dst)  \
+#define Read_vint_check(dst)  \
    do { ptr = read_vint(ptr, end, dst); if(!ptr) return NULL; } while(0);
 
  if(!ptr || ptr >= end) return NULL;
@@ -101,7 +113,7 @@ do_read_value(unsigned char *ptr, unsigned char *end, VALUE *dst)
  wtype = prefix & 0xF;
  switch(wtype) {
      case VINT:
-	 Read_check(&n);
+	 Read_vint_check(&n);
 	 *dst = INT2NUM((int)n >> 1 ^ -(n & 1));
 	 break;
      case BITS8:
@@ -137,9 +149,10 @@ do_read_value(unsigned char *ptr, unsigned char *end, VALUE *dst)
 	 break;
      case TUPLE:
      case HTUPLE:
-	 Read_check(&len);
+	 Read_vint_check(&len);
+	 if(bound_error(ptr, end, len)) return NULL;
 	 end = ptr + len;
-	 Read_check(&nelms);
+	 Read_vint_check(&nelms);
 	 *dst = rb_ary_new2(nelms);
 	 rb_iv_set(*dst, "@tag", INT2FIX(tag));
 	 RBASIC(*dst)->klass = (wtype == TUPLE) ? rb_Tuple_c : rb_HTuple_c;
@@ -153,15 +166,16 @@ do_read_value(unsigned char *ptr, unsigned char *end, VALUE *dst)
 	 };
 	 break;
      case BYTES:
-	 Read_check(&len);
-	 if(len < 0 || ptr + len < 0 || ptr + len > end) return NULL;
+	 Read_vint_check(&len);
+	 if(bound_error(ptr, end, len)) return NULL;
 	 *dst = rb_str_new(ptr, len);
 	 ptr += len;
 	 break;
      case ASSOC:
-	 Read_check(&len);
+	 Read_vint_check(&len);
+	 if(bound_error(ptr, end, len)) return NULL;
 	 end = ptr + len;
-	 Read_check(&nelms);
+	 Read_vint_check(&nelms);
 	 *dst = rb_hash_new();
 	 rb_set_iv(*dst, "tag", INT2FIX(tag));
 	 RBASIC(*dst)->klass = rb_Assoc_c;
@@ -179,7 +193,7 @@ do_read_value(unsigned char *ptr, unsigned char *end, VALUE *dst)
  }
 
  return ptr;
-#undef Read_check
+#undef Read_vint_check
 }
 
 VALUE
@@ -214,7 +228,7 @@ extprot_read_value(VALUE self, VALUE io)
      prefix = io_read_vint(io);
      if(prefix & 0xF != 1) Raise_EOF;
      len = io_read_vint(io);
-     str = rb_funcall(io, id_read, 1, INT2FIX(len));
+     str = rb_funcall(io, id_read, 1, UINT2FIX(len));
      if (NIL_P(str)) Raise_EOF;
      StringValue(str);
      if (RSTRING(str)->len != len) Raise_EOF;
