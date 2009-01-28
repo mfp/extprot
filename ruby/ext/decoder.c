@@ -2,7 +2,6 @@
 #include <ruby.h>
 #include <rubyio.h>
 #include <stdio.h>
-#include <alloca.h>
 #include <arpa/inet.h>
 
 static VALUE rb_HTuple_c, rb_Enum_c, rb_Tuple_c, rb_Assoc_c;
@@ -195,6 +194,8 @@ extprot_read_value(VALUE self, VALUE io)
  unsigned int len;
  unsigned int nelms;
  VALUE ret;
+ /* we need this to remain on the stack so the buf isn't deallocated */
+ volatile VALUE rbbuf;
  unsigned int i;
 
  if(TYPE(io) == T_FILE) {
@@ -205,7 +206,8 @@ extprot_read_value(VALUE self, VALUE io)
 	 rb_raise(rb_eRuntimeError, "Expected message (Tuple wire type); prefix: %x",
 		  prefix);
      Read_vint(fp, &len);
-     buf = alloca(len);
+     rbbuf = rb_str_buf_new(len);
+     buf = RSTRING(rbbuf)->ptr;
      if(fread(buf, 1, len, fp) != len) Raise_EOF;
  } else {
      VALUE str;
