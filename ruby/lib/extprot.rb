@@ -54,28 +54,21 @@ module Readers
   class Invalid < Base; def self.read(_, io); raise BadWireType end end
 
   class Tuple_base < Base
-    def self.read_array(prefix, io)
+    def self.read_array(klass, prefix, io)
       tag = ll_tag(prefix)
       _ = read_vint(io)
       nelms = read_vint(io)
-      a = Array.new(nelms)
-      nelms.times{|i| a[i] = Readers.read_value(io)}
-      [tag, a]
+      a = Array.new(nelms){ Readers.read_value(io) }
+      klass.new(a, tag)
     end
   end
 
   class Tuple < Tuple_base
-    def self.read(prefix, io)
-      tag, a = read_array(prefix, io)
-      ::Extprot::Tuple.new(a, tag)
-    end
+    def self.read(prefix, io); read_array(::Extprot::Tuple, prefix, io) end
   end
 
   class HTuple < Tuple_base
-    def self.read(prefix, io)
-      tag, a = read_array(prefix, io)
-      ::Extprot::HTuple.new(a, tag)
-    end
+    def self.read(prefix, io); read_array(::Extprot::HTuple, prefix, io) end
   end
 
   class Assoc < Base
