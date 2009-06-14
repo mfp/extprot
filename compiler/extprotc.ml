@@ -37,7 +37,7 @@ let usage_msg =
         ]
 
 let print_field bindings const fname mutabl ty =
-  let reduced = Ptypes.type_expr ty |> Gencode.beta_reduce_texpr bindings in
+  let reduced = Gencode.beta_reduce_texpr bindings ty in
     Format.fprintf Format.err_formatter "%!%S - %S mutable: %s@.%a@.@."
       const fname (string_of_bool mutabl) PP.inspect_reduced_type_expr reduced
 

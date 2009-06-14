@@ -197,7 +197,7 @@ let generate_container bindings =
        in <:str_item< $record_types$; $typedef msgname <:ctyp< [$consts$] >>$ >>
 
   and ctyp_of_texpr expr =
-    type_expr expr |> reduce_to_poly_texpr_core bindings |> ctyp_of_poly_texpr_core
+    reduce_to_poly_texpr_core bindings expr |> ctyp_of_poly_texpr_core
 
   and ctyp_of_poly_texpr_core = function
       `Bool opts -> get_type <:ctyp< bool >> opts
@@ -299,10 +299,8 @@ let generate_container bindings =
                          const s.non_constant
               in <:ctyp< [ $sum_ty$ ] >>
             end
-          | #poly_type_expr_core ->
-              get_type
-                (reduce_to_poly_texpr_core bindings texpr |> ctyp_of_poly_texpr_core)
-                opts in
+          | #poly_type_expr_core as ptexpr ->
+              get_type (ctyp_of_poly_texpr_core ptexpr) opts in
         let params =
           List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params in
         let type_rhs =
@@ -378,7 +376,7 @@ struct
         in <:expr< fun [ $Ast.mcOr_of_list (List.map match_case l)$ ] >>
 
   and pp_texpr bindings texpr =
-    type_expr texpr |> reduce_to_poly_texpr_core bindings |> pp_poly_texpr_core
+    reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
 
   and pp_poly_texpr_core = function
       `Bool _ -> pp_func "pp_bool"
@@ -448,9 +446,8 @@ struct
           let pp_fields = List.map pp_field r.record_fields in
             <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
         end
-      | #poly_type_expr_core ->
-          let ppfunc_expr =
-            reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
+      | #poly_type_expr_core as ptexpr ->
+          let ppfunc_expr = pp_poly_texpr_core ptexpr
           in match get_type_info opts with
               None -> ppfunc_expr
             | Some (_, _, tof) ->

@@ -76,18 +76,18 @@ let failwithfmt fmt = kprintf (fun s -> if true then failwith s) fmt
 let update_bindings bindings params args =
   List.fold_right2 SMap.add params args bindings
 
-let rec beta_reduce_aux f self (bindings : bindings) = function
+let beta_reduce_base_texpr_aux f self (bindings : bindings) : base_type_expr -> 'a = function
   | #base_type_expr_simple as x -> x
-  | `Tuple (l, opts) -> `Tuple (List.map (self bindings) (l :> type_expr list), opts)
-  | `List (t, opts) -> `List (self bindings (type_expr t), opts)
-  | `Array (t, opts) -> `Array (self bindings (type_expr t), opts)
-  | (`Sum _ | `Record _ | `App _ | `Type_param _) as x -> f bindings x
+  | `Tuple (l, opts) -> `Tuple (List.map (self bindings) l, opts)
+  | `List (t, opts) -> `List (self bindings t, opts)
+  | `Array (t, opts) -> `Array (self bindings t, opts)
+  | (`App _ | `Type_param _) as x -> f bindings x
 
 let beta_reduce_sum self bindings s opts =
   let non_const =
     List.map
       (fun (const, tys) ->
-         (const, List.map (self bindings) (tys :> type_expr list)))
+         (const, List.map (self bindings) tys))
       s.non_constant
   in `Sum ({ s with non_constant = non_const }, opts)
 
@@ -95,7 +95,7 @@ let rec beta_reduce_record self bindings r opts =
   let fields' =
     List.map
       (fun (name, ismutable, ty) -> (name, ismutable, self bindings ty))
-      (r.record_fields :> (_ * _ * type_expr) list)
+      r.record_fields
   in
   `Record ({r with record_fields = fields'}, opts)
 
@@ -117,15 +117,21 @@ let merge_rtexpr_options (rtexpr : reduced_type_expr) (opts : type_options)
     | `Sum (t, opts2) -> `Sum (t, m opts opts2)
     | `Tuple (l, opts2) -> `Tuple (l, m opts opts2)
 
-let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
-  let aux bindings x : reduced_type_expr = match x with
+let rec beta_reduce_texpr bindings (texpr : base_type_expr) : reduced_type_expr =
+  let rec aux bindings x : reduced_type_expr =
+
+    let reduce_texpr bindings = function
+        `Sum _ | `Record _ | `Type_param _ | `App _ as x -> aux bindings x
+        | #base_type_expr as x -> beta_reduce_texpr bindings x
+
+    in match x with
       `Sum (s, opts) -> beta_reduce_sum beta_reduce_texpr bindings s opts
     | `Record (r, opts) -> beta_reduce_record beta_reduce_texpr bindings r opts
     | `Type_param p ->
         let name = string_of_type_param p in begin match smap_find name bindings with
             Some (Message_decl (name, _, opts)) -> `Message (name, opts)
           | Some (Type_decl (_, [], exp, opts)) ->
-              merge_rtexpr_options (beta_reduce_texpr bindings exp) opts
+              merge_rtexpr_options (reduce_texpr bindings exp) opts
           | Some (Type_decl (_, _, _, _)) ->
               failwithfmt "beta_reduce_texpr: wrong arity for higher-order type %S" name;
               assert false
@@ -140,42 +146,34 @@ let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
             let bindings =
               update_bindings bindings (List.map string_of_type_param params)
                 (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty, opts)) args)
-            in merge_rtexpr_options (beta_reduce_texpr bindings exp) opts2
+            in merge_rtexpr_options (reduce_texpr bindings exp) opts2
         | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
                   assert false
-  in beta_reduce_aux aux beta_reduce_texpr bindings texpr
+  in beta_reduce_base_texpr_aux aux beta_reduce_texpr bindings texpr
 
-let rec reduce_to_poly_texpr_core bindings (texpr : type_expr) : poly_type_expr_core =
+let rec reduce_to_poly_texpr_core bindings (btexpr : base_type_expr) : poly_type_expr_core =
   let self = reduce_to_poly_texpr_core in
 
   let aux bindings x : poly_type_expr_core = match x with
-      `Sum _ | `Record _ ->
-        (* `Type (s.type_name, []) in *)
-        (* there shouldn't be any of these left *)
-        assert false
     | `Type_param p -> `Type_arg (type_param_name p)
     | `App (name, args, opts) -> match smap_find name bindings with
           Some (Message_decl (_, _, opts2)) -> `Type (name, [], merge_options opts opts2)
         | Some (Type_decl (name, _, `Sum _, opts2)) ->
-            `Type (name, List.map (self bindings) (args :> type_expr list),
-                   merge_options opts opts2)
+            `Type (name, List.map (self bindings) args, merge_options opts opts2)
         | Some (Type_decl (name, _, _, opts2)) ->
-            `Type (name, List.map (self bindings) (args :> type_expr list),
-                   merge_options opts opts2)
+            `Type (name, List.map (self bindings) args, merge_options opts opts2)
             (* let bindings = *)
               (* update_bindings bindings (List.map string_of_type_param params) *)
                 (* (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args) *)
             (* in self bindings exp *)
         | None -> `Type_arg name
 
-  in beta_reduce_aux aux self bindings texpr
+  in beta_reduce_base_texpr_aux aux self bindings btexpr
 
 let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
-  (* must expand top-level `Sum!
-    * otherwise the expr for type foo = A | B becomes `Type foo *)
     `Sum (s, opts) -> beta_reduce_sum reduce_to_poly_texpr_core bindings s opts
   | `Record (r, opts) -> beta_reduce_record reduce_to_poly_texpr_core bindings r opts
-  | s -> (reduce_to_poly_texpr_core bindings s :> poly_type_expr)
+  | #base_type_expr as x -> (reduce_to_poly_texpr_core bindings x :> poly_type_expr)
 
 let rec map_message f =
   let map_field (fname, mutabl, ty) = (fname, mutabl, f ty) in function
@@ -227,8 +225,7 @@ let low_level_msg_def bindings (msg : message_expr) =
             sum.non_constant
         in Sum (constant, non_constant, opts) in
 
-  let low_level_field ty =
-    type_expr ty |> beta_reduce_texpr bindings |> low_level_of_rtexp
+  let low_level_field ty = beta_reduce_texpr bindings ty |> low_level_of_rtexp
   in
     map_message low_level_field msg
 
