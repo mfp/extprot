@@ -103,6 +103,9 @@ EXTEND Gram
 
   msg_expr :
     [ [ r = record -> (r :> message_expr)
+      | n = a_LIDENT; "<"; targs = LIST1 [ type_expr_simple ] SEP ","; ">" ->
+        `App (n, targs, [])
+      | n = a_LIDENT -> `App (n, [], [])
       | l = LIST1 [ n = a_UIDENT; r = record -> (n, r) ] SEP "|" -> `Sum l ] ];
 
   a_LIDENT: [ [ `LIDENT s -> s ] ];

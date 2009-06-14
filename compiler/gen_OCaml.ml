@@ -182,6 +182,15 @@ let generate_container bindings =
         (* in <:str_item< type $msgname$ = { $fields$ } >> *)
         in typedef msgname <:ctyp< { $fields$ } >>
 
+   | `App (name, args, opts) ->
+       let tyname = String.capitalize name ^ "." ^ String.uncapitalize name in
+       let applied =
+         ident_of_ctyp @@
+         List.fold_left
+           (fun ty tyvar -> <:ctyp< $ty$ $tyvar$ >>)
+           (ctyp_of_path tyname) (List.map ctyp_of_texpr args)
+       in typedef msgname <:ctyp< $applied$ >>
+
    | `Sum l ->
        let tydef_of_msg_branch (const, mexpr) =
          message_types (msgname ^ "_" ^ const) (mexpr :> message_expr) in
@@ -369,6 +378,11 @@ struct
           >> in
         let pp_fields = List.map pp_field l in
           <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
+    | `App(name, args, _) ->
+        List.fold_left
+          (fun e ptexpr -> <:expr< $e$ $pp_texpr bindings ptexpr$ >>)
+          <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
+          args
     | `Sum l ->
         let match_case (const, mexpr) =
           <:match_case<

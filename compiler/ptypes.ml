@@ -69,7 +69,11 @@ and 'a sum_data_type = {
 
 type base_message_expr = [ `Record of (string * bool * base_type_expr) list ]
 
-type message_expr = [ base_message_expr | `Sum of (string * base_message_expr) list ]
+type message_expr = [
+    base_message_expr
+  | `App of string * base_type_expr list * type_options
+  | `Sum of (string * base_message_expr) list
+]
 
 type declaration =
     Message_decl of string * message_expr * type_options
@@ -118,7 +122,9 @@ let free_type_variables decl : string list =
           sum.non_constant in
 
   let rec msg_free_vars known = function
-      `Record l ->
+    | `App (_, targs, _) ->
+        concat_map (fun ty -> type_free_vars known (ty :> type_expr)) targs
+    | `Record l ->
         concat_map (fun (_, _, e) -> type_free_vars known (e :> type_expr)) l
     | `Sum l ->
         concat_map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l in
@@ -177,6 +183,13 @@ let check_declarations decls =
           let rec fold_msg acc : message_expr -> error list = function
               `Record l ->
                 List.fold_left (fun errs (_, _, ty) -> fold_base_ty errs ty) acc l
+            | `App (s, params, _) ->
+                let expected = List.length params in
+                  begin match smap_find s arities with
+                      None -> acc
+                    | Some n when n = expected -> acc
+                    | Some n -> Wrong_arity (s, n, name, expected) :: acc
+                  end
             | `Sum l ->
                 List.fold_left
                   (fun errs (_, msg) -> fold_msg errs (msg :> message_expr))

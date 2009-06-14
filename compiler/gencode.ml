@@ -73,6 +73,8 @@ type bindings = declaration SMap.t
 
 let failwithfmt fmt = kprintf (fun s -> if true then failwith s) fmt
 
+let merge_options opt1 opt2 = opt2 @ opt1
+
 let update_bindings bindings params args =
   List.fold_right2 SMap.add params args bindings
 
@@ -98,8 +100,6 @@ let rec beta_reduce_record self bindings r opts =
       r.record_fields
   in
   `Record ({r with record_fields = fields'}, opts)
-
-let merge_options opt1 opt2 = opt2 @ opt1
 
 let merge_rtexpr_options (rtexpr : reduced_type_expr) (opts : type_options)
       : reduced_type_expr =
@@ -175,22 +175,42 @@ let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
   | `Record (r, opts) -> beta_reduce_record reduce_to_poly_texpr_core bindings r opts
   | #base_type_expr as x -> (reduce_to_poly_texpr_core bindings x :> poly_type_expr)
 
-let rec map_message f =
-  let map_field (fname, mutabl, ty) = (fname, mutabl, f ty) in function
+let rec map_message bindings (f : base_type_expr -> _) g =
+  let map_field f (fname, mutabl, ty) = (fname, mutabl, f ty) in
+  function
     `Sum cases  ->
       Record_sum
         (List.map
-           (fun (const, `Record fields) -> (const, List.map map_field fields))
+           (fun (const, `Record fields) -> (const, List.map (map_field f) fields))
            cases)
-  | `Record fields -> Record_single (List.map map_field fields)
+  | `Record fields -> Record_single (List.map (map_field f) fields)
+  | `App(name, args, opts) as ty ->
+      match beta_reduce_texpr bindings ty with
+          `Record (r, opts) ->
+            Record_single (List.map (map_field g) r.record_fields)
+        | _ ->
+            failwithfmt
+              "Wrong type abbreviation in message (%S): must be a record type."
+              name;
+            assert false
 
-let rec iter_message f =
-  let proc_field const (fname, mutabl, ty) = f const fname mutabl ty in function
+let rec iter_message bindings f g =
+  let proc_field f const (fname, mutabl, ty) = f const fname mutabl ty in
+  function
     `Sum cases  ->
         List.iter
-          (fun (const, `Record fields) -> List.iter (proc_field const) fields)
+          (fun (const, `Record fields) -> List.iter (proc_field f const) fields)
           cases
-  | `Record fields -> List.iter (proc_field "") fields
+  | `Record fields -> List.iter (proc_field f "") fields
+  | `App(name, args, opts) as ty ->
+      match beta_reduce_texpr bindings ty with
+          `Record (r, opts) ->
+            List.iter (proc_field g "") r.record_fields
+        | _ ->
+            failwithfmt
+              "Wrong type abbreviation in message (%S): must be a record type."
+              name;
+            assert false
 
 let low_level_msg_def bindings (msg : message_expr) =
 
@@ -227,7 +247,7 @@ let low_level_msg_def bindings (msg : message_expr) =
 
   let low_level_field ty = beta_reduce_texpr bindings ty |> low_level_of_rtexp
   in
-    map_message low_level_field msg
+    map_message bindings low_level_field low_level_of_rtexp msg
 
 let collect_bindings =
   List.fold_left (fun m decl -> SMap.add (declaration_name decl) decl m) SMap.empty

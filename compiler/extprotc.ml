@@ -36,10 +36,13 @@ let usage_msg =
           "OCaml", G.generators;
         ]
 
-let print_field bindings const fname mutabl ty =
-  let reduced = Gencode.beta_reduce_texpr bindings ty in
+let print_reduced_field const fname mutabl reduced =
     Format.fprintf Format.err_formatter "%!%S - %S mutable: %s@.%a@.@."
       const fname (string_of_bool mutabl) PP.inspect_reduced_type_expr reduced
+
+let print_field bindings const fname mutabl ty =
+  let reduced = Gencode.beta_reduce_texpr bindings ty in
+    print_reduced_field const fname mutabl reduced
 
 let inspect_decls decls bindings =
   prerr_newline ();
@@ -49,7 +52,7 @@ let inspect_decls decls bindings =
     (function
          Ptypes.Message_decl (name, mexpr, _) ->
            Format.fprintf Format.err_formatter "Message %S:@.@." name;
-           Gencode.iter_message (print_field bindings) mexpr;
+           Gencode.iter_message bindings (print_field bindings) print_reduced_field mexpr;
            Format.fprintf Format.err_formatter "---@.@."
        | Ptypes.Type_decl _ -> ())
     decls
