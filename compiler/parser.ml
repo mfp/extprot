@@ -36,6 +36,7 @@ EXTEND Gram
           "="; e = type_expr; opts = type_options ->
             let e = match e with
                 `Sum (s, opts) -> `Sum ({ s with type_name = name }, opts)
+              | `Record (r, opts) -> `Record ({ r with record_name = name }, opts)
               | e -> e
             in Type_decl (name, par, e, opts) ] ];
 
@@ -49,7 +50,7 @@ EXTEND Gram
   type_expr :
     [ "top"
       [ l = LIST1 [ const_declarations ] SEP "|" -> `Sum (sum_of_constructor_list l, [])
-      (* | r = record -> r  *)
+      | r = record_type -> r
       ]
     | "simple"
       [ t = type_expr_simple -> (t : base_type_expr :> type_expr)] ] ;
@@ -83,6 +84,10 @@ EXTEND Gram
 
   tuple :
     [ [ "("; l = LIST1 [ type_expr_simple ] SEP "*"; ")" -> (l, [])] ] ;
+
+  record_type :
+    [ [ "{"; l = field_list; "}" ->
+          `Record ({ record_name = "bogus"; record_fields = l }, []) ] ];
 
   record :
     [ [ "{"; l = field_list; "}" -> `Record l ] ];

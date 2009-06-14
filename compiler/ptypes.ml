@@ -52,9 +52,14 @@ type base_type_expr = [
 
 type type_expr = [
     base_type_expr
-  (* | `Record of (string * bool * base_type_expr) list *)
+  | `Record of base_type_expr record_data_type * type_options
   | `Sum of base_type_expr sum_data_type * type_options
 ]
+
+and 'a record_data_type = {
+  record_name : string;
+  record_fields : (string * bool * 'a) list
+}
 
 and 'a sum_data_type = {
   type_name : string;
@@ -105,6 +110,8 @@ let free_type_variables decl : string list =
 
   let rec type_free_vars known : type_expr -> string list = function
       #base_type_expr as x -> free_vars known x
+    | `Record (record, _) ->
+        concat_map (fun (_, _, ty) -> free_vars known ty) record.record_fields
     | `Sum (sum, _) ->
         concat_map
           (fun (_, l) -> concat_map (type_free_vars known) (l :> type_expr list))
@@ -177,6 +184,9 @@ let check_declarations decls =
 
           let fold_ty acc : type_expr -> error list = function
               #base_type_expr as bty -> fold_base_ty acc bty
+            | `Record (r, _) ->
+                List.fold_left
+                  (fun errs (_, _, ty) -> fold_base_ty errs ty) acc r.record_fields
             | `Sum (sum, _) ->
                 List.fold_left
                   (fun acc (_, l) -> List.fold_left fold_base_ty acc l)

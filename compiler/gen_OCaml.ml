@@ -79,6 +79,8 @@ let rec default_value = let _loc = Loc.ghost in function
     | Sum ([], _, _) -> None
     | Sum (c :: _, _, _) -> (* first constant constructor = default*)
         Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
+    | Record (name, _, _) ->
+        Some <:expr< ! $uid:String.capitalize name$.$lid:name ^ "_default"$ () >>
     | Htuple (List, _, _) -> Some <:expr< [] >>
     | Htuple (Array, _, _) -> Some <:expr< [| |] >>
     | Message (name, _) ->
@@ -264,7 +266,17 @@ let generate_container bindings =
       end
     | Type_decl (name, params, texpr, opts) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
-            `Sum (s, _) -> begin
+          | `Record (r, _) -> begin
+              let ctyp (name, mutabl, texpr) =
+                let ty = ctyp_of_poly_texpr_core texpr in match mutabl with
+                    true -> <:ctyp< $lid:name$ : mutable $ty$ >>
+                  | false -> <:ctyp< $lid:name$ : $ty$ >> in
+              let fields =
+                foldl1 "ctyp_of_poly_texpr_core `Type_decl (_, _, `Record _, _)" ctyp
+                  (fun ct field -> <:ctyp< $ct$; $ctyp field$ >>) r.record_fields
+              in <:ctyp< { $fields$ } >>
+            end
+          | `Sum (s, _) -> begin
               let ty_of_const_texprs (const, ptexprs) =
                 (* eprintf "type %S, const %S, %d ptexprs\n" name const (List.length ptexprs); *)
                 let tys = List.map ctyp_of_poly_texpr_core ptexprs in
@@ -404,29 +416,38 @@ struct
         expr in
 
     let expr = match poly_beta_reduce_texpr bindings texpr with
-      `Sum (s, opts) -> begin
-        let constr_ptexprs_case (const, ptexprs) =
-          let params = Array.to_list @@
-                       Array.init (List.length ptexprs) (sprintf "v%d")
-          in
+      | `Sum (s, opts) -> begin
+          let constr_ptexprs_case (const, ptexprs) =
+            let params = Array.to_list @@
+                         Array.init (List.length ptexprs) (sprintf "v%d")
+            in
+              <:match_case<
+                $uid:const$ $paCom_of_lidlist _loc params$ ->
+                  $pp_func "fprintf"$ pp
+                  $str:String.capitalize tyname ^ "." ^ const ^ " %a"$
+                  $pp_poly_texpr_core (`Tuple (ptexprs, opts))$ ($exTup_of_lidlist _loc params$)
+              >> in
+          let constr_case constr =
             <:match_case<
-              $uid:const$ $paCom_of_lidlist _loc params$ ->
-                $pp_func "fprintf"$ pp
-                $str:String.capitalize tyname ^ "." ^ const ^ " %a"$
-                $pp_poly_texpr_core (`Tuple (ptexprs, opts))$ ($exTup_of_lidlist _loc params$)
+                $uid:constr$ -> $pp_func "fprintf"$ pp
+                                  $str:String.capitalize tyname ^ "." ^ constr$
             >> in
-        let constr_case constr =
-          <:match_case<
-              $uid:constr$ -> $pp_func "fprintf"$ pp
-                                $str:String.capitalize tyname ^ "." ^ constr$
-          >> in
-        let cases = List.concat
-                      [
-                        List.map constr_case s.constant;
-                        List.map constr_ptexprs_case s.non_constant;
-                      ]
-        in <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
-      end
+          let cases = List.concat
+                        [
+                          List.map constr_case s.constant;
+                          List.map constr_ptexprs_case s.non_constant;
+                        ]
+          in <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
+        end
+      | `Record (r, opts) -> begin
+          let pp_field (name, _, tyexpr) =
+            <:expr<
+              ( $str:String.capitalize r.record_name ^ "." ^ name$,
+                $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core tyexpr$ )
+            >> in
+          let pp_fields = List.map pp_field r.record_fields in
+            <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
+        end
       | #poly_type_expr_core ->
           let ppfunc_expr =
             reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
@@ -448,7 +469,7 @@ module Make_reader
             val read_msg_func : string -> string
           end) =
 struct
-  let read_field msgname constr_name name llty =
+  let rec read_field msgname constr_name name llty =
     let _loc = loc "<generated code @ field_match_cases>" in
 
     let rec read_elms f lltys_and_defs =
@@ -638,6 +659,10 @@ struct
                 | $other_cases$
               ]
             >>
+      | Record (name, fields, opts) ->
+          let fields' =
+            List.map (fun f -> (f.field_name, true, f.field_type)) fields
+          in wrap_reader opts (wrap_msg_reader name (record_case msgname 0 fields'))
       | Message (name, opts) ->
           wrap_reader opts <:expr< $uid:String.capitalize name$.$lid:RD.read_msg_func name$ s >>
       | Htuple (kind, llty, opts) ->
@@ -680,7 +705,7 @@ struct
               >>
     in read llty
 
-  let record_case msgname ?constr tag fields =
+  and record_case msgname ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
     let constr_name = Option.default "<default>" constr in
 
@@ -754,27 +779,26 @@ struct
             with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
       >>
 
-  let rec read_message msgname =
-    let _loc = Loc.mk "<generated code @ read_message>" in
-    let wrap match_cases =
-      <:expr<
-        let t = $RD.reader_func `Read_prefix$ s in begin
-          if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
-            Extprot.Error.bad_wire_type
-              ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
-            else ();
-          match Extprot.Codec.ll_tag t with [
-            $match_cases$
-            | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
-          ]
-        end
-      >>
-    in
-      function
-        Record_single fields -> wrap (record_case msgname 0 fields)
+  and wrap_msg_reader msgname match_cases =
+    let _loc = Loc.mk "<generated code @ wrap_msg_reader>" in
+    <:expr<
+      let t = $RD.reader_func `Read_prefix$ s in begin
+        if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
+          Extprot.Error.bad_wire_type
+            ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
+          else ();
+        match Extprot.Codec.ll_tag t with [
+          $match_cases$
+          | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
+        ]
+      end
+    >>
+
+  and read_message msgname = function
+        Record_single fields -> wrap_msg_reader msgname (record_case msgname 0 fields)
       | Record_sum l ->
           list_mapi (fun tag (constr, fields) -> record_case msgname ~constr tag fields) l |>
-            Ast.mcOr_of_list |> wrap
+            Ast.mcOr_of_list |> wrap_msg_reader msgname
 end
 
 let rec raw_rd_func reader_func =
@@ -805,7 +829,7 @@ let rec raw_rd_func reader_func =
         Some (patt C.Bits64_float, wrap opts @@ reader_func `Read_raw_float)
     | Bytes opts ->
         Some (patt C.Bytes, wrap opts @@ reader_func `Read_raw_string)
-    | Sum _ | Tuple _ | Htuple _ | Message _ -> None
+    | Sum _ | Record _ | Tuple _ | Htuple _ | Message _ -> None
 
 let add_message_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
@@ -853,7 +877,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
         Some <:str_item< value $lid:"io_read_" ^ msgname$ s = $ioread_expr$ >>
     }
 
-let rec write_field fname =
+let rec write_field ?namespace fname =
   let _loc = Loc.mk "<generated code @ write>" in
   let simple_write_func = function
       Vint (Bool, _) -> "write_bool"
@@ -863,7 +887,7 @@ let rec write_field fname =
     | Bitstring64 (Long, _) -> "write_int64"
     | Bitstring64 (Float, _) -> "write_float"
     | Bytes _ -> "write_string"
-    | Tuple _ | Sum _ | Htuple _ | Message _ -> assert false in
+    | Tuple _ | Sum _ | Record _ | Htuple _ | Message _ -> assert false in
 
   let rec write_values tag var_tys =
     let nelms = List.length var_tys in
@@ -951,22 +975,26 @@ let rec write_field fname =
             non_constant in
         let match_cases = constant_match_cases @ non_constant_cases in
           <:expr< match $v$ with [ $Ast.mcOr_of_list match_cases$ ] >>
+    | Record (name, fields, _) ->
+        let fields' =
+          List.map (fun f -> (f.field_name, true, f.field_type)) fields
+        in write_fields ~namespace:name fields'
 
-  in write <:expr< msg.$lid:fname$ >>
+  in match namespace with
+      None -> write <:expr< msg.$lid:fname$ >>
+    | Some ns -> write <:expr< msg.$uid:String.capitalize ns$.$lid:fname$ >>
 
-let write_fields fs =
-  Ast.exSem_of_list @@ List.map (fun (name, _, llty) -> write_field name llty) fs
+and write_fields ?namespace fs =
+  Ast.exSem_of_list @@ List.map (fun (name, _, llty) -> write_field ?namespace name llty) fs
 
-let rec write_message msgname =
-  ignore msgname;
+and dump_fields ?namespace tag fields =
   let _loc = Loc.mk "<generated code @ write_message>" in
-  let dump_fields tag fields =
     let nelms = List.length fields in
       <:expr<
          let aux = Extprot.Msg_buffer.create () in
          let nelms = $int:string_of_int nelms$ in do {
            Extprot.Msg_buffer.add_tuple_prefix b  $int:string_of_int tag$;
-           $write_fields fields$;
+           $write_fields ?namespace fields$;
            Extprot.Msg_buffer.add_vint b
              (Extprot.Msg_buffer.length aux +
               $int:string_of_int @@ Extprot.Codec.vint_length nelms$);
@@ -975,7 +1003,9 @@ let rec write_message msgname =
          }
       >>
 
-  in function
+and write_message msgname =
+  ignore msgname;
+  let _loc = Loc.mk "<generated code @ write_message>" in function
       Record_single fields -> dump_fields 0 fields
     | Record_sum l ->
         let match_case (tag, constr, fields) =

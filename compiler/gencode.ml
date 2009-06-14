@@ -13,6 +13,7 @@ type low_level =
   | Bitstring64 of b64_meaning * type_options
   | Bytes of type_options
   | Sum of constructor list * (constructor * low_level list) list * type_options
+  | Record of string * field list * type_options
   | Tuple of low_level list * type_options
   | Htuple of htuple_meaning * low_level * type_options
   | Message of string * type_options
@@ -21,6 +22,11 @@ and constructor = {
   const_tag : tag;
   const_name : string;
   const_type : string;
+}
+
+and field = {
+  field_name : string;
+  field_type : low_level;
 }
 
 and 'a record =
@@ -45,6 +51,7 @@ and htuple_meaning =
 type reduced_type_expr = [
     reduced_type_expr base_type_expr_core
   | `Sum of reduced_type_expr sum_data_type * type_options
+  | `Record of reduced_type_expr record_data_type * type_options
   | `Message of string * type_options
 ]
 
@@ -56,6 +63,7 @@ type poly_type_expr_core = [
 
 type poly_type_expr = [
   poly_type_expr_core
+  | `Record of poly_type_expr_core record_data_type * type_options
   | `Sum of poly_type_expr_core sum_data_type * type_options
 ]
 
@@ -73,7 +81,7 @@ let rec beta_reduce_aux f self (bindings : bindings) = function
   | `Tuple (l, opts) -> `Tuple (List.map (self bindings) (l :> type_expr list), opts)
   | `List (t, opts) -> `List (self bindings (type_expr t), opts)
   | `Array (t, opts) -> `Array (self bindings (type_expr t), opts)
-  | (`Sum _ | `App _ | `Type_param _) as x -> f bindings x
+  | (`Sum _ | `Record _ | `App _ | `Type_param _) as x -> f bindings x
 
 let beta_reduce_sum self bindings s opts =
   let non_const =
@@ -82,6 +90,14 @@ let beta_reduce_sum self bindings s opts =
          (const, List.map (self bindings) (tys :> type_expr list)))
       s.non_constant
   in `Sum ({ s with non_constant = non_const }, opts)
+
+let rec beta_reduce_record self bindings r opts =
+  let fields' =
+    List.map
+      (fun (name, ismutable, ty) -> (name, ismutable, self bindings ty))
+      (r.record_fields :> (_ * _ * type_expr) list)
+  in
+  `Record ({r with record_fields = fields'}, opts)
 
 let merge_options opt1 opt2 = opt2 @ opt1
 
@@ -96,6 +112,7 @@ let merge_rtexpr_options (rtexpr : reduced_type_expr) (opts : type_options)
     | `List (t, opts2) -> `List (t, opts2)
     | `Long_int opts2 -> `Long_int (m opts opts2)
     | `Message (n, opts2) -> `Message (n, m opts opts2)
+    | `Record (fs, opts2) -> `Record (fs, m opts opts)
     | `String opts2 -> `String (m opts opts2)
     | `Sum (t, opts2) -> `Sum (t, m opts opts2)
     | `Tuple (l, opts2) -> `Tuple (l, m opts opts2)
@@ -103,6 +120,7 @@ let merge_rtexpr_options (rtexpr : reduced_type_expr) (opts : type_options)
 let rec beta_reduce_texpr bindings texpr : reduced_type_expr =
   let aux bindings x : reduced_type_expr = match x with
       `Sum (s, opts) -> beta_reduce_sum beta_reduce_texpr bindings s opts
+    | `Record (r, opts) -> beta_reduce_record beta_reduce_texpr bindings r opts
     | `Type_param p ->
         let name = string_of_type_param p in begin match smap_find name bindings with
             Some (Message_decl (name, _, opts)) -> `Message (name, opts)
@@ -131,7 +149,7 @@ let rec reduce_to_poly_texpr_core bindings (texpr : type_expr) : poly_type_expr_
   let self = reduce_to_poly_texpr_core in
 
   let aux bindings x : poly_type_expr_core = match x with
-      `Sum _ ->
+      `Sum _ | `Record _ ->
         (* `Type (s.type_name, []) in *)
         (* there shouldn't be any of these left *)
         assert false
@@ -156,6 +174,7 @@ let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
   (* must expand top-level `Sum!
     * otherwise the expr for type foo = A | B becomes `Type foo *)
     `Sum (s, opts) -> beta_reduce_sum reduce_to_poly_texpr_core bindings s opts
+  | `Record (r, opts) -> beta_reduce_record reduce_to_poly_texpr_core bindings r opts
   | s -> (reduce_to_poly_texpr_core bindings s :> poly_type_expr)
 
 let rec map_message f =
@@ -188,6 +207,13 @@ let low_level_msg_def bindings (msg : message_expr) =
     | `List (ty, opts) -> Htuple (List, low_level_of_rtexp (reduced_type_expr ty), opts)
     | `Array (ty, opts) -> Htuple (Array, low_level_of_rtexp (reduced_type_expr ty), opts)
     | `Message (s, opts) -> Message (s, opts)
+    | `Record (r, opts) ->
+        let fields =
+          List.map
+            (fun (name, ismutable, ty) ->
+               { field_name = name; field_type = low_level_of_rtexp ty; })
+            r.record_fields
+        in Record (r.record_name, fields, opts)
     | `Sum (sum, opts) ->
         let constant =
           List.mapi
@@ -310,6 +336,11 @@ struct
               | _ -> pp ppf "@[<1>%a@ | %a@]" (list (pp' "%s") "@ | ") s.constant
                        pp_non_constant non_const
       end
+    | `Record (r, _) ->
+        let pp_field ppf (name, ismutable, expr) =
+          if ismutable then pp ppf "mutable ";
+          pp ppf "@[<1>%s :@ %a@]" name pp_reduced_type_expr expr
+        in pp ppf "@[<1>%a@]" (list pp_field ";@ ") r.record_fields
     | `Message (s, _) -> pp ppf "msg:%S" s
     | #base_type_expr_core as x ->
         pp_base_type_expr_core pp_reduced_type_expr ppf x
@@ -332,9 +363,21 @@ struct
       (list (pp' "%S") ",@ ") s.constant
       (pp_non_constant f) s.non_constant
 
+  let pp_fields f ppf l =
+    list
+      (fun ppf (name, mut, ty) ->
+         pp ppf "@[%S,@ %s,@ %a@]" name (string_of_bool mut) f ty)
+      ",@ " ppf l
+
+  let inspect_record_dtype f ppf r =
+    pp ppf "{@[<1>@ record_name = %S;@ record_fields = [@[<1>@ %a ]@] }@]"
+      r.record_name
+      (pp_fields f) r.record_fields
+
   let rec inspect_reduced_type_expr ppf : reduced_type_expr -> unit = function
     | `Message (s, _) -> pp ppf "`Message %S" s
     | `Sum (s, _) -> pp ppf "@[<2>`Sum@ %a@]" (inspect_sum_dtype inspect_reduced_type_expr) s
+    | `Record (r, _) -> pp ppf "@[<2>`Record@ %a@]" (inspect_record_dtype inspect_reduced_type_expr) r
     | #base_type_expr_core as x ->
         inspect_base_type_expr_core inspect_reduced_type_expr ppf x
 end
