@@ -10,6 +10,7 @@ open ExtString
 
 type container = {
   c_name : string;
+  c_include_modules : Ast.str_item option;
   c_types : Ast.str_item option;
   c_reader : Ast.str_item option;
   c_io_reader : Ast.str_item option;
@@ -21,6 +22,7 @@ type container = {
 let empty_container name ?default_func ty_str_item =
   {
     c_name = name;
+    c_include_modules = None;
     c_types = Some ty_str_item;
     c_reader = None;
     c_io_reader = None;
@@ -205,6 +207,14 @@ let generate_container bindings =
 
        in <:str_item< $record_types$; $typedef msgname <:ctyp< [$consts$] >>$ >>
 
+  and modules_to_include_of_mexpr = function
+      `Record _ | `Sum _ -> None
+    | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
+
+   and modules_to_include_of_texpr = function
+     | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
+     | #type_expr -> None
+
   and ctyp_of_texpr expr =
     reduce_to_poly_texpr_core bindings expr |> ctyp_of_poly_texpr_core
 
@@ -259,7 +269,7 @@ let generate_container bindings =
                 in <:expr< { $Ast.rbSem_of_list assigns$ } >> in
 
         let default_func = match Gencode.low_level_msg_def bindings mexpr with
-            Record_single fields ->
+            Record_single (_, fields) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                   ref (fun () -> $ default_record fields $)
@@ -269,9 +279,11 @@ let generate_container bindings =
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                   ref (fun () -> $uid:String.capitalize constr$ $ default_record fields $)
               >>
-          | Record_sum [] -> failwith "bug in generate_container: empty Record_sum list"
-        in
-          Some (empty_container msgname ~default_func (message_types msgname mexpr))
+          | Record_sum [] -> failwith "bug in generate_container: empty Record_sum list" in
+        let container =
+          empty_container msgname ~default_func (message_types msgname mexpr)
+        in Some
+             { container with c_include_modules = modules_to_include_of_mexpr mexpr }
       end
     | Type_decl (name, params, texpr, opts) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
@@ -312,10 +324,9 @@ let generate_container bindings =
               get_type (ctyp_of_poly_texpr_core ptexpr) opts in
         let params =
           List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params in
-        let type_rhs =
-          maybe_type_equals opts ~params ty
-        in
-          Some (empty_container name (typedef name ~params type_rhs))
+        let type_rhs = maybe_type_equals opts ~params ty in
+        let container = empty_container name (typedef name ~params type_rhs) in
+          Some { container with c_include_modules = modules_to_include_of_texpr texpr }
 
 let loc = Camlp4.PreCast.Loc.mk
 
@@ -341,6 +352,7 @@ let generate_code containers =
   let container_of_str_item c =
     <:str_item<
        module $String.capitalize c.c_name$ = struct
+         $maybe_str_item c.c_include_modules$;
          $maybe_str_item c.c_types$;
          $maybe_str_item c.c_default_func$;
          $maybe_str_item c.c_pretty_printer$;
@@ -808,7 +820,7 @@ struct
     >>
 
   and read_message msgname = function
-        Record_single fields -> wrap_msg_reader msgname (record_case msgname 0 fields)
+        Record_single (_, fields) -> wrap_msg_reader msgname (record_case msgname 0 fields)
       | Record_sum l ->
           list_mapi (fun tag (constr, fields) -> record_case msgname ~constr tag fields) l |>
             Ast.mcOr_of_list |> wrap_msg_reader msgname
@@ -1019,7 +1031,7 @@ and dump_fields ?namespace tag fields =
 and write_message msgname =
   ignore msgname;
   let _loc = Loc.mk "<generated code @ write_message>" in function
-      Record_single fields -> dump_fields 0 fields
+      Record_single (_, fields) -> dump_fields 0 fields
     | Record_sum l ->
         let match_case (tag, constr, fields) =
           <:match_case< $uid:constr$ msg -> $dump_fields tag fields$ >> in

@@ -29,11 +29,9 @@ and field = {
   field_type : low_level;
 }
 
-and 'a record =
-  | Record_single of (string * bool * 'a) list
+and 'a message =
+  | Record_single of string option * (string * bool * 'a) list
   | Record_sum of (string * (string * bool * 'a) list) list
-
-and low_level_record = low_level record
 
 and vint_meaning =
     Bool
@@ -183,11 +181,11 @@ let rec map_message bindings (f : base_type_expr -> _) g =
         (List.map
            (fun (const, `Record fields) -> (const, List.map (map_field f) fields))
            cases)
-  | `Record fields -> Record_single (List.map (map_field f) fields)
+  | `Record fields -> Record_single (None, List.map (map_field f) fields)
   | `App(name, args, opts) as ty ->
       match beta_reduce_texpr bindings ty with
           `Record (r, opts) ->
-            Record_single (List.map (map_field g) r.record_fields)
+            Record_single (Some r.record_name, List.map (map_field g) r.record_fields)
         | _ ->
             failwithfmt
               "Wrong type abbreviation in message (%S): must be a record type."
