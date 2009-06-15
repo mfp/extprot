@@ -379,10 +379,12 @@ struct
         let pp_fields = List.map pp_field l in
           <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
     | `App(name, args, _) ->
-        List.fold_left
-          (fun e ptexpr -> <:expr< $e$ $pp_texpr bindings ptexpr$ >>)
-          <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
-          args
+        let pp_func =
+          List.fold_left
+            (fun e ptexpr -> <:expr< $e$ $pp_texpr bindings ptexpr$ >>)
+            <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
+            args
+        in <:expr< $pp_func$ pp >>
     | `Sum l ->
         let match_case (const, mexpr) =
           <:match_case<
@@ -458,7 +460,7 @@ struct
                 $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core tyexpr$ )
             >> in
           let pp_fields = List.map pp_field r.record_fields in
-            <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
+            <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ >>
         end
       | #poly_type_expr_core as ptexpr ->
           let ppfunc_expr = pp_poly_texpr_core ptexpr
