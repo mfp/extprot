@@ -686,7 +686,8 @@ struct
       | Record (name, fields, opts) ->
           let fields' =
             List.map (fun f -> (f.field_name, true, f.field_type)) fields
-          in wrap_reader opts (wrap_msg_reader name (record_case msgname 0 fields'))
+          in wrap_reader opts
+               (wrap_msg_reader name (record_case ~namespace:name msgname 0 fields'))
       | Message (name, opts) ->
           wrap_reader opts <:expr< $uid:String.capitalize name$.$lid:RD.read_msg_func name$ s >>
       | Htuple (kind, llty, opts) ->
@@ -729,7 +730,7 @@ struct
               >>
     in read llty
 
-  and record_case msgname ?constr tag fields =
+  and record_case msgname ?namespace ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
     let constr_name = Option.default "<default>" constr in
 
@@ -777,7 +778,9 @@ struct
 
     let field_assigns =
       List.map
-        (fun (name, _, _) -> <:rec_binding< $lid:name$ = $lid:name$ >>)
+        (fun (name, _, _) -> match namespace with
+             None -> <:rec_binding< $lid:name$ = $lid:name$ >>
+           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
         fields in
     (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
     let record =
