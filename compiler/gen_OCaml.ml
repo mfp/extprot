@@ -81,8 +81,7 @@ let rec default_value = let _loc = Loc.ghost in function
     | Sum ([], _, _) -> None
     | Sum (c :: _, _, _) -> (* first constant constructor = default*)
         Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
-    | Record (name, _, _) ->
-        Some <:expr< ! $uid:String.capitalize name$.$lid:name ^ "_default"$ () >>
+    | Record (name, _, _) -> None
     | Htuple (List, _, _) -> Some <:expr< [] >>
     | Htuple (Array, _, _) -> Some <:expr< [| |] >>
     | Message (name, _) ->
