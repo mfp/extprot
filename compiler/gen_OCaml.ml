@@ -10,7 +10,9 @@ open ExtString
 
 type container = {
   c_name : string;
-  c_include_modules : Ast.str_item option;
+  (* either open (in message definitions) or include (in type defs), needed for
+     application of record types) *)
+  c_import_modules : Ast.str_item option;
   c_types : Ast.str_item option;
   c_reader : Ast.str_item option;
   c_io_reader : Ast.str_item option;
@@ -22,7 +24,7 @@ type container = {
 let empty_container name ?default_func ty_str_item =
   {
     c_name = name;
-    c_include_modules = None;
+    c_import_modules = None;
     c_types = Some ty_str_item;
     c_reader = None;
     c_io_reader = None;
@@ -206,9 +208,9 @@ let generate_container bindings =
 
        in <:str_item< $record_types$; $typedef msgname <:ctyp< [$consts$] >>$ >>
 
-  and modules_to_include_of_mexpr = function
+  and modules_to_open_of_mexpr = function
       `Record _ | `Sum _ -> None
-    | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
+    | `App (name, _, _) -> Some <:str_item< open $uid:String.capitalize name$ >>
 
    and modules_to_include_of_texpr = function
      | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
@@ -282,7 +284,7 @@ let generate_container bindings =
         let container =
           empty_container msgname ~default_func (message_types msgname mexpr)
         in Some
-             { container with c_include_modules = modules_to_include_of_mexpr mexpr }
+             { container with c_import_modules = modules_to_open_of_mexpr mexpr }
       end
     | Type_decl (name, params, texpr, opts) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
@@ -325,7 +327,7 @@ let generate_container bindings =
           List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params in
         let type_rhs = maybe_type_equals opts ~params ty in
         let container = empty_container name (typedef name ~params type_rhs) in
-          Some { container with c_include_modules = modules_to_include_of_texpr texpr }
+          Some { container with c_import_modules = modules_to_include_of_texpr texpr }
 
 let loc = Camlp4.PreCast.Loc.mk
 
@@ -351,7 +353,7 @@ let generate_code containers =
   let container_of_str_item c =
     <:str_item<
        module $String.capitalize c.c_name$ = struct
-         $maybe_str_item c.c_include_modules$;
+         $maybe_str_item c.c_import_modules$;
          $maybe_str_item c.c_types$;
          $maybe_str_item c.c_default_func$;
          $maybe_str_item c.c_pretty_printer$;
