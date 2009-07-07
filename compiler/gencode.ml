@@ -143,11 +143,76 @@ let rec beta_reduce_texpr bindings (texpr : base_type_expr) : reduced_type_expr 
             let opts = merge_options opts opts2 in
             let bindings =
               update_bindings bindings (List.map string_of_type_param params)
-                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty, opts)) args)
-            in merge_rtexpr_options (reduce_texpr bindings exp) opts2
+                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty, opts)) args) in
+            let bindings, exp = alpha_convert bindings exp in
+              merge_rtexpr_options (reduce_texpr bindings exp) opts2
         | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
                   assert false
   in beta_reduce_base_texpr_aux aux beta_reduce_texpr bindings texpr
+
+and alpha_convert =
+  let newid =
+    let n = ref 0 in
+      fun () -> sprintf "__extprot_%d" (incr n; !n) in
+
+  fun bindings (exp : type_expr) ->
+
+    let lookup bs p =
+      let name = Type_param.string_of_type_param p in
+        match smap_find name bs with
+            Some x -> x
+          | None -> failwithfmt "alpha_convert: unbound type variable %S" name;
+                    assert false in
+
+    let rec convert_base_texpr bindings : (base_type_expr as 'a) -> bindings * 'a =
+      let self = convert_base_texpr in function
+        `Type_param p ->
+          let p' = type_param_of_string (newid ()) in
+            (* printf "alpha %S -> %S\n%!" (string_of_type_param p) (string_of_type_param p'); *)
+            (update_bindings bindings [string_of_type_param p'] [lookup bindings p],
+             `Type_param p')
+      | `App (s, l, opts) ->
+          let bs, l = List.fold_right
+                        (fun ty (bs, l) -> let bs, ty = self bs ty in (bs, ty :: l))
+                        l
+                        (bindings, [])
+          in (bs, `App (s, l, opts))
+      | `Tuple (tys, opts) ->
+          let bs, tys =
+            List.fold_right
+              (fun ty (bs, tys) -> let bs, ty = self bs ty in (bs, ty :: tys))
+              tys (bindings, [])
+          in (bs, `Tuple (tys, opts))
+      | `List (ty, opts) -> let bs, ty = self bindings ty in (bs, `List (ty, opts))
+      | `Array (ty, opts) -> let bs, ty = self bindings ty in (bs, `Array (ty, opts))
+      | x -> (bindings, x)
+
+    and convert_type_expr bindings : type_expr -> bindings * type_expr =
+      let do_convert = convert_base_texpr in function
+      | `Record (r, opts) ->
+          let bs, fields =
+            List.fold_right
+              (fun (name, mut, ty) (bs, l) ->
+                 let bs, ty = do_convert bs ty in (bs, (name, mut, ty) :: l))
+              r.record_fields
+              (bindings, [])
+          in (bs, `Record ({ r with record_fields = fields }, opts))
+      | `Sum (s, opts) ->
+          let bs, non_constant =
+            List.fold_right
+              (fun (cons, tys) (bs, l) ->
+                 let bs, tys =
+                   List.fold_right
+                     (fun ty (bs, l) -> let bs, ty = do_convert bs ty in (bs, ty :: l))
+                     tys (bs, [])
+                 in (bs, (cons, tys) :: l))
+              s.non_constant
+              (bindings, [])
+          in (bs, `Sum ({ s with non_constant = non_constant }, opts))
+      | #base_type_expr as x ->
+          let bs, ty = convert_base_texpr bindings x in (bs, type_expr ty)
+
+    in convert_type_expr bindings exp
 
 let rec reduce_to_poly_texpr_core bindings (btexpr : base_type_expr) : poly_type_expr_core =
   let self = reduce_to_poly_texpr_core in
