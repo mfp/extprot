@@ -31,6 +31,16 @@ let rtt_b =
 
 let complex_rtt = rand_choice [ rtt_a; rtt_b ]
 
+let rec_message =
+  rand_int >>= fun a ->
+  rand_string rand_len >>= fun b ->
+    return { Irecord.a = a; b = b }
+
+let rec_fields =
+  rec_message >>= fun msg ->
+  rand_int >>= fun b ->
+    return { Rec_fields.a = msg; b = b }
+
 module Xml = struct
   open Printf
   module B = Buffer

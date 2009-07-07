@@ -55,6 +55,24 @@ struct
         done
       end;
 
+      "record type" >:: begin fun () ->
+        for i = 0 to 5000 do
+          let v = Gen_data.generate Gen_data.rec_message in
+            check_roundtrip
+              Rec_message.write_rec_message Rec_message.read_rec_message
+              (PP.pp Rec_message.pp_rec_message) v
+        done
+      end;
+
+      "fields of record type" >:: begin fun () ->
+        for i = 0 to 5000 do
+          let v = Gen_data.generate Gen_data.rec_fields in
+            check_roundtrip
+              Rec_fields.write_rec_fields Rec_fields.read_rec_fields
+              (PP.pp Rec_fields.pp_rec_fields) v
+        done
+      end;
+
       "integer" >:: begin fun () ->
         let check n =
           check_roundtrip

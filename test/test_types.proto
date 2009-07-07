@@ -64,3 +64,10 @@ message msg2c0 = { a : int; b : [ int ] }
 
 message msg3 = { v0 : int }
 message msg3a = { v0 : int; v1 : silly_tuple; v2 : [ int ] }
+
+type record 'a 'b = { a : 'a; b : 'b }
+type irecord 'a = record<int, 'a>
+
+message rec_message = irecord<string>
+(* message rec_message_sum = A of irecord<string> | B of irecord<int> *)
+message rec_fields = { a : irecord<string>; b : int }
