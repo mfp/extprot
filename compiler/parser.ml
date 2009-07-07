@@ -89,9 +89,6 @@ EXTEND Gram
     [ [ "{"; l = field_list; "}" ->
           `Record ({ record_name = "bogus"; record_fields = l }, []) ] ];
 
-  record :
-    [ [ "{"; l = field_list; "}" -> `Record l ] ];
-
   field_list :
     [ [ t1 = field; ";"; t2 = SELF -> t1 :: t2
       | t1 = field; ";" -> [t1]
@@ -101,12 +98,21 @@ EXTEND Gram
     [ [ n = a_LIDENT; ":"; ty = type_expr_simple -> (n, false, ty)
       | "mutable"; n = a_LIDENT; ":"; ty = type_expr_simple -> (n, true, ty) ] ];
 
-  msg_expr :
-    [ [ r = record -> (r :> message_expr)
-      | n = a_LIDENT; "<"; targs = LIST1 [ type_expr_simple ] SEP ","; ">" ->
+  record_app :
+    [ [ n = a_LIDENT; "<"; targs = LIST1 [ type_expr_simple ] SEP ","; ">" ->
         `App (n, targs, [])
-      | n = a_LIDENT -> `App (n, [], [])
-      | l = LIST1 [ n = a_UIDENT; r = record -> (n, r) ] SEP "|" -> `Sum l ] ];
+      | n = a_LIDENT -> `App (n, [], []) ] ];
+
+  record :
+    [ [ "{"; l = field_list; "}" -> `Record l ] ];
+
+  record_or_app :
+    [ [ r = record -> r
+      | r = record_app -> r ] ];
+
+  msg_expr :
+    [ [ r = record_or_app -> (r :> message_expr)
+      | l = LIST1 [ n = a_UIDENT; r = record_or_app -> (n, r) ] SEP "|" -> `Sum l ] ];
 
   a_LIDENT: [ [ `LIDENT s -> s ] ];
   a_UIDENT: [ [ `UIDENT s -> s ] ];

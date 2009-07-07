@@ -69,5 +69,5 @@ type record 'a 'b = { a : 'a; b : 'b }
 type irecord 'a = record<int, 'a>
 
 message rec_message = irecord<string>
-(* message rec_message_sum = A of irecord<string> | B of irecord<int> *)
+message rec_message_sum = A irecord<string> | B irecord<int>
 message rec_fields = { a : irecord<string>; b : int }

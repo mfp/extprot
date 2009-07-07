@@ -55,12 +55,21 @@ struct
         done
       end;
 
-      "record type" >:: begin fun () ->
+      "message using record type" >:: begin fun () ->
         for i = 0 to 5000 do
           let v = Gen_data.generate Gen_data.rec_message in
             check_roundtrip
               Rec_message.write_rec_message Rec_message.read_rec_message
               (PP.pp Rec_message.pp_rec_message) v
+        done
+      end;
+
+      "message sum using record types" >:: begin fun () ->
+        for i = 0 to 5000 do
+          let v = Gen_data.generate Gen_data.rec_message_sum in
+            check_roundtrip
+              Rec_message_sum.write_rec_message_sum Rec_message_sum.read_rec_message_sum
+              (PP.pp Rec_message_sum.pp_rec_message_sum) v
         done
       end;
 

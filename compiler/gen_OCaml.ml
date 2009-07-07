@@ -208,11 +208,21 @@ let generate_container bindings =
 
        in <:str_item< $record_types$; $typedef msgname <:ctyp< [$consts$] >>$ >>
 
-  and modules_to_open_of_mexpr = function
-      `Record _ | `Sum _ -> None
-    | `App (name, _, _) -> Some <:str_item< open $uid:String.capitalize name$ >>
+  and modules_to_open_of_mexpr =
+    let open_for name = <:str_item< open $uid:String.capitalize name$ >>
 
-   and modules_to_include_of_texpr = function
+    in function
+      `Record _ -> None
+    | `Sum l ->
+        Some (List.fold_left
+                (fun acc (_, expr) -> match expr with
+                     `App (name, _, _) -> <:str_item< $open_for name$; $acc$ >>
+                   | _ -> acc)
+                <:str_item< >>
+                l)
+    | `App (name, _, _) -> Some (open_for name)
+
+  and modules_to_include_of_texpr = function
      | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
      | #type_expr -> None
 

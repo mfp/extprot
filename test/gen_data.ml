@@ -31,15 +31,26 @@ let rtt_b =
 
 let complex_rtt = rand_choice [ rtt_a; rtt_b ]
 
-let rec_message =
-  rand_int >>= fun a ->
-  rand_string rand_len >>= fun b ->
-    return { Irecord.a = a; b = b }
+let rand_record fa fb =
+  fa >>= fun a ->
+  fb >>= fun b ->
+    return { Record.a = a; b = b }
+
+let rec_message = rand_record rand_int (rand_string rand_len)
 
 let rec_fields =
   rec_message >>= fun msg ->
   rand_int >>= fun b ->
     return { Rec_fields.a = msg; b = b }
+
+let rec_message_sum =
+  let a =
+    rand_record rand_int (rand_string rand_len) >>= fun r ->
+      return (Rec_message_sum.A r) in
+  let b =
+    rand_record rand_int rand_int >>= fun r -> return (Rec_message_sum.B r)
+  in
+    rand_choice [ a; b ]
 
 module Xml = struct
   open Printf

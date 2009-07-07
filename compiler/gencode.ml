@@ -240,40 +240,51 @@ let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
 
 let rec map_message bindings (f : base_type_expr -> _) g =
   let map_field f (fname, mutabl, ty) = (fname, mutabl, f ty) in
-  function
+  let expand_record_type f name ty =
+    match beta_reduce_texpr bindings ty with
+        `Record (r, opts) -> f r opts
+      | _ -> failwithfmt
+               "Wrong type abbreviation in message (%S): must be a record type."
+               name;
+             assert false
+  in function
     `Sum cases  ->
       Record_sum
         (List.map
-           (fun (const, `Record fields) -> (const, List.map (map_field f) fields))
+           (function
+                (const, `Record fields) -> (const, List.map (map_field f) fields)
+              | (const, (`App (name, args, opts) as ty)) ->
+                  expand_record_type
+                    (fun r opts -> (const, List.map (map_field g) r.record_fields))
+                    name ty)
            cases)
   | `Record fields -> Record_single (None, List.map (map_field f) fields)
-  | `App(name, args, opts) as ty ->
-      match beta_reduce_texpr bindings ty with
-          `Record (r, opts) ->
-            Record_single (Some r.record_name, List.map (map_field g) r.record_fields)
-        | _ ->
-            failwithfmt
-              "Wrong type abbreviation in message (%S): must be a record type."
-              name;
-            assert false
+  | `App (name, args, opts) as ty ->
+      expand_record_type
+        (fun r opts ->
+            Record_single (Some r.record_name, List.map (map_field g) r.record_fields))
+        name ty
 
 let rec iter_message bindings f g =
   let proc_field f const (fname, mutabl, ty) = f const fname mutabl ty in
-  function
-    `Sum cases  ->
-        List.iter
-          (fun (const, `Record fields) -> List.iter (proc_field f const) fields)
-          cases
-  | `Record fields -> List.iter (proc_field f "") fields
-  | `App(name, args, opts) as ty ->
-      match beta_reduce_texpr bindings ty with
-          `Record (r, opts) ->
-            List.iter (proc_field g "") r.record_fields
+  let iter_expanded_type const name ty =
+    match beta_reduce_texpr bindings ty with
+        `Record (r, opts) -> List.iter (proc_field g const) r.record_fields
         | _ ->
             failwithfmt
               "Wrong type abbreviation in message (%S): must be a record type."
               name;
             assert false
+  in function
+    `Sum cases  ->
+        List.iter
+          (function
+               (const, `Record fields) -> List.iter (proc_field f const) fields
+             | (const, (`App (name, args, opts) as ty)) ->
+                 iter_expanded_type const name ty)
+          cases
+  | `Record fields -> List.iter (proc_field f "") fields
+  | `App(name, args, opts) as ty -> iter_expanded_type "" name ty
 
 let low_level_msg_def bindings (msg : message_expr) =
 

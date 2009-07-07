@@ -69,10 +69,13 @@ and 'a sum_data_type = {
 
 type base_message_expr = [ `Record of (string * bool * base_type_expr) list ]
 
+
+type message_expr_app = [ `App of string * base_type_expr list * type_options ]
+
 type message_expr = [
     base_message_expr
-  | `App of string * base_type_expr list * type_options
-  | `Sum of (string * base_message_expr) list
+  | message_expr_app
+  | `Sum of (string * [base_message_expr | message_expr_app]) list
 ]
 
 type declaration =
