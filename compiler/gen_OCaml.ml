@@ -1007,7 +1007,10 @@ let rec write_field ?namespace fname =
     | Record (name, fields, _) ->
         let fields' =
           List.map (fun f -> (f.field_name, true, f.field_type)) fields
-        in write_fields ~namespace:name fields'
+        in
+          <:expr< let b = aux in
+                  let msg = $ v $ in
+                    $dump_fields ~namespace:name 0 fields'$ >>
 
   in match namespace with
       None -> write <:expr< msg.$lid:fname$ >>
@@ -1017,7 +1020,7 @@ and write_fields ?namespace fs =
   Ast.exSem_of_list @@ List.map (fun (name, _, llty) -> write_field ?namespace name llty) fs
 
 and dump_fields ?namespace tag fields =
-  let _loc = Loc.mk "<generated code @ write_message>" in
+  let _loc = Loc.mk "<generated code @ dump_fields>" in
     let nelms = List.length fields in
       <:expr<
          let aux = Extprot.Msg_buffer.create () in
