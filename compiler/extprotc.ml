@@ -12,7 +12,8 @@ let (@@) f x = f x
 let file = ref None
 let output = ref None
 let generators = ref None
-let dump_decls = ref false
+let dump_reduced = ref false
+let dump_concrete = ref false
 
 let arg_spec =
   Arg.align
@@ -20,7 +21,8 @@ let arg_spec =
       "-o", Arg.String (fun f -> output := Some f), "FILE Set output file.";
       "-g", Arg.String (fun gs -> generators := Some (String.nsplit gs ",")),
         "LIST Generators to use (comma-separated).";
-      "--debug", Arg.Set dump_decls, " Dump message definitions."
+      "--debug-reduced", Arg.Set dump_reduced, " Dump beta reduced message definitions.";
+      "--debug-concrete", Arg.Set dump_concrete, " Dump concrete message definitions.";
     ]
 
 let usage_msg =
@@ -43,7 +45,7 @@ let print_header ?(sub = '=') fmt =
          (String.make (String.length s) sub))
     fmt
 
-let inspect_decls decls bindings =
+let inspect_reduced_decls bindings decls =
   let prev_const = ref "" in
   let print_reduced_field const fname mutabl reduced =
     if const <> !prev_const then print_header ~sub:'-' "Branch %s" const;
@@ -63,6 +65,31 @@ let inspect_decls decls bindings =
        | Ptypes.Type_decl _ -> ())
     decls
 
+let inspect_concrete bindings decls =
+  let print_fields =
+    List.iter
+      (fun (name, mut, llty) ->
+         if mut then
+           Format.fprintf Format.err_formatter " mutable %s : " name
+         else
+           Format.fprintf Format.err_formatter " %s : " name;
+         Format.fprintf Format.err_formatter "@[%a@]@.@." Sexplib.Sexp.pp_hum
+           (Gencode.sexp_of_low_level llty)) in
+  let dump_msg name mexpr =
+    match Gencode.low_level_msg_def bindings mexpr with
+        Gencode.Message_single (_, fields) -> print_fields fields
+      | Gencode.Message_sum cases ->
+          List.iter
+            (fun (cons, fields) -> print_header ~sub:'-' "Branch %s" cons;
+                                   print_fields fields)
+            cases
+  in List.iter
+       (function
+            Ptypes.Message_decl (name, mexpr, _) -> print_header "Message %s" name;
+                                                    dump_msg name mexpr
+          | Ptypes.Type_decl _ -> ())
+       decls
+
 let () =
   Arg.parse arg_spec (fun fname -> file := Some fname) usage_msg;
   Option.may
@@ -77,5 +104,7 @@ let () =
                [] -> G.generate_code ?generators:!generators decls |> output_string och
              | errors -> Ptypes.print_errors stderr errors
          end;
-         if !dump_decls then inspect_decls decls (Gencode.collect_bindings decls))
+         let bs = Gencode.collect_bindings decls in
+         if !dump_reduced then inspect_reduced_decls bs decls;
+         if !dump_concrete then inspect_concrete bs decls)
     !file
