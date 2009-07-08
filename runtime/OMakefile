@@ -1,3 +1,8 @@
+OCAMLPACKS[] += camlp4.macro
+
+PP = -ppopt -D$(ENDIANNESS)
+OCAMLDEPFLAGS += -syntax camlp4o $(PP)
+OCAMLFLAGS += -syntax camlp4o $(PP)
 
 EXTPROT_RUNTIME_OBJS[] =
 	codec

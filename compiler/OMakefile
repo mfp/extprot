@@ -2,6 +2,11 @@ OCAMLINCLUDES[] += $(BASE)/runtime
 OCAML_LIBS[] =
 	$(BASE)/runtime/extprot
 
+OCAMLFLAGS += -syntax camlp4o
+OCAMLDEPFLAGS += -syntax camlp4o
+
+OCAMLPACKS[] += camlp4.quotations
+
 EXTPROT_OBJS[] =
 	parser
 	ptypes
@@ -9,6 +14,7 @@ EXTPROT_OBJS[] =
 	gen_OCaml
 
 section
+	OCAMLPACKS[] += camlp4.extend
 	OCAMLFLAGS += -w e
 	CamlSources(parser)
 
