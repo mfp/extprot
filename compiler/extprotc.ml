@@ -36,24 +36,30 @@ let usage_msg =
           "OCaml", G.generators;
         ]
 
-let print_reduced_field const fname mutabl reduced =
-    Format.fprintf Format.err_formatter "%!%S - %S mutable: %s@.%a@.@."
-      const fname (string_of_bool mutabl) PP.inspect_reduced_type_expr reduced
-
-let print_field bindings const fname mutabl ty =
-  let reduced = Gencode.beta_reduce_texpr bindings ty in
-    print_reduced_field const fname mutabl reduced
+let print_header ?(sub = '=') fmt =
+  kprintf
+    (fun s ->
+       Format.fprintf Format.err_formatter "%s@.%s@." s
+         (String.make (String.length s) sub))
+    fmt
 
 let inspect_decls decls bindings =
-  prerr_newline ();
-  prerr_endline (String.make 60 '*');
-  prerr_newline ();
+  let prev_const = ref "" in
+  let print_reduced_field const fname mutabl reduced =
+    if const <> !prev_const then print_header ~sub:'-' "Branch %s" const;
+    Format.fprintf Format.err_formatter " %S%s@. reduced: @[%a@]@.@."
+      fname (if mutabl then " mutable" else "") PP.inspect_reduced_type_expr reduced;
+    prev_const := const in
+  let print_field bindings const fname mutabl ty =
+    let reduced = Gencode.beta_reduce_texpr bindings ty in
+      print_reduced_field const fname mutabl reduced in
+
   List.iter
     (function
          Ptypes.Message_decl (name, mexpr, _) ->
-           Format.fprintf Format.err_formatter "Message %S:@.@." name;
+           prev_const := "";
+           print_header "Message %s" name;
            Gencode.iter_message bindings (print_field bindings) print_reduced_field mexpr;
-           Format.fprintf Format.err_formatter "---@.@."
        | Ptypes.Type_decl _ -> ())
     decls
 
