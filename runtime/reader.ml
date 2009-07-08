@@ -162,8 +162,7 @@ struct
   let from_io_reader ch =
     let hd = IO_reader.read_prefix ch in
       if Codec.ll_type hd <> Codec.Tuple then
-        Error.bad_wire_type
-          ~message:$str:msgname$ ~ll_type:(Codec.ll_type hd) ();
+        Error.bad_wire_type ~ll_type:(Codec.ll_type hd) ();
       let len = IO_reader.read_vint ch in
       let m = Msg_buffer.create () in
         Msg_buffer.add_vint m hd;
