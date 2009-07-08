@@ -30,8 +30,8 @@ and field = {
 }
 
 and 'a message =
-  | Record_single of string option * (string * bool * 'a) list
-  | Record_sum of (string * (string * bool * 'a) list) list
+  | Message_single of string option * (string * bool * 'a) list
+  | Message_sum of (string * (string * bool * 'a) list) list
 
 and vint_meaning =
     Bool
@@ -249,7 +249,7 @@ let rec map_message bindings (f : base_type_expr -> _) g =
              assert false
   in function
     `Sum cases  ->
-      Record_sum
+      Message_sum
         (List.map
            (function
                 (const, `Record fields) -> (const, List.map (map_field f) fields)
@@ -258,11 +258,11 @@ let rec map_message bindings (f : base_type_expr -> _) g =
                     (fun r opts -> (const, List.map (map_field g) r.record_fields))
                     name ty)
            cases)
-  | `Record fields -> Record_single (None, List.map (map_field f) fields)
+  | `Record fields -> Message_single (None, List.map (map_field f) fields)
   | `App (name, args, opts) as ty ->
       expand_record_type
         (fun r opts ->
-            Record_single (Some r.record_name, List.map (map_field g) r.record_fields))
+            Message_single (Some r.record_name, List.map (map_field g) r.record_fields))
         name ty
 
 let rec iter_message bindings f g =

@@ -280,17 +280,17 @@ let generate_container bindings =
                 in <:expr< { $Ast.rbSem_of_list assigns$ } >> in
 
         let default_func = match Gencode.low_level_msg_def bindings mexpr with
-            Record_single (_, fields) ->
+            Message_single (_, fields) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                   ref (fun () -> $ default_record fields $)
               >>
-          | Record_sum ((constr, fields) :: _) ->
+          | Message_sum ((constr, fields) :: _) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                   ref (fun () -> $uid:String.capitalize constr$ $ default_record fields $)
               >>
-          | Record_sum [] -> failwith "bug in generate_container: empty Record_sum list" in
+          | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list" in
         let container =
           empty_container msgname ~default_func (message_types msgname mexpr)
         in Some
@@ -834,8 +834,8 @@ struct
     >>
 
   and read_message msgname = function
-        Record_single (_, fields) -> wrap_msg_reader msgname (record_case msgname 0 fields)
-      | Record_sum l ->
+        Message_single (_, fields) -> wrap_msg_reader msgname (record_case msgname 0 fields)
+      | Message_sum l ->
           list_mapi (fun tag (constr, fields) -> record_case msgname ~constr tag fields) l |>
             Ast.mcOr_of_list |> wrap_msg_reader msgname
 end
@@ -1048,8 +1048,8 @@ and dump_fields ?namespace tag fields =
 and write_message msgname =
   ignore msgname;
   let _loc = Loc.mk "<generated code @ write_message>" in function
-      Record_single (_, fields) -> dump_fields 0 fields
-    | Record_sum l ->
+      Message_single (_, fields) -> dump_fields 0 fields
+    | Message_sum l ->
         let match_case (tag, constr, fields) =
           <:match_case< $uid:constr$ msg -> $dump_fields tag fields$ >> in
         let match_cases =
