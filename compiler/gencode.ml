@@ -165,24 +165,21 @@ and alpha_convert =
                     assert false in
 
     let rec convert_base_texpr bindings : (base_type_expr as 'a) -> bindings * 'a =
-      let self = convert_base_texpr in function
+      let self = convert_base_texpr in
+      let convert_list f l =
+        let bs, l =
+          List.fold_right
+            (fun ty (bs, l) -> let bs, ty = self bs ty in (bs, ty :: l))
+            l (bindings, [])
+        in f bs l
+
+      in function
         `Type_param p ->
           let p' = type_param_of_string (newid ()) in
-            (* printf "alpha %S -> %S\n%!" (string_of_type_param p) (string_of_type_param p'); *)
             (update_bindings bindings [string_of_type_param p'] [lookup bindings p],
              `Type_param p')
-      | `App (s, l, opts) ->
-          let bs, l = List.fold_right
-                        (fun ty (bs, l) -> let bs, ty = self bs ty in (bs, ty :: l))
-                        l
-                        (bindings, [])
-          in (bs, `App (s, l, opts))
-      | `Tuple (tys, opts) ->
-          let bs, tys =
-            List.fold_right
-              (fun ty (bs, tys) -> let bs, ty = self bs ty in (bs, ty :: tys))
-              tys (bindings, [])
-          in (bs, `Tuple (tys, opts))
+      | `App (s, tys, opts) -> convert_list (fun bs tys -> (bs, `App (s, tys, opts))) tys
+      | `Tuple (tys, opts) -> convert_list (fun bs tys -> (bs, `Tuple (tys, opts))) tys
       | `List (ty, opts) -> let bs, ty = self bindings ty in (bs, `List (ty, opts))
       | `Array (ty, opts) -> let bs, ty = self bindings ty in (bs, `Array (ty, opts))
       | x -> (bindings, x)
