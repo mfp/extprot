@@ -1,6 +1,8 @@
 open Ptypes
 
-type tag = int
+TYPE_CONV_PATH "Extprot_compiler.Gencode_types"
+
+type tag = int with sexp
 
 type low_level =
     Vint of vint_meaning * type_options
@@ -40,6 +42,8 @@ and b64_meaning =
 and htuple_meaning =
     List
   | Array
+
+with sexp
 
 type reduced_type_expr = [
     reduced_type_expr base_type_expr_core

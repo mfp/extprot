@@ -5,7 +5,10 @@ OCAML_LIBS[] =
 OCAMLFLAGS += -syntax camlp4o
 OCAMLDEPFLAGS += -syntax camlp4o
 
-OCAMLPACKS[] += camlp4.quotations
+OCAMLPACKS[] +=
+	camlp4.quotations
+	sexplib
+	sexplib.syntax
 
 EXTPROT_OBJS[] =
 	parser
@@ -19,6 +22,10 @@ section
 	OCAMLPACKS[] += camlp4.extend
 	OCAMLFLAGS += -w e
 	CamlSources(parser)
+
+section
+	OCAMLFLAGS += -w e
+	CamlSources(protocol_types gencode_types)
 
 OCAMLPACKS += camlp4.lib
 OCamlProgram(extprotc, $(EXTPROT_OBJS) extprotc)
