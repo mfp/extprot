@@ -10,7 +10,9 @@ OCAMLPACKS[] += camlp4.quotations
 EXTPROT_OBJS[] =
 	parser
 	ptypes
+	protocol_types
 	gencode
+	gencode_types
 	gen_OCaml
 
 section
