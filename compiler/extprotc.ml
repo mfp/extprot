@@ -45,12 +45,14 @@ let print_header ?(sub = '=') fmt =
          (String.make (String.length s) sub))
     fmt
 
+let print fmt = Format.fprintf Format.err_formatter fmt
+
 let inspect_reduced_decls bindings decls =
   let prev_const = ref "" in
   let print_reduced_field const fname mutabl reduced =
     if const <> !prev_const then print_header ~sub:'-' "Branch %s" const;
-    Format.fprintf Format.err_formatter " %S%s@. reduced: @[%a@]@.@."
-      fname (if mutabl then " mutable" else "") PP.inspect_reduced_type_expr reduced;
+    print " %s%S@. reduced: @[%a@]@.@."
+      (if mutabl then "mutable " else "") fname PP.inspect_reduced_type_expr reduced;
     prev_const := const in
   let print_field bindings const fname mutabl ty =
     let reduced = Gencode.beta_reduce_texpr bindings ty in
@@ -69,13 +71,9 @@ let inspect_concrete bindings decls =
   let print_fields =
     List.iter
       (fun (name, mut, llty) ->
-         if mut then
-           Format.fprintf Format.err_formatter " mutable %s : " name
-         else
-           Format.fprintf Format.err_formatter " %s : " name;
-         Format.fprintf Format.err_formatter "@[%a@]@.@." Sexplib.Sexp.pp_hum
-           (Gencode.sexp_of_low_level llty)) in
-  let dump_msg name mexpr =
+         print " %s%s : " (if mut then "mutable " else "") name;
+         print "@[%a@]@.@." Sexplib.Sexp.pp_hum (Gencode.sexp_of_low_level llty)) in
+  let print_msg name mexpr =
     match Gencode.low_level_msg_def bindings mexpr with
         Gencode.Message_single (_, fields) -> print_fields fields
       | Gencode.Message_sum cases ->
@@ -86,7 +84,7 @@ let inspect_concrete bindings decls =
   in List.iter
        (function
             Ptypes.Message_decl (name, mexpr, _) -> print_header "Message %s" name;
-                                                    dump_msg name mexpr
+                                                    print_msg name mexpr
           | Ptypes.Type_decl _ -> ())
        decls
 
