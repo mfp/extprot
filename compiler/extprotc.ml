@@ -100,7 +100,11 @@ let () =
          begin
            match Ptypes.check_declarations decls with
                [] -> G.generate_code ?generators:!generators decls |> output_string och
-             | errors -> Ptypes.print_errors stderr errors
+             | errors ->
+                 print "Found %d errors:@." (List.length errors);
+                 Ptypes.pp_errors Format.err_formatter errors;
+                 print "@.@]";
+                 exit 1
          end;
          let bs = Gencode.collect_bindings decls in
          if !dump_reduced then inspect_reduced_decls bs decls;
