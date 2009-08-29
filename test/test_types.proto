@@ -71,3 +71,9 @@ type irecord 'a = record<int, 'a>
 message rec_message = irecord<string>
 message rec_message_sum = A irecord<string> | B irecord<int>
 message rec_fields = { a : irecord<string>; b : int }
+
+type widen 'a 'b 'c 'd = { a : 'a; b : 'b; c : 'c; d : 'd }
+
+message widen1 = widen< byte, int, long, byte >
+message widen2 = widen< int, long, float, long >
+message widen3 = widen< long, float, float, float>

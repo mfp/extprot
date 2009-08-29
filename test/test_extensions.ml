@@ -112,5 +112,15 @@ let () = Register_test.register "extensions"
         { Msg1e.a = Node2.Node (123, Color.Red, tup)  }
     end;
 
+    "numeric type widening" >:: begin fun () ->
+      check_roundtrip Widen2.pp_widen2 Widen1.write_widen1 Widen2.read_widen2
+        { Widen.a = 1; b = 2; c = 3L; d = 4 }
+        { Widen.a = 1; b = 2L; c = 3.; d = 4L };
+
+      check_roundtrip Widen3.pp_widen3 Widen1.write_widen1 Widen3.read_widen3
+        { Widen.a = 1; b = 2; c = 3L; d = 4 }
+        { Widen.a = 1L; b = 2.; c = 3.; d = 4. };
+    end;
+
     default_value_tests;
   ]

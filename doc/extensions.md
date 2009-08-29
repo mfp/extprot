@@ -143,6 +143,20 @@ The `Unknown` constructor in the `variance` type allows new readers to
 deserialize old data, as missing variance fields/elements will default to
 `Unknown`.
 
+## Numeric type widening
+
+Numeric types can be widened in the same way as in e.g. C, so
+
+   type dimension = int
+
+can be expanded later in time to
+
+   type dimension = long
+
+and newer readers will automatically expand old (int) data to the new (long)
+type. At present, type narrowing is not supported, so older readers will not
+be able to deserialize data that uses the new definition.
+
 ## Reference
 
 We use this notation:
@@ -186,6 +200,8 @@ This table summarizes the extensions possible in extprot:
            new elements of type with default value                     X    X
 
        ... and adding new constructors                                 X
+
+     numeric type widening                                             X
 
 ## Default values
 
