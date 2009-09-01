@@ -4,7 +4,7 @@
 (** [Wrong_protocol_version (max_known, found)] *)
 exception Wrong_protocol_version of int * int
 
-val serialize : (Msg_buffer.t -> 'a -> 'b) -> 'a -> string
+val serialize : ?buf:Msg_buffer.t -> (Msg_buffer.t -> 'a -> 'b) -> 'a -> string
 val deserialize : (Reader.String_reader.t -> 'a) -> string -> 'a
 
 val read : (Reader.IO_reader.t -> 'a) -> IO.input -> 'a
@@ -14,6 +14,8 @@ val read : (Reader.IO_reader.t -> 'a) -> IO.input -> 'a
 val write :
   ?buf:Msg_buffer.t ->
   (Msg_buffer.t -> 'a -> unit) -> 'b IO.output -> 'a -> unit
+
+(** {6 Versioned serialization} *)
 
 (* [read_versioned fs io] reads a little-endian, 16-bit, unsigned integer
  * and uses it to index the [fs] array of reader functions.
@@ -29,3 +31,11 @@ val read_versioned : (Reader.IO_reader.t -> 'a) array -> IO.input -> 'a
 val write_versioned :
   ?buf:Msg_buffer.t ->
   int -> (Msg_buffer.t -> 'a -> unit) -> 'b IO.output -> 'a -> unit
+
+(** Analog to {!write_versioned}, returning a string. *)
+val serialize_versioned :
+  ?buf:Msg_buffer.t -> int -> (Msg_buffer.t -> 'a -> 'b) -> 'a -> string
+
+(** Analog to {!read_versioned}, reading from a string. *)
+val deserialize_versioned :
+  (Reader.String_reader.t -> 'a) array -> string -> 'a

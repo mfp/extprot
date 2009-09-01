@@ -1,18 +1,38 @@
 
 exception Wrong_protocol_version of int * int (* max_known, found *)
 
-let serialize f x =
-  let b = Msg_buffer.create () in
+let get_buf = function
+    None -> Msg_buffer.create ()
+  | Some b -> Msg_buffer.clear b; b
+
+let serialize ?buf f x =
+  let b = get_buf buf in
     f b x;
     Msg_buffer.contents b
 
 let deserialize f s = f (Reader.String_reader.from_string s)
 
-let read f io = f (Reader.IO_reader.from_io io)
+let serialize_versioned ?buf version f x =
+  let buf = get_buf buf in
+    if version < 0 || version > 0xFFFF then
+      invalid_arg ("Extprot.Conv.serialize_versioned: bad version " ^
+                   string_of_int version);
+    Msg_buffer.add_byte buf (version land 0xFF);
+    Msg_buffer.add_byte buf ((version lsr 8) land 0xFF);
+    f buf x;
+    Msg_buffer.contents buf
 
-let get_buf = function
-    None -> Msg_buffer.create ()
-  | Some b -> Msg_buffer.clear b; b
+let deserialize_versioned fs s =
+  let len = String.length s in
+    if len < 2 then
+      raise (Wrong_protocol_version (Array.length fs, -1));
+    let version = Char.code (s.[0]) + (Char.code s.[1] lsl 8) in
+      if version < Array.length fs then
+        fs.(version) (Reader.String_reader.make s 2 (len - 2))
+      else
+        raise (Wrong_protocol_version (Array.length fs, version))
+
+let read f io = f (Reader.IO_reader.from_io io)
 
 let write ?buf (f : Msg_buffer.t -> 'a -> unit) io (x : 'a) =
   let buf = get_buf buf in
