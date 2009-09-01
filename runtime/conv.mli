@@ -28,7 +28,7 @@ val read_versioned : (Reader.IO_reader.t -> 'a) array -> IO.input -> 'a
   * 16-bit, unsigned integer to [io], followed by the serialization of the
   * value as performed by the [version-th] function from the [fs] array. If
   * the serialization fails, nothing is written.
-  * @raise Wrong_protocol_version if the [version] is not a valid index into
+  * @raise Invalid_argument if the [version] is not a valid index into
   * the array.
   * *)
 val write_versioned :

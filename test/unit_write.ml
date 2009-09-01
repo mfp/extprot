@@ -22,6 +22,104 @@ let (@@) f x = f x
 
 let wrap_printer f x = String.concat "\n" [""; f x; ""]
 
+module Versioned =
+struct
+  module C = Extprot.Conv
+
+  let (@.) f g x = f (g x)
+  let (@..) f g x y = f x (g y)
+
+  let fail () = assert false
+
+  let assert_raise ~msg choose_exn f x =
+    try
+      let () = f x in
+        assert_failure ("Expected exception. " ^ msg)
+    with exn ->
+      if not (choose_exn exn) then raise exn
+
+  let test_aux
+        rd_bool rd_string rd_long serialize_versioned deserialize_versioned =
+
+    let wr_bool, wr_string, wr_long =
+      Simple_bool.write_simple_bool,
+      Simple_string.write_simple_string,
+      Simple_long.write_simple_long in
+    let fs1 = [| (fun x -> `Bool x) @. rd_bool;
+                 (fun x -> `String x) @. rd_string |] in
+
+    let fs1' = [|
+      wr_bool @.. (function `Bool x -> x | _ -> fail ());
+      wr_string @.. (function `String x -> x | _ -> fail ());
+    |] in
+
+    let fs2 =
+      Array.append fs1 [| (fun x -> `Long x) @. rd_long; |] in
+
+    let fs2' =
+      Array.append fs1' [|
+        wr_long @.. (function `Long x -> x | _ -> fail ());
+      |] in
+
+    let v = `Bool { Simple_bool.v = true } in
+    let s = serialize_versioned fs1' 0 v in
+    let x = deserialize_versioned fs1 s in
+    let () =
+      assert_equal ~msg:"Versioned serialization failed for `Bool _ ." v x in
+    let v = `String { Simple_string.v = "whatever" } in
+    let s = serialize_versioned fs1' 1 v in
+    let x = deserialize_versioned fs1 s in
+    let () =
+      assert_equal ~msg:"Versioned serialization failed for `String _." v x in
+    let v = `Long { Simple_long.v = 42L } in
+    let s = serialize_versioned fs2' 2 v in
+    let x = deserialize_versioned fs2 s in
+    let () =
+      assert_equal ~msg:"Versioned serialization failed for `Long _." v x
+    in
+      assert_raise
+        ~msg:"when finding an unknown version number during deserialization"
+        (function C.Wrong_protocol_version _ -> true | _ -> false)
+        (fun () -> ignore (deserialize_versioned fs1 s))
+        ();
+      assert_raise
+        ~msg:"when giving a bad version number for serialization"
+        (function Invalid_argument _ -> true | _ -> false)
+        (fun () -> ignore (serialize_versioned fs2' 10 v))
+        ();
+      ()
+
+  let test_serialize_versioned () =
+    test_aux
+      Simple_bool.read_simple_bool
+      Simple_string.read_simple_string
+      Simple_long.read_simple_long
+      C.serialize_versioned C.deserialize_versioned
+
+  let test_read_write_versioned () =
+
+    let serialize fs idx v =
+      let io = IO.output_string () in
+        C.write_versioned fs idx io v;
+        IO.close_out io in
+
+    let deserialize fs s =
+      let io = IO.input_string s in
+        C.read_versioned fs io
+    in
+      test_aux
+      Simple_bool.io_read_simple_bool
+      Simple_string.io_read_simple_string
+      Simple_long.io_read_simple_long
+        serialize deserialize
+
+  let () = Register_test.register "versioned serialization"
+    [
+      "versioned (de)serialize" >:: test_serialize_versioned;
+      "versioned read/write" >:: test_read_write_versioned;
+    ]
+end
+
 module Probabilistic =
 struct
   open Extprot.Random_gen
