@@ -22,7 +22,7 @@ let write ?buf (f : Msg_buffer.t -> 'a -> unit) io (x : 'a) =
 let read_versioned fs io =
   let version = IO.read_ui16 io in
     if version < Array.length fs then
-      fs.(version) io
+      fs.(version) (Reader.IO_reader.from_io io)
     else
       raise (Wrong_protocol_version ((Array.length fs), version))
 

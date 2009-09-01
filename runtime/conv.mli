@@ -20,7 +20,7 @@ val write :
  * @raise Wrong_protocol_version if the version is higher than the last known
  * one.
  * *)
-val read_versioned : (IO.input -> 'a) array -> IO.input -> 'a
+val read_versioned : (Reader.IO_reader.t -> 'a) array -> IO.input -> 'a
 
 (** [write_versioned ?buf version f io x] writes the given [version] as a
   * 16-bit, unsigned integer to [io], followed by the serialization of the
