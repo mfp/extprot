@@ -12,14 +12,14 @@ let serialize ?buf f x =
 
 let deserialize f s = f (Reader.String_reader.from_string s)
 
-let serialize_versioned ?buf version f x =
+let serialize_versioned ?buf fs version x =
   let buf = get_buf buf in
-    if version < 0 || version > 0xFFFF then
+    if version < 0 || version > 0xFFFF || version >= Array.length fs then
       invalid_arg ("Extprot.Conv.serialize_versioned: bad version " ^
                    string_of_int version);
     Msg_buffer.add_byte buf (version land 0xFF);
     Msg_buffer.add_byte buf ((version lsr 8) land 0xFF);
-    f buf x;
+    fs.(version) buf x;
     Msg_buffer.contents buf
 
 let deserialize_versioned fs s =
@@ -46,8 +46,11 @@ let read_versioned fs io =
     else
       raise (Wrong_protocol_version ((Array.length fs), version))
 
-let write_versioned ?buf version (f : Msg_buffer.t -> 'a -> unit) io (x : 'a) =
+let write_versioned ?buf fs version io x =
   let buf = get_buf buf in
-    f buf x;
+    if version < 0 || version > 0xFFFF || version >= Array.length fs then
+      invalid_arg ("Extprot.Conv.write_versioned: bad version " ^
+                   string_of_int version);
+    fs.(version) buf x;
     IO.write_ui16 io version;
     IO.nwrite io (Msg_buffer.contents buf)

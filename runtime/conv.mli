@@ -24,17 +24,20 @@ val write :
  * *)
 val read_versioned : (Reader.IO_reader.t -> 'a) array -> IO.input -> 'a
 
-(** [write_versioned ?buf version f io x] writes the given [version] as a
+(** [write_versioned ?buf fs version io x] writes the given [version] as a
   * 16-bit, unsigned integer to [io], followed by the serialization of the
-  * value as performed by [f]. If the serialization fails, nothing is written.
+  * value as performed by the [version-th] function from the [fs] array. If
+  * the serialization fails, nothing is written.
+  * @raise Wrong_protocol_version if the [version] is not a valid index into
+  * the array.
   * *)
 val write_versioned :
   ?buf:Msg_buffer.t ->
-  int -> (Msg_buffer.t -> 'a -> unit) -> 'b IO.output -> 'a -> unit
+  (Msg_buffer.t -> 'a -> unit) array -> int -> 'b IO.output -> 'a -> unit
 
 (** Analog to {!write_versioned}, returning a string. *)
-val serialize_versioned :
-  ?buf:Msg_buffer.t -> int -> (Msg_buffer.t -> 'a -> 'b) -> 'a -> string
+val serialize_versioned : ?buf:Msg_buffer.t ->
+  (Msg_buffer.t -> 'a -> unit) array -> int -> 'a -> string
 
 (** Analog to {!read_versioned}, reading from a string. *)
 val deserialize_versioned :
