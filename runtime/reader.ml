@@ -7,6 +7,8 @@ sig
 
   val close : t -> unit
 
+  val read_byte : t -> int
+
   val read_prefix : t -> prefix
 
   val read_vint : t -> int

@@ -3,6 +3,7 @@ sig
   type t
   type position
   val close : t -> unit
+  val read_byte : t -> int
   val read_prefix : t -> Codec.prefix
   val read_vint : t -> int
   val read_bool : t -> bool
