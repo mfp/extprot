@@ -106,6 +106,9 @@ let add_channel b ic len =
 let output_buffer oc b =
   output oc b.buffer 0 b.position
 
+let output_buffer_to_io io b =
+  ignore (IO.really_output io b.buffer 0 b.position : int)
+
 let add_byte b n = add_char b (Char.unsafe_chr n)
 
 let add_vint b n =
