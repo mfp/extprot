@@ -72,10 +72,32 @@ DEFINE Read_vint(t) =
     done;
     !x + (!b lsl !e)
 
+open Printf
+
+let input_string funcname offset s =
+  let pos = ref offset in
+  let len = String.length s in
+    if !pos < 0 then
+      invalid_arg (sprintf "%s: invalid offset %d" funcname offset)
+    else
+      IO.create_in
+        ~read:(fun () ->
+                 if !pos >= len then raise IO.No_more_input;
+                 let c = String.unsafe_get s !pos in
+                   incr pos;
+                   c)
+        ~input:(fun sout p l ->
+                  if !pos >= len then raise IO.No_more_input;
+                  let n = (if !pos + l > len then len - !pos else l) in
+                    String.unsafe_blit s !pos sout p n;
+                    pos := !pos + n;
+                    n)
+        ~close:(fun () -> ())
+
 module IO_reader : sig
   include S
   val from_io : IO.input -> t
-  val from_string : string -> t
+  val from_string : ?offset:int -> string -> t
   val from_file : string -> t
 
   val read_bytes : t -> string -> int -> int -> unit
@@ -85,7 +107,10 @@ struct
   type position = int
 
   let from_io io = { io = io; pos = 0 }
-  let from_string s = { io = IO.input_string s; pos = 0 }
+
+  let from_string ?(offset = 0) s =
+    { io = input_string "Extprot.IO_reader.from_string" offset s; pos = 0 }
+
   let from_file fname = from_io (IO.input_channel (open_in fname))
 
   let close t = IO.close_in t.io

@@ -49,7 +49,7 @@ val string_of_reader_func : reader_func -> string
 module IO_reader : sig
   include S
   val from_io : IO.input -> t
-  val from_string : string -> t
+  val from_string : ?offset:int -> string -> t
   val from_file : string -> t
 end
 
