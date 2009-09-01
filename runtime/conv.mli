@@ -17,12 +17,18 @@ val write :
 
 (** {6 Versioned serialization} *)
 
-(* [read_versioned fs io] reads a little-endian, 16-bit, unsigned integer
- * and uses it to index the [fs] array of reader functions.
+(* [ioread_versioned fs io] reads the version number as a little-endian, 16-bit,
+ * unsigned integer and uses it to index the [fs] array of reader functions.
+ * If the version number is not known, the message is discarded and
+ * [Wrong_protocol_version] is raised. You can therefore try to read again
+ * from the same reader later.
  * @raise Wrong_protocol_version if the version is higher than the last known
  * one.
  * *)
-val read_versioned : (Reader.IO_reader.t -> 'a) array -> IO.input -> 'a
+val read_versioned : (Reader.IO_reader.t -> 'a) array -> Reader.IO_reader.t -> 'a
+
+(** Like {!read_versioned}, operating on an [IO.input] channel. *)
+val io_read_versioned : (Reader.IO_reader.t -> 'a) array -> IO.input -> 'a
 
 (** [write_versioned ?buf fs version io x] writes the given [version] as a
   * 16-bit, unsigned integer to [io], followed by the serialization of the

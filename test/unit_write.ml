@@ -96,7 +96,7 @@ struct
       Simple_long.read_simple_long
       C.serialize_versioned C.deserialize_versioned
 
-  let test_read_write_versioned () =
+  let test_read_write_versioned_aux read_versioned =
 
     let serialize fs idx v =
       let io = IO.output_string () in
@@ -104,8 +104,7 @@ struct
         IO.close_out io in
 
     let deserialize fs s =
-      let io = IO.input_string s in
-        C.read_versioned fs io
+      read_versioned fs (IO.input_string s)
     in
       test_aux
       Simple_bool.io_read_simple_bool
@@ -113,10 +112,18 @@ struct
       Simple_long.io_read_simple_long
         serialize deserialize
 
+  let test_io_read_write_versioned () =
+    test_read_write_versioned_aux C.io_read_versioned
+
+  let test_read_write_versioned () =
+    test_read_write_versioned_aux
+      (fun fs io -> C.read_versioned fs (Extprot.Reader.IO_reader.from_io io))
+
   let () = Register_test.register "versioned serialization"
     [
       "versioned (de)serialize" >:: test_serialize_versioned;
       "versioned read/write" >:: test_read_write_versioned;
+      "versioned IO read/write" >:: test_io_read_write_versioned;
     ]
 end
 

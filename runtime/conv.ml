@@ -39,12 +39,19 @@ let write ?buf (f : Msg_buffer.t -> 'a -> unit) io (x : 'a) =
     f buf x;
     Msg_buffer.output_buffer_to_io io buf
 
-let read_versioned fs io =
-  let version = IO.read_ui16 io in
+let read_versioned fs rd =
+  let a = Reader.IO_reader.read_byte rd in
+  let b = Reader.IO_reader.read_byte rd in
+  let version = a + b lsl 8 in
     if version < Array.length fs then
-      fs.(version) (Reader.IO_reader.from_io io)
-    else
-      raise (Wrong_protocol_version ((Array.length fs), version))
+      fs.(version) rd
+    else begin
+      let hd = Reader.IO_reader.read_prefix rd in
+        Reader.IO_reader.skip_value rd hd;
+        raise (Wrong_protocol_version ((Array.length fs), version))
+    end
+
+let io_read_versioned fs io = read_versioned fs (Reader.IO_reader.from_io io)
 
 let write_versioned ?buf fs version io x =
   let buf = get_buf buf in
