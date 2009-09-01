@@ -37,7 +37,7 @@ let read f io = f (Reader.IO_reader.from_io io)
 let write ?buf (f : Msg_buffer.t -> 'a -> unit) io (x : 'a) =
   let buf = get_buf buf in
     f buf x;
-    IO.nwrite io (Msg_buffer.contents buf)
+    Msg_buffer.output_buffer_to_io io buf
 
 let read_versioned fs io =
   let version = IO.read_ui16 io in
@@ -53,4 +53,4 @@ let write_versioned ?buf fs version io x =
                    string_of_int version);
     fs.(version) buf x;
     IO.write_ui16 io version;
-    IO.nwrite io (Msg_buffer.contents buf)
+    Msg_buffer.output_buffer_to_io io buf
