@@ -347,10 +347,11 @@ let maybe_str_item =
 
 module PrOCaml =Camlp4.Printers.OCaml.Make(Camlp4.PreCast.Syntax)
 
-let string_of_ast f ast =
+let string_of_ast ?width f ast =
   let b = Buffer.create 256 in
   let fmt = Format.formatter_of_buffer b in
   let o = new PrOCaml.printer () in
+    Option.may (Format.pp_set_margin fmt) width;
     Format.fprintf fmt "@[<v0>%a@]@." (f o) ast;
     Buffer.contents b
 
@@ -358,7 +359,7 @@ let default_function = function
     None -> None
   | Some _ -> assert false
 
-let generate_code containers =
+let generate_code ?width containers =
   let _loc = loc "<generated code>" in
   let container_of_str_item c =
     <:str_item<
@@ -371,7 +372,7 @@ let generate_code containers =
          $maybe_str_item c.c_io_reader$;
          $maybe_str_item c.c_writer$
        end >>
-  in string_of_ast (fun o -> o#implem)
+  in string_of_ast ?width (fun o -> o#implem)
        (List.fold_left
           (fun s c -> <:str_item< $s$; $container_of_str_item c$ >>)
           <:str_item< >>

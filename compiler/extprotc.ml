@@ -14,6 +14,7 @@ let output = ref None
 let generators = ref None
 let dump_reduced = ref false
 let dump_concrete = ref false
+let width = ref 100
 
 let arg_spec =
   Arg.align
@@ -21,6 +22,8 @@ let arg_spec =
       "-o", Arg.String (fun f -> output := Some f), "FILE Set output file.";
       "-g", Arg.String (fun gs -> generators := Some (String.nsplit gs ",")),
         "LIST Generators to use (comma-separated).";
+      "-w", Arg.Set_int width,
+        sprintf "N Set width to N characters in generated code (default: %d)." !width;
       "--debug-reduced", Arg.Set dump_reduced, " Dump beta reduced message definitions.";
       "--debug-concrete", Arg.Set dump_concrete, " Dump concrete message definitions.";
     ]
@@ -99,7 +102,7 @@ let () =
        let decls = Parser.print_synerr Parser.parse_file file in
          begin
            match Ptypes.check_declarations decls with
-               [] -> G.generate_code ?generators:!generators decls |> output_string och
+               [] -> G.generate_code ~width:!width ?generators:!generators decls |> output_string och
              | errors ->
                  print "Found %d errors:@." (List.length errors);
                  Ptypes.pp_errors Format.err_formatter errors;
