@@ -443,7 +443,8 @@ struct
   let add_msgdecl_pretty_printer bindings msgname mexpr opts c =
     let expr = pp_message bindings msgname mexpr in
       { c with c_pretty_printer =
-          Some <:str_item< value $lid:"pp_" ^ msgname$ pp = $expr$ >> }
+          Some <:str_item< value $lid:"pp_" ^ msgname$ pp = $expr$;
+                           value pp = $lid:"pp_" ^ msgname$; >> }
 
   let add_typedecl_pretty_printer bindings tyname typarams texpr opts c =
     let wrap expr =
@@ -895,6 +896,10 @@ let add_message_reader bindings msgname mexpr opts c =
                     (Extprot.Reader.String_reader.from_io_reader io);
 
                 value $lid:"fast_io_read_" ^ msgname$ = $lid:"io_read_" ^ msgname$;
+
+                value read = $lid:"read_" ^ msgname$;
+                value io_read = $lid:"io_read_" ^ msgname$;
+                value fast_io_read = $lid:"fast_io_read_" ^ msgname$;
               >>
     }
 
@@ -914,7 +919,10 @@ let add_message_io_reader bindings msgname mexpr opts c =
   let ioread_expr = Mk_io_reader.read_message msgname llrec in
     {
       c with c_io_reader =
-        Some <:str_item< value $lid:"io_read_" ^ msgname$ s = $ioread_expr$ >>
+        Some <:str_item<
+                value $lid:"io_read_" ^ msgname$ s = $ioread_expr$;
+                value io_read = $lid:"io_read_" ^ msgname$;
+             >>
     }
 
 let rec write_field ?namespace fname =
@@ -1062,8 +1070,10 @@ let add_message_writer bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_writer>" in
   let llrec = Gencode.low_level_msg_def bindings mexpr in
   let write_expr = write_message msgname llrec in
-  let writer = <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$ >> in
-    { c with c_writer = Some writer }
+  let writer =
+    <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$;
+                value write = $lid:"write_" ^ msgname$; >>
+  in { c with c_writer = Some writer }
 
 let msgdecl_generators : (string * _ msgdecl_generator) list =
   [
