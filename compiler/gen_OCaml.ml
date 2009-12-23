@@ -196,13 +196,16 @@ let generate_container bindings =
 
    | `Sum l ->
        let tydef_of_msg_branch (const, mexpr) =
-         message_types (msgname ^ "_" ^ const) (mexpr :> message_expr) in
+         <:str_item<
+           module $String.capitalize const$ = struct
+             $message_types (String.lowercase const) (mexpr :> message_expr)$
+           end; >> in
        let record_types =
          foldl1 "message_types `Sum" tydef_of_msg_branch
            (fun s b -> <:str_item< $s$; $tydef_of_msg_branch b$ >>) l in
 
        let variant (const, _) =
-         <:ctyp< $uid:const$ of ($lid: msgname ^ "_" ^ const $) >> in
+         <:ctyp< $uid:const$ of ($uid:const$.$lid:String.lowercase const$) >> in
        let consts = foldl1 "message_types `Sum" variant
                       (fun vars c -> <:ctyp< $vars$ | $variant c$ >>) l
 
@@ -393,13 +396,20 @@ struct
 
   let pp_func name = <:expr< Extprot.Pretty_print.$lid:name$ >>
 
-  let rec pp_message bindings msgname = function
+  let rec pp_message ?namespace bindings msgname = function
       `Record l ->
         let pp_field (name, _, tyexpr) =
-          <:expr<
-            ( $str:String.capitalize msgname ^ "." ^ name$,
-              $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_texpr bindings tyexpr$ )
-          >> in
+          let selector = match namespace with
+              None -> <:expr< (fun t -> t.$lid:name$) >>
+            | Some ns -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >> in
+          let label = match namespace with
+              None -> String.capitalize msgname ^ "." ^ name
+            | Some ns -> sprintf "%s.%s.%s"
+                           (String.capitalize msgname) (String.capitalize ns) name
+          in <:expr<
+               ( $str:label$,
+                 $pp_func "pp_field"$ $selector$ $pp_texpr bindings tyexpr$ )
+             >> in
         let pp_fields = List.map pp_field l in
           <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
     | `App(name, args, _) ->
@@ -412,7 +422,8 @@ struct
     | `Sum l ->
         let match_case (const, mexpr) =
           <:match_case<
-            $uid:const$ t -> $pp_message bindings msgname (mexpr :> message_expr)$ t>>
+            $uid:const$ t ->
+              $pp_message ~namespace:const bindings msgname (mexpr :> message_expr)$ t>>
         in <:expr< fun [ $Ast.mcOr_of_list (List.map match_case l)$ ] >>
 
   and pp_texpr bindings texpr =
@@ -838,8 +849,10 @@ struct
   and read_message msgname = function
         Message_single (_, fields) -> wrap_msg_reader msgname (record_case msgname 0 fields)
       | Message_sum l ->
-          list_mapi (fun tag (constr, fields) -> record_case msgname ~constr tag fields) l |>
-            Ast.mcOr_of_list |> wrap_msg_reader msgname
+          list_mapi
+            (fun tag (constr, fields) ->
+               record_case ~namespace:constr msgname ~constr tag fields) l
+          |> Ast.mcOr_of_list |> wrap_msg_reader msgname
 end
 
 let rec raw_rd_func reader_func =
@@ -1060,7 +1073,7 @@ and write_message msgname =
       Message_single (_, fields) -> dump_fields 0 fields
     | Message_sum l ->
         let match_case (tag, constr, fields) =
-          <:match_case< $uid:constr$ msg -> $dump_fields tag fields$ >> in
+          <:match_case< $uid:constr$ msg -> $dump_fields ~namespace:constr tag fields$ >> in
         let match_cases =
           Ast.mcOr_of_list @@ List.map match_case @@
           List.mapi (fun i (c, fs) -> (i, c, fs)) l
