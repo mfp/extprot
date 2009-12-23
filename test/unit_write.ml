@@ -326,7 +326,7 @@ let () =
          * *)
         check_write "\001\003\001\002\000"
           ~msg:"(Msg_sum.A { Msg_sum.b = false })"
-          Msg_sum.write_msg_sum (Msg_sum.A { Msg_sum.b = false }) ();
+          Msg_sum.write_msg_sum (Msg_sum.A { Msg_sum.A.b = false }) ();
         (*
          * 017      tuple, tag 1
          * 003      len
@@ -335,7 +335,7 @@ let () =
          * *)
         check_write "\017\003\001\000\020"
           ~msg:"(Msg_sum.B { Msg_sum.i = 10 })"
-          Msg_sum.write_msg_sum (Msg_sum.B { Msg_sum.i = 10 }) ()
+          Msg_sum.write_msg_sum (Msg_sum.B { Msg_sum.B.i = 10 }) ()
       end;
 
       "simple_sum" >:: begin fun () ->

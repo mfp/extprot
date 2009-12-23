@@ -22,12 +22,12 @@ let rtt_a =
   let a2_elm = rand_sum_type rand_int (rand_string rand_len) rand_int64 in
     rand_list rand_len a1_elm >>= fun a1 ->
     rand_list rand_len a2_elm >>= fun a2 ->
-    return (Complex_rtt.A { Complex_rtt.a1 = a1; a2 = a2 })
+    return (Complex_rtt.A { Complex_rtt.A.a1 = a1; a2 = a2 })
 
 let rtt_b =
   rand_bool >>= fun b1 ->
   rand_tuple2 (rand_string rand_len) (rand_list rand_len rand_int) >>= fun b2 ->
-    return (Complex_rtt.B { Complex_rtt.b1 = b1; b2 = b2 })
+    return (Complex_rtt.B { Complex_rtt.B.b1 = b1; b2 = b2 })
 
 let complex_rtt = rand_choice [ rtt_a; rtt_b ]
 
@@ -93,11 +93,11 @@ module Xml = struct
 
   let complex_rtt_to_xml x b = match x with
       A t -> tag "complex_rtt_A" begin fun b ->
-        list_to_xml (tuple2_to_xml int_to_xml (list_to_xml bool_to_xml)) t.a1 b;
-        list_to_xml (sum_type_to_xml int_to_xml string_to_xml long_to_xml) t.a2 b
+        list_to_xml (tuple2_to_xml int_to_xml (list_to_xml bool_to_xml)) t.A.a1 b;
+        list_to_xml (sum_type_to_xml int_to_xml string_to_xml long_to_xml) t.A.a2 b
       end b
     | B t -> tag "complex_rtt_A" begin fun b ->
-        bool_to_xml t.b1 b;
-        tuple2_to_xml string_to_xml (list_to_xml int_to_xml) t.b2 b;
+        bool_to_xml t.B.b1 b;
+        tuple2_to_xml string_to_xml (list_to_xml int_to_xml) t.B.b2 b;
       end b
 end
