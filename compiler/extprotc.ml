@@ -81,8 +81,10 @@ let inspect_concrete bindings decls =
         Gencode.Message_single (_, fields) -> print_fields fields
       | Gencode.Message_sum cases ->
           List.iter
-            (fun (cons, fields) -> print_header ~sub:'-' "Branch %s" cons;
-                                   print_fields fields)
+            (fun (ns, cons, fields) ->
+               print_header ~sub:'-' "Branch %s (namespace: %s)"
+                 cons (Option.default "" ns);
+               print_fields fields)
             cases
   in List.iter
        (function

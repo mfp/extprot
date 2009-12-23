@@ -187,10 +187,10 @@ let rec map_message bindings (f : base_type_expr -> _) g =
       Message_sum
         (List.map
            (function
-                (const, `Record fields) -> (const, List.map (map_field f) fields)
+                (const, `Record fields) -> (None, const, List.map (map_field f) fields)
               | (const, (`App (name, args, opts) as ty)) ->
                   expand_record_type
-                    (fun r opts -> (const, List.map (map_field g) r.record_fields))
+                    (fun r opts -> (Some name, const, List.map (map_field g) r.record_fields))
                     name ty)
            cases)
   | `Record fields -> Message_single (None, List.map (map_field f) fields)

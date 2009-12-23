@@ -28,7 +28,9 @@ and field = {
 
 and 'a message =
   | Message_single of string option * (string * bool * 'a) list
-  | Message_sum of (string * (string * bool * 'a) list) list
+    (* namespace (for poly record types) * list of  constructor * mutable * type *)
+  | Message_sum of (string option * string * (string * bool * 'a) list) list
+    (* list of  namespace * constructor * list of fields as above *)
 
 and vint_meaning =
     Bool

@@ -269,7 +269,7 @@ let generate_container bindings =
 
   in function
       Message_decl (msgname, mexpr, _) -> begin
-        let default_record fields =
+        let default_record ?namespace fields =
           let default_values =
             maybe_all
               (fun (name, _, llty) ->
@@ -279,19 +279,26 @@ let generate_container bindings =
               None -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
             | Some l ->
                 let assigns =
-                  List.map (fun (name, v) -> <:rec_binding< $lid:name$ = $v$ >>) l
+                  List.map
+                    (fun (name, v) -> match namespace with
+                         None -> <:rec_binding< $lid:name$ = $v$ >>
+                       | Some ns ->
+                           <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $v$ >>)
+                    l
                 in <:expr< { $Ast.rbSem_of_list assigns$ } >> in
 
         let default_func = match Gencode.low_level_msg_def bindings mexpr with
-            Message_single (_, fields) ->
+            Message_single (namespace, fields) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
-                  ref (fun () -> $ default_record fields $)
+                  ref (fun () -> $ default_record ?namespace fields $)
               >>
-          | Message_sum ((constr, fields) :: _) ->
+          | Message_sum ((namespace, constr, fields) :: _) ->
+              let namespace = Option.default constr namespace in
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
-                  ref (fun () -> $uid:String.capitalize constr$ $ default_record fields $)
+                  ref (fun () -> $uid:String.capitalize constr$
+                                   $ default_record ~namespace fields $)
               >>
           | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list" in
         let container =
@@ -850,8 +857,10 @@ struct
         Message_single (_, fields) -> wrap_msg_reader msgname (record_case msgname 0 fields)
       | Message_sum l ->
           list_mapi
-            (fun tag (constr, fields) ->
-               record_case ~namespace:constr msgname ~constr tag fields) l
+            (fun tag (namespace, constr, fields) ->
+               record_case
+                 ~namespace:(Option.default constr namespace)
+                 msgname ~constr tag fields) l
           |> Ast.mcOr_of_list |> wrap_msg_reader msgname
 end
 
@@ -1072,11 +1081,13 @@ and write_message msgname =
   let _loc = Loc.mk "<generated code @ write_message>" in function
       Message_single (_, fields) -> dump_fields 0 fields
     | Message_sum l ->
-        let match_case (tag, constr, fields) =
-          <:match_case< $uid:constr$ msg -> $dump_fields ~namespace:constr tag fields$ >> in
+        let match_case (tag, ns, constr, fields) =
+          <:match_case<
+            $uid:constr$ msg ->
+              $dump_fields ~namespace:(Option.default constr ns) tag fields$ >> in
         let match_cases =
           Ast.mcOr_of_list @@ List.map match_case @@
-          List.mapi (fun i (c, fs) -> (i, c, fs)) l
+          List.mapi (fun i (ns, c, fs) -> (i, ns, c, fs)) l
         in <:expr< match msg with [ $match_cases$ ] >>
 
 let add_message_writer bindings msgname mexpr opts c =
