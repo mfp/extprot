@@ -211,20 +211,6 @@ let generate_container bindings =
 
        in <:str_item< $record_types$; $typedef msgname <:ctyp< [$consts$] >>$ >>
 
-  and modules_to_open_of_mexpr =
-    let open_for name = <:str_item< open $uid:String.capitalize name$ >>
-
-    in function
-      `Record _ -> None
-    | `Sum l ->
-        Some (List.fold_left
-                (fun acc (_, expr) -> match expr with
-                     `App (name, _, _) -> <:str_item< $open_for name$; $acc$ >>
-                   | _ -> acc)
-                <:str_item< >>
-                l)
-    | `App (name, _, _) -> Some (open_for name)
-
   and modules_to_include_of_texpr = function
      | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
      | #type_expr -> None
@@ -303,8 +289,7 @@ let generate_container bindings =
           | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list" in
         let container =
           empty_container msgname ~default_func (message_types msgname mexpr)
-        in Some
-             { container with c_import_modules = modules_to_open_of_mexpr mexpr }
+        in Some container
       end
     | Type_decl (name, params, texpr, opts) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
@@ -854,7 +839,8 @@ struct
     >>
 
   and read_message msgname = function
-        Message_single (_, fields) -> wrap_msg_reader msgname (record_case msgname 0 fields)
+        Message_single (namespace, fields) ->
+          wrap_msg_reader msgname (record_case ?namespace msgname 0 fields)
       | Message_sum l ->
           list_mapi
             (fun tag (namespace, constr, fields) ->
@@ -1079,7 +1065,7 @@ and dump_fields ?namespace tag fields =
 and write_message msgname =
   ignore msgname;
   let _loc = Loc.mk "<generated code @ write_message>" in function
-      Message_single (_, fields) -> dump_fields 0 fields
+      Message_single (namespace, fields) -> dump_fields ?namespace 0 fields
     | Message_sum l ->
         let match_case (tag, ns, constr, fields) =
           <:match_case<
