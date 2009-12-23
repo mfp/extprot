@@ -35,9 +35,9 @@ will translate to this module:
 
     module Msg1 :
     sig
-      type msg1_A = { a : int; }
-      type msg1_B = { b : string; }
-      type msg1 = A of msg1_A | B of msg1_B
+      module A = struct type a = { a : int } end
+      module B = struct type b = { b : string } end
+      type msg1 = A of A.a | B of B.b
       val pp_msg1 : Format.formatter -> msg1 -> unit
       val read_msg1 : Extprot.Reader.String_reader.t -> msg1
       val fast_io_read_msg1 : Extprot.Reader.IO_reader.t -> msg1
