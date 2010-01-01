@@ -72,6 +72,7 @@ EXTEND Gram
             `App (n, targs, [])
         | "'"; n = a_LIDENT -> `Type_param (type_param_of_string n)
         | n = a_LIDENT -> `App (n, [], [])
+        | n = ident_with_path -> let (path, name) = n in `Ext_app (path, name, [], [])
         ]
 
     | "simple"
@@ -81,6 +82,11 @@ EXTEND Gram
         | "long" -> `Long_int []
         | "float" -> `Float []
         | "string" -> `String [] ] ] ;
+
+  ident_with_path :
+    [
+      [ p = a_UIDENT; "."; n = a_LIDENT -> ([p], n)
+      | p = a_UIDENT; "."; p1 = SELF -> let (p1, n) = p1 in (p :: p1, n) ] ];
 
   tuple :
     [ [ "("; l = LIST1 [ type_expr_simple ] SEP "*"; ")" -> (l, [])] ] ;

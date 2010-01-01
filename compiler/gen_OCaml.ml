@@ -66,6 +66,12 @@ let patt_of_ll_type t =
   let _loc = Loc.mk "<genererated code @ patt_of_ll_type>" in
     <:patt< Extprot.Codec.$uid:Extprot.Codec.string_of_low_level_type t$ >>
 
+let ident_with_path _loc path ident =
+  List.fold_right
+    (fun p id -> <:ident< $uid:p$.$id$ >>)
+    path
+    <:ident< $lid:ident$ >>
+
 let maybe_all f = function
     [] -> None
   | hd :: tl ->
@@ -86,8 +92,10 @@ let rec default_value = let _loc = Loc.ghost in function
     | Record (name, _, _) -> None
     | Htuple (List, _, _) -> Some <:expr< [] >>
     | Htuple (Array, _, _) -> Some <:expr< [| |] >>
-    | Message (name, _) ->
-        Some <:expr< ! $uid:String.capitalize name$.$lid:name ^ "_default"$ () >>
+    | Message (path, name, _) ->
+        let full_path = path @ [String.capitalize name] in
+        let id = ident_with_path _loc full_path (name ^ "_default") in
+          Some <:expr< ! $id:id$ () >>
     | Tuple (tys, _) -> match maybe_all default_value tys with
           None -> None
         | Some [] -> failwith "default_value: empty tuple"
@@ -243,6 +251,16 @@ let generate_container bindings =
                  <:ctyp< ( $ ctyp_of_poly_texpr_core hd $ * $tl'$ ) >>
                  opts
       end
+    | `Ext_type (path, name, args, opts) ->
+        let full_path = path @ [String.capitalize name] in
+        let id = ident_with_path _loc full_path name in
+        let t = List.fold_left (* apply *)
+                  (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core ptexpr$ >>)
+                  <:ctyp< $id:id$ >>
+                  args
+        in get_type
+             (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
+             opts
     | `Type (name, args, opts) ->
         let t = List.fold_left (* apply *)
                   (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core ptexpr$ >>)
@@ -440,6 +458,13 @@ struct
         List.fold_left
           (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
           <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
+          args
+    | `Ext_type (path, name, args, _) ->
+        let full_path = path @ [String.capitalize name] in
+        let id = ident_with_path _loc full_path ("pp_" ^ name) in
+        List.fold_left
+          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
+          <:expr< $id:id$ >>
           args
     | `Type_arg n -> <:expr< $lid:"pp_" ^ n$ >>
 
@@ -705,8 +730,10 @@ struct
             List.map (fun f -> (f.field_name, true, f.field_type)) fields
           in wrap_reader opts
                (wrap_msg_reader name (record_case ~namespace:name msgname 0 fields'))
-      | Message (name, opts) ->
-          wrap_reader opts <:expr< $uid:String.capitalize name$.$lid:RD.read_msg_func name$ s >>
+      | Message (path, name, opts) ->
+          let full_path = path @ [String.capitalize name] in
+          let id = ident_with_path _loc full_path (RD.read_msg_func name) in
+          wrap_reader opts <:expr< $id:id$ s >>
       | Htuple (kind, llty, opts) ->
           let e = match kind with
               List ->
@@ -985,8 +1012,10 @@ let rec write_field ?namespace fname =
     | Bytes opts as llty ->
         <:expr< Extprot.Msg_buffer.$lid:simple_write_func llty$
                   aux $wrap_value opts v$ >>
-    | Message (name, _) ->
-        <:expr< $uid:String.capitalize name$.$lid:"write_" ^ name$ aux $v$ >>
+    | Message (path, name, _) ->
+        let full_path = path @ [String.capitalize name] in
+        let id = ident_with_path _loc full_path ("write_" ^ name) in
+        <:expr< $id:id$ aux $v$ >>
     | Tuple (lltys, opts) -> write_tuple 0 (wrap_value opts v) lltys
     | Htuple (kind, llty, opts) ->
         let iter_f = match kind with

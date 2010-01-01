@@ -30,6 +30,7 @@ let free_type_variables decl : string list =
     | `App (n, tys, _) ->
         let l = concat_map (free_vars known) tys in
           if List.mem n known then l else n :: l
+    | `Ext_app (_, _, tys, _) -> concat_map (free_vars known) tys
     | `Tuple (l, _) -> concat_map (free_vars known) l
     | `List (t, _) | `Array (t, _) -> free_vars known t
     | #base_type_expr_simple -> [] in
@@ -94,6 +95,7 @@ let check_declarations decls =
               #base_type_expr_simple | `Type_param _ -> acc
             | `Tuple (l, _) -> List.fold_left fold_base_ty acc l
             | `List (t, _) | `Array (t, _) -> fold_base_ty acc t
+            | `Ext_app (_, _, tys, _) -> List.fold_left fold_base_ty acc tys
             | `App (s, params, _) ->
                 let expected = List.length params in
                   begin match smap_find s arities with

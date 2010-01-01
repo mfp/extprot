@@ -49,6 +49,7 @@ include Type_param
 type base_type_expr = [
     base_type_expr base_type_expr_core
   | `App of string * base_type_expr list * type_options
+  | `Ext_app of string list * string * base_type_expr list * type_options
   | `Type_param of type_param
 ] with sexp
 

@@ -19,7 +19,7 @@ let beta_reduce_base_texpr_aux f self (bindings : bindings) : base_type_expr -> 
   | `Tuple (l, opts) -> `Tuple (List.map (self bindings) l, opts)
   | `List (t, opts) -> `List (self bindings t, opts)
   | `Array (t, opts) -> `Array (self bindings t, opts)
-  | (`App _ | `Type_param _) as x -> f bindings x
+  | (`App _ | `Ext_app _ | `Type_param _) as x -> f bindings x
 
 let beta_reduce_sum self bindings s opts =
   let non_const =
@@ -48,6 +48,7 @@ let merge_rtexpr_options (rtexpr : reduced_type_expr) (opts : type_options)
     | `List (t, opts2) -> `List (t, opts2)
     | `Long_int opts2 -> `Long_int (m opts opts2)
     | `Message (n, opts2) -> `Message (n, m opts opts2)
+    | `Ext_message (p, n, opts2) -> `Ext_message (p, n, m opts opts2)
     | `Record (fs, opts2) -> `Record (fs, m opts opts)
     | `String opts2 -> `String (m opts opts2)
     | `Sum (t, opts2) -> `Sum (t, m opts opts2)
@@ -75,6 +76,9 @@ let rec beta_reduce_texpr bindings (texpr : base_type_expr) : reduced_type_expr 
                     assert false
         end
 
+    | `Ext_app (path, name, [], opts) -> `Ext_message (path, name, opts)
+    | `Ext_app _ -> failwith "beta_reduce_texpr: external polymorphic types not supported"
+
     | `App (name, args, opts) -> match smap_find name bindings with
           Some (Message_decl (_, _, opts2)) -> `Message (name, merge_options opts opts2)
         | Some (Type_decl (_, params, exp, opts2)) ->
@@ -86,6 +90,7 @@ let rec beta_reduce_texpr bindings (texpr : base_type_expr) : reduced_type_expr 
               merge_rtexpr_options (reduce_texpr bindings exp) opts2
         | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
                   assert false
+
   in beta_reduce_base_texpr_aux aux beta_reduce_texpr bindings texpr
 
 and alpha_convert =
@@ -154,6 +159,8 @@ let rec reduce_to_poly_texpr_core bindings (btexpr : base_type_expr) : poly_type
 
   let aux bindings x : poly_type_expr_core = match x with
     | `Type_param p -> `Type_arg (type_param_name p)
+    | `Ext_app (path, name, args, opts) ->
+        `Ext_type (path, name, List.map (self bindings) args, opts)
     | `App (name, args, opts) -> match smap_find name bindings with
           Some (Message_decl (_, _, opts2)) -> `Type (name, [], merge_options opts opts2)
         | Some (Type_decl (name, _, `Sum _, opts2)) ->
@@ -233,7 +240,8 @@ let low_level_msg_def bindings (msg : message_expr) =
     | `Tuple (l, opts) -> Tuple (List.map low_level_of_rtexp (l :> reduced_type_expr list), opts)
     | `List (ty, opts) -> Htuple (List, low_level_of_rtexp (reduced_type_expr ty), opts)
     | `Array (ty, opts) -> Htuple (Array, low_level_of_rtexp (reduced_type_expr ty), opts)
-    | `Message (s, opts) -> Message (s, opts)
+    | `Ext_message (path, s, opts) -> Message(path, s, opts)
+    | `Message (s, opts) -> Message ([], s, opts)
     | `Record (r, opts) ->
         let fields =
           List.map
@@ -368,6 +376,8 @@ struct
           pp ppf "@[<1>%s :@ %a@]" name pp_reduced_type_expr expr
         in pp ppf "@[<1>%a@]" (list pp_field ";@ ") r.record_fields
     | `Message (s, _) -> pp ppf "msg:%S" s
+    | `Ext_message (path, s, _) -> pp ppf "msg:%S"
+                                     (String.concat "." (path @ [s]))
     | #base_type_expr_core as x ->
         pp_base_type_expr_core pp_reduced_type_expr ppf x
 
@@ -402,6 +412,7 @@ struct
 
   let rec inspect_reduced_type_expr ppf : reduced_type_expr -> unit = function
     | `Message (s, _) -> pp ppf "`Message %S" s
+    | `Ext_message (path, s, _) -> pp ppf "`Ext_message %S" (String.concat "." (path @ [s]))
     | `Sum (s, _) -> pp ppf "@[<2>`Sum@ %a@]" (inspect_sum_dtype inspect_reduced_type_expr) s
     | `Record (r, _) -> pp ppf "@[<2>`Record@ %a@]" (inspect_record_dtype inspect_reduced_type_expr) r
     | #base_type_expr_core as x ->

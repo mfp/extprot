@@ -13,7 +13,7 @@ type low_level =
   | Record of string * field list * type_options
   | Tuple of low_level list * type_options
   | Htuple of htuple_meaning * low_level * type_options
-  | Message of string * type_options
+  | Message of string list * string * type_options
 
 and constructor = {
   const_tag : tag;
@@ -52,11 +52,13 @@ type reduced_type_expr = [
   | `Sum of reduced_type_expr sum_data_type * type_options
   | `Record of reduced_type_expr record_data_type * type_options
   | `Message of string * type_options
+  | `Ext_message of string list * string * type_options
 ]
 
 type poly_type_expr_core = [
     poly_type_expr_core base_type_expr_core
   | `Type of string * poly_type_expr_core list * type_options (* polymorphic sum type name, type args *)
+  | `Ext_type of string list * string * poly_type_expr_core list * type_options
   | `Type_arg of string
 ]
 
