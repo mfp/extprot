@@ -98,22 +98,22 @@ let check_declarations decls =
             | `Ext_app (_, _, tys, _) -> List.fold_left fold_base_ty acc tys
             | `App (s, params, _) ->
                 let expected = List.length params in
-                  begin match smap_find s arities with
-                      None -> acc
-                    | Some n when n = expected -> acc
-                    | Some n -> Wrong_arity (s, n, name, expected) :: acc
-                  end in
+                let acc = match smap_find s arities with
+                    None -> acc
+                  | Some n when n = expected -> acc
+                  | Some n -> Wrong_arity (s, n, name, expected) :: acc
+                in List.fold_left fold_base_ty acc params in
 
           let rec fold_msg acc : message_expr -> error list = function
               `Record l ->
                 List.fold_left (fun errs (_, _, ty) -> fold_base_ty errs ty) acc l
             | `App (s, params, _) ->
                 let expected = List.length params in
-                  begin match smap_find s arities with
-                      None -> acc
-                    | Some n when n = expected -> acc
-                    | Some n -> Wrong_arity (s, n, name, expected) :: acc
-                  end
+                let acc = match smap_find s arities with
+                    None -> acc
+                  | Some n when n = expected -> acc
+                  | Some n -> Wrong_arity (s, n, name, expected) :: acc
+                in List.fold_left fold_base_ty acc params
             | `Sum l ->
                 List.fold_left
                   (fun errs (_, msg) -> fold_msg errs (msg :> message_expr))
@@ -143,6 +143,6 @@ let pp_errors pp =
            Repeated_binding s -> pr "Type binding %S is duplicated.@." s
          | Unbound_type_variable (where, which) ->
              pr "Type %S is unbound in %S.@." which where
-         | Wrong_arity (which, wrong, where, correct) ->
+         | Wrong_arity (which, correct, where, wrong) ->
              pr "Type %S used with wrong arity (%d instead of %d) in %S.@."
                which wrong correct where)
