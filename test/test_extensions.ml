@@ -42,8 +42,12 @@ let default_value_tests = "default_values" >::: [
     let simple_sum = { Simple_sum.v = Sum_type.D } in
       check_roundtrip Msg3a.pp_msg3a Msg3.write_msg3 Msg3a.read_msg3a
         { Msg3.v0 = 123 } { Msg3a.v0 = 123; v1 = (simple_sum, simple_sum); v2 = [] };
-  end
+  end;
 
+  "bool" >:: begin fun () ->
+    check_roundtrip Msg2d.pp_msg2d Msg2.write_msg2 Msg2d.read_msg2d
+      { Msg2.a = 123 } { Msg2d.a = 123; b = false }
+  end;
 ]
 
 let () = Register_test.register "extensions"

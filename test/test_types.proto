@@ -61,6 +61,7 @@ message msg2a = { a : int; b : sum_type<bool, byte, int> }
 message msg2b = { a : int; b : simple_sum }
 message msg2c = { a : int; b : [ int ]; c : [| byte |] }
 message msg2c0 = { a : int; b : [ int ] }
+message msg2d = { a : int; b : bool }
 
 message msg3 = { v0 : int }
 message msg3a = { v0 : int; v1 : silly_tuple; v2 : [ int ] }

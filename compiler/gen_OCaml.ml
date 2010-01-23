@@ -85,7 +85,8 @@ let maybe_all f = function
       in Option.map List.rev l
 
 let rec default_value = let _loc = Loc.ghost in function
-    Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> None
+      Vint (Bool, _) -> Some <:expr< False >>
+    | Vint ((Int | Int8), _) | Bitstring32 _ | Bitstring64 _ | Bytes _ -> None
     | Sum ([], _, _) -> None
     | Sum (c :: _, _, _) -> (* first constant constructor = default*)
         Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>

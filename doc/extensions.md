@@ -215,6 +215,7 @@ The default values is defined for each type inductively: the default value of ..
 * a message is the first message variant with the fields
   having the default values corresponding to their types, if they are all
   defined.
+* a bool is `false`
 
 Otherwise, the type/message has got no default value.
 
@@ -222,6 +223,8 @@ Otherwise, the type/message has got no default value.
 
              type                                  default value
     --------------------------------- -----------------------------------------
+     type bo = bool                    false
+
      type a = A int | B | C            B
 
      type b = (a * a)                  (B, B)
@@ -233,6 +236,8 @@ Otherwise, the type/message has got no default value.
      message m = { v1 : c; v2 : b }    { v1 = []; v2 = (B, B) }
 
      message n = { a : a; m : m }      { a = B; m = { v1 = []; v2 = (B, B) } }
+
+     message o = { a : a; b : bo }     { a = B; b = false }
 
      type id = int                     undefined
 
