@@ -96,14 +96,7 @@ let input_string funcname offset s =
                     n)
         ~close:(fun () -> ())
 
-module IO_reader : sig
-  include S
-  val from_io : IO.input -> t
-  val from_string : ?offset:int -> string -> t
-  val from_file : string -> t
-
-  val read_bytes : t -> string -> int -> int -> unit
-end =
+module IO_reader =
 struct
   type t =  { io : IO.input; mutable pos : int }
   type position = int
@@ -168,14 +161,7 @@ struct
   let read_string t = EOF_wrap(read_string, t)
 end
 
-module String_reader : sig
-  include S
-  val make : string -> int -> int -> t
-  val from_io_reader : IO_reader.t -> t
-  val from_io_reader' : IO_reader.t -> t * string
-  val from_io : IO.input -> t
-  val from_string : string -> t
-end =
+module String_reader =
 struct
   type t = { mutable buf : string; mutable last : int; mutable pos : int }
   type position = int
