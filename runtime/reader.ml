@@ -32,6 +32,8 @@ sig
   val skip_to : t -> position -> unit
 
   val skip_value : t -> prefix -> unit
+
+  val read_message : t -> string
 end
 
 type reader_func =
@@ -73,6 +75,24 @@ DEFINE Read_vint(t) =
       b := read_byte t
     done;
     !x + (!b lsl !e)
+
+DEFINE Read_msg(t) =
+  let p = read_prefix t in
+    match ll_type p with
+        Tuple ->
+          let len = read_vint t in
+          let prefix_s =
+            let b = Msg_buffer.create () in
+              Msg_buffer.add_vint b p;
+              Msg_buffer.add_vint b len;
+              Msg_buffer.contents b in
+          let prefix_len = String.length prefix_s in
+          let s = String.create (prefix_len + len) in
+            String.blit prefix_s 0 s 0 prefix_len;
+            read_bytes t s prefix_len len;
+            s
+      | Vint | Bits8 | Bits32 | Bits64_long | Bits64_float | Enum | Bytes
+      | Htuple | Assoc | Invalid_ll_type as ll_type -> Error.bad_wire_type ~ll_type ()
 
 open Printf
 
@@ -159,6 +179,8 @@ struct
   let read_i64 t = EOF_wrap(read_i64, t)
   let read_float t = EOF_wrap(read_float, t)
   let read_string t = EOF_wrap(read_string, t)
+
+  let read_message t = Read_msg(t)
 end
 
 module String_reader =
@@ -234,4 +256,6 @@ struct
     if pos > t.pos then t.pos <- pos
 
   INCLUDE "reader_impl.ml"
+
+  let read_message t = Read_msg(t)
 end

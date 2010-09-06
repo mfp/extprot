@@ -23,6 +23,7 @@ sig
   val offset : t -> int -> position
   val skip_to : t -> position -> unit
   val skip_value : t -> Codec.prefix -> unit
+  val read_message : t -> string
 end
 
 type reader_func =
