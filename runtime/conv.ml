@@ -32,6 +32,12 @@ let deserialize_versioned fs s =
       else
         raise (Wrong_protocol_version (Array.length fs, version))
 
+let deserialize_versioned' fs version msg =
+  if version >= 0 && version < Array.length fs then
+    fs.(version) (Reader.String_reader.make msg 0 (String.length msg))
+  else
+    raise (Wrong_protocol_version (Array.length fs, version))
+
 let read f io = f (Reader.IO_reader.from_io io)
 
 let write ?buf (f : Msg_buffer.t -> 'a -> unit) io (x : 'a) =
@@ -61,3 +67,10 @@ let write_versioned ?buf fs version io x =
     fs.(version) buf x;
     IO.write_ui16 io version;
     Msg_buffer.output_buffer_to_io io buf
+
+let read_frame io =
+  let rd = Reader.IO_reader.from_io io in
+  let a = Reader.IO_reader.read_byte rd in
+  let b = Reader.IO_reader.read_byte rd in
+  let version = a + b lsl 8 in
+    (version, Reader.IO_reader.read_message rd)

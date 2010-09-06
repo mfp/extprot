@@ -48,3 +48,11 @@ val serialize_versioned : ?buf:Msg_buffer.t ->
 (** Analog to {!read_versioned}, reading from a string. *)
 val deserialize_versioned :
   (Reader.String_reader.t -> 'a) array -> string -> 'a
+
+(** Analog to {!deserialize_versioned}, where the version is given, and the
+  * string only contains the message (not the version number) *)
+val deserialize_versioned' :
+  (Reader.String_reader.t -> 'a) array -> int -> string -> 'a
+
+(** Return frame (16-bit version plus message) *)
+val read_frame : IO.input -> int * string
