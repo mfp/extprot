@@ -172,6 +172,7 @@ module String_reader : sig
   include S
   val make : string -> int -> int -> t
   val from_io_reader : IO_reader.t -> t
+  val from_io_reader' : IO_reader.t -> t * string
   val from_io : IO.input -> t
   val from_string : string -> t
 end =
@@ -186,7 +187,7 @@ struct
 
   let from_string s = make s 0 (String.length s)
 
-  let from_io_reader ch =
+  let from_io_reader' ch =
     let hd = IO_reader.read_prefix ch in
       if Codec.ll_type hd <> Codec.Tuple then
         Error.bad_wire_type ~ll_type:(Codec.ll_type hd) ();
@@ -198,7 +199,9 @@ struct
         let buf = String.create (len + off) in
           String.blit (Msg_buffer.contents m) 0 buf 0 off;
           IO_reader.read_bytes ch buf off len;
-          make buf 0 (String.length buf)
+          (make buf 0 (String.length buf), buf)
+
+  let from_io_reader ch = fst (from_io_reader' ch)
 
   let from_io io = from_io_reader (IO_reader.from_io io)
 
