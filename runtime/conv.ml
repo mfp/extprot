@@ -10,6 +10,10 @@ let serialize ?buf f x =
     f b x;
     Msg_buffer.contents b
 
+let dump f buf x =
+  Msg_buffer.clear buf;
+  f buf x
+
 let deserialize f s = f (Reader.String_reader.from_string s)
 
 let serialize_versioned ?buf fs version x =

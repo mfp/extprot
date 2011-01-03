@@ -9,6 +9,8 @@ val deserialize : (Reader.String_reader.t -> 'a) -> string -> 'a
 
 val read : (Reader.IO_reader.t -> 'a) -> IO.input -> 'a
 
+val dump : (Msg_buffer.t -> 'a -> unit) -> Msg_buffer.t -> 'a -> unit
+
 (** @param buf the buffer to use when serializing the value. It will be
   *            automatically cleared before use. *)
 val write :
