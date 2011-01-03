@@ -183,3 +183,6 @@ let write_string b s =
   add_vint b Codec.string_prefix;
   add_vint b (String.length s);
   add_string b s
+
+let with_buffer f t = f t.buffer 0 t.position
+
