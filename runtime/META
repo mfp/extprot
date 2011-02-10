@@ -1,0 +1,6 @@
+name="extprot"
+description="extprot runtime"
+requires="extlib"
+archive(byte)="extprot.cma"
+archive(native)="extprot.cmxa"
+

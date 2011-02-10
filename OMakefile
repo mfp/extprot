@@ -8,6 +8,10 @@ OCAMLFLAGS = -dtypes -w Az -warn-error Az
 OCAMLOPTFLAGS = -S -inline 100
 OCAMLCFLAGS += -g
 
+prefix = /usr/local
+INSTALL = install
+RM = rm -f
+
 OCAMLPACKS[] =
 	camlp4
 	extlib
@@ -39,7 +43,17 @@ BASE = $(dir .)
 extprotc: compiler/extprotc
 	cp $^ $@
 
+.PHONY: install
+install:
+	$(INSTALL) compiler/extprotc $(prefix)/bin/
+	ocamlfind install -patch-version "git" extprot runtime/META $(addsuffixes .cma .cmxa .cmx .cmi, runtime/extprot) runtime/*.mli
+
+.PHONY: uninstall
+uninstall:
+	$(RM) $(prefix)/extprotc
+	ocamlfind remove extprot
+
 .PHONY: clean
 clean:
-	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot
+	$(RM) $(filter-proper-targets $(ls R, .)) *.s *.annot
 
