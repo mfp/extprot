@@ -46,7 +46,7 @@ extprotc: compiler/extprotc
 .PHONY: install
 install:
 	$(INSTALL) compiler/extprotc $(prefix)/bin/
-	ocamlfind install -patch-version "git" extprot runtime/META $(addsuffixes .cma .cmxa .cmx .cmi, runtime/extprot) runtime/*.mli
+	ocamlfind install -patch-version "git" extprot runtime/META $(addsuffixes .cma .cmxa .cmx .cmi .a, runtime/extprot) runtime/*.mli
 
 .PHONY: uninstall
 uninstall:
