@@ -746,19 +746,7 @@ struct
                     ] in $lid:loop$ [] nelms
                   >>
               | Array ->
-                  <:expr<
-                    match nelms with [
-                        0 -> [||]
-                      | n ->
-                          let elm = $read llty$ in
-                          let a = Array.make nelms elm in begin
-                            for i = 1 to nelms - 1 do
-                              a.(i) := $read llty$
-                            done;
-                            a
-                          end
-                    ]
-                  >>
+                  <:expr< Array.init nelms (fun _ -> $read llty$) >>
           in wrap_reader opts <:expr<
                 let t = $RD.reader_func `Read_prefix$ s in
                   match Extprot.Codec.ll_type t with [
