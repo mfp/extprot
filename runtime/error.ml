@@ -46,6 +46,13 @@ let pp_extprot_error pp (e, loc) = match e with
   | Bad_format err ->
       PP.pp_tuple2 ~constr:"Bad_format" pp_format_error pp_location pp (err, loc)
 
+let () =
+  Printexc.register_printer
+    (function
+         Extprot_error (err, loc) ->
+           Some (PP.ppfmt "Extprot_error %a" pp_extprot_error (err, loc))
+       | _ -> None)
+
 let extprot_error err loc = raise (Extprot_error (err, loc))
 
 let bad_format err loc = extprot_error (Bad_format err) loc
