@@ -133,6 +133,19 @@ let ctyp_of_path path = match List.rev @@ String.nsplit path "." with
           <:ctyp< $lid:ty$ >>
           mods
 
+module Caml =
+  Camlp4OCamlParser.Make
+    (Camlp4OCamlRevisedParser.Make
+       (Camlp4.OCamlInitSyntax.Make(Ast)(Gram)(Quotation)))
+
+let expr_of_string s =
+  try
+    Gram.parse_string Caml.expr (Loc.mk "<string>") s
+  with Loc.Exc_located (_, b) as e ->
+    Printf.eprintf "Parse error in OCaml expression: %s\nin\n%s\n"
+      (Printexc.to_string b) s;
+    raise e
+
 let expr_of_path expr = match List.rev @@ String.nsplit expr "." with
     [] -> raise (Bad_option "Empty expr")
   | e :: mods ->
@@ -527,6 +540,12 @@ struct
       { c with c_pretty_printer =
           Some <:str_item< value $lid:"pp_" ^ tyname$ = $wrap expr$ >> }
 
+  let add_typedecl_pretty_printer bindings tyname typarams texpr opts c =
+    match lookup_option "pp" opts with
+        None -> add_typedecl_pretty_printer bindings tyname typarams texpr opts c
+      | Some s ->
+      { c with c_pretty_printer =
+          Some <:str_item< value $lid:"pp_" ^ tyname$ = $expr_of_string s$ >> }
 end
 
 module Make_reader

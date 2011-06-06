@@ -2,7 +2,10 @@ OCAMLINCLUDES[] += $(BASE)/runtime
 OCAML_LIBS[] =
 	$(BASE)/runtime/extprot
 
-OCAMLFLAGS += -syntax camlp4o
+CAMLP4PATH = $(shell ocamlfind query camlp4)
+PARSERS_PATH = $(CAMLP4PATH)/Camlp4Parsers
+
+OCAMLFLAGS += -syntax camlp4o -I $(PARSERS_PATH)
 OCAMLDEPFLAGS += -syntax camlp4o
 
 OCAMLPACKS[] +=
@@ -18,6 +21,10 @@ EXTPROT_OBJS[] =
 	gencode_types
 	gen_OCaml
 
+CAMLP4_OBJS[] =
+	Camlp4OCamlRevisedParser
+	Camlp4OCamlParser
+
 section
 	OCAMLPACKS[] += camlp4.extend
 	OCAMLFLAGS += -w e
@@ -28,7 +35,8 @@ section
 	CamlSources(protocol_types gencode_types)
 
 OCAMLPACKS += camlp4.lib
-OCamlProgram(extprotc, $(EXTPROT_OBJS) extprotc)
+OCamlProgram(extprotc, \
+    $(addprefix $(PARSERS_PATH)/, $(CAMLP4_OBJS)) $(EXTPROT_OBJS) extprotc)
 
 .DEFAULT: extprotc$(EXE)
 
