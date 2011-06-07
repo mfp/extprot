@@ -45,6 +45,59 @@ will translate to this module:
       val write_msg1 : Extprot.Msg_buffer.t -> msg1 -> unit
     end
 
+### Type options
+
+You can give hints to the code generator by appending
+
+   options "ocaml.xxx" = "..."
+           "ocaml.yyy" = "..."
+
+to the type definition.
+
+#### Using external types and type aliases
+
+The generated code can convert automatically values from the serialization
+type to an external one by using suitable conversion functions; e.g.,
+
+    type timestamp = long
+      options "ocaml.type" = "Time.t, Time.of_int64, Time.to_int64"
+
+will serialize Time.t values by converting them to 64-bit integers
+(using Time.to_int64), and deserialize by reading a 64-bit integer and
+converting it into a Time.t value with Time.of_int64. The "ocaml.type" option
+value _must_ be a comma-separated list of identifiers (with optional module
+paths).
+
+##### Type equality
+
+You can indicate that a type is equal to an existing one with the
+"ocaml.type_equals" option; e.g.,
+
+
+    type opt 'a = None | Some 'a
+      options "ocaml.type_equals" = "option"
+
+defines an opt type that is equal to the usual option type. The
+"ocaml.type_equals" value must be an idenfifier with optional module path.
+
+#### Pretty-printers
+
+You can provide a customized pretty-printer function that overrides the
+default one with the "ocaml.pp" option; its value must be a valid
+OCaml expression of type  ... -> Format.formatter -> a -> unit where
+the ellipsis represents pretty-printer functions for each type parameter
+(if any)
+
+    type opt 'a = None | Some 'a
+      options "ocaml.type_equals" = "option"
+              "ocaml.pp" =
+                "fun pp_a fmt -> function
+                     None -> Format.fprintf fmt \"nothing at all\"
+                   | Some x -> Format.fprintf fmt \"some value %a\" pp_a x"
+
+Note that special characters need to be escaped inside the string given as the
+option value (as done in normal OCaml programs).
+
 ### Performance
 
 See the `test/bm_01` program.
