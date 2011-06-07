@@ -122,7 +122,7 @@ EXTEND Gram
 
   a_LIDENT: [ [ `LIDENT s -> s ] ];
   a_UIDENT: [ [ `UIDENT s -> s ] ];
-  a_STRING: [ [ `STRING (_, s) -> s ] ];
+  a_STRING: [ [ `STRING (s, _) -> s ] ];
 
 END
 
