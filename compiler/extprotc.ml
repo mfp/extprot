@@ -100,6 +100,12 @@ let () =
        let output = match !output with
            None -> Filename.chop_extension file ^ ".ml"
          | Some f -> f in
+
+       if output = file then begin
+         print "extprotc: refusing to overwrite %S@." file;
+         exit 2
+       end;
+
        let och = open_out output in
        let decls = Parser.print_synerr Parser.parse_file file in
          begin
