@@ -103,19 +103,20 @@ let read_i32_fallback t p = function
 
 let read_i32 t = Read_prim_type(t, Bits32, read_raw_i32, read_i32_fallback)
 
+let i64_buf = "12345678"
+let load_i64_buf t = read_bytes t i64_buf 0 8
+let i64_byte_n n = Char.code (String.unsafe_get i64_buf n)
+
 let read_i64_bits t =
-  let a = read_byte t in
-  let b = read_byte t in
-  let c = read_byte t in
-  let d = read_byte t in
-  let e = read_byte t in
-  let f = read_byte t in
-  let g = read_byte t in
-  let h = read_byte t in
-    to_i64 a          +!! (to_i64 b <!! 8) +!!
-    (to_i64 c <!! 16) +!! (to_i64 d <!! 24) +!!
-    (to_i64 e <!! 32) +!! (to_i64 f <!! 40) +!!
-    (to_i64 g <!! 48) +!! (to_i64 h <!! 56)
+  load_i64_buf t;
+  let x1 = i64_byte_n 0 + (i64_byte_n 1 lsl 8) + (i64_byte_n 2 lsl 16) in
+  let x2 = i64_byte_n 3 + (i64_byte_n 4 lsl 8) + (i64_byte_n 5 lsl 16) in
+  let x3 = i64_byte_n 6 + (i64_byte_n 7 lsl 8) in
+    Int64.add
+      (Int64.add
+         (Int64.of_int x1)
+         (Int64.shift_left (Int64.of_int x2) 24))
+      (Int64.shift_left (Int64.of_int x3) 48)
 
 let read_raw_i64 = read_i64_bits
 
