@@ -1,4 +1,5 @@
 open Printf
+open Sexplib.Conv
 
 TYPE_CONV_PATH "Extprot_compiler.Protocol_types"
 

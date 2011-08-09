@@ -1,4 +1,5 @@
 open Ptypes
+open Sexplib.Conv
 
 TYPE_CONV_PATH "Extprot_compiler.Gencode_types"
 
