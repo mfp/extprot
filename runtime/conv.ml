@@ -14,7 +14,8 @@ let dump f buf x =
   Msg_buffer.clear buf;
   f buf x
 
-let deserialize f s = f (Reader.String_reader.from_string s)
+let deserialize f ?(offset = 0) s =
+  f (Reader.String_reader.make s offset (String.length s - offset))
 
 let serialize_versioned ?buf fs version x =
   let buf = get_buf buf in

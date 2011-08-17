@@ -5,7 +5,7 @@
 exception Wrong_protocol_version of int * int
 
 val serialize : ?buf:Msg_buffer.t -> (Msg_buffer.t -> 'a -> 'b) -> 'a -> string
-val deserialize : (Reader.String_reader.t -> 'a) -> string -> 'a
+val deserialize : (Reader.String_reader.t -> 'a) -> ?offset:int -> string -> 'a
 
 val read : (Reader.IO_reader.t -> 'a) -> IO.input -> 'a
 
