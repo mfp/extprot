@@ -130,7 +130,7 @@ end
 module Probabilistic =
 struct
   open Extprot.Random_gen
-  open Util
+  open Test_util
 
   let check_roundtrip write read prettyprint v =
     (* print_endline @@ prettyprint v; *)
@@ -529,7 +529,7 @@ let () =
           List.map (fun digest -> { Simple_digest2.digest = digest; extra = "whatever" })
             [ Digest_type.bad_digest; Digest_type.from_string "foo" ] in
         let s = String.concat "" @@
-                List.map (Util.encode Simple_digest2.write_simple_digest2) digests in
+                List.map (Test_util.encode Simple_digest2.write_simple_digest2) digests in
         let reader = E.Reader.String_reader.make s 0 (String.length s) in
           begin
             try

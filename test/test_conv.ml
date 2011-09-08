@@ -1,7 +1,7 @@
 open Printf
 open OUnit
 open Test_types
-open Util
+open Test_util
 module PP = Extprot.Pretty_print
 module M = Extprot.Msg_buffer
 module C = Extprot.Conv

@@ -10,7 +10,7 @@ TEST_MODULES[] =
     digest_type
     test_types
     gen_data
-    util
+    test_util
     unit_write
     test_conv
     test_extensions
