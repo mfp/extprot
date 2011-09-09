@@ -121,6 +121,8 @@ struct
   type t =  { io : IO.input; mutable pos : int }
   type position = int
 
+  let read_bytes_is_atomic = false
+
   let from_io io = { io = io; pos = 0 }
 
   let from_string ?(offset = 0) s =
@@ -187,6 +189,8 @@ module String_reader =
 struct
   type t = { mutable buf : string; mutable last : int; mutable pos : int }
   type position = int
+
+  let read_bytes_is_atomic = true
 
   let make s off len =
     if off < 0 || len < 0 || off + len > String.length s then

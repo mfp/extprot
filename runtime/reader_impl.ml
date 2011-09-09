@@ -104,14 +104,32 @@ let read_i32_fallback t p = function
 let read_i32 t = Read_prim_type(t, Bits32, read_raw_i32, read_i32_fallback)
 
 let i64_buf = "12345678"
-let load_i64_buf t = read_bytes t i64_buf 0 8
-let i64_byte_n n = Char.code (String.unsafe_get i64_buf n)
+
+let load_i64_buf =
+  (* if read_bytes is atomic, we can use a shared buffer as long as we are
+   * careful afterwards and don't allow a context switch before we read its
+   * contents *)
+  if read_bytes_is_atomic then
+    (fun t ->
+      read_bytes t i64_buf 0 8;
+      i64_buf)
+  else
+    (* otherwise, allocate a new buf *)
+    (fun t ->
+       let buf = String.create 8 in
+         read_bytes t buf 0 8;
+         buf)
+
+let i64_byte_n buf n = Char.code (String.unsafe_get buf n)
 
 let read_i64_bits t =
-  load_i64_buf t;
-  let x1 = i64_byte_n 0 + (i64_byte_n 1 lsl 8) + (i64_byte_n 2 lsl 16) in
-  let x2 = i64_byte_n 3 + (i64_byte_n 4 lsl 8) + (i64_byte_n 5 lsl 16) in
-  let x3 = i64_byte_n 6 + (i64_byte_n 7 lsl 8) in
+  let buf = load_i64_buf t in
+  (* we read the bits without causing any allocation, thus preventing a
+   * context switch, so it's OK if buf is allocated "statically" and reused
+   * when load_i64_buf decides to *)
+  let x1 = i64_byte_n buf 0 + (i64_byte_n buf 1 lsl 8) + (i64_byte_n buf 2 lsl 16) in
+  let x2 = i64_byte_n buf 3 + (i64_byte_n buf 4 lsl 8) + (i64_byte_n buf 5 lsl 16) in
+  let x3 = i64_byte_n buf 6 + (i64_byte_n buf 7 lsl 8) in
     Int64.add
       (Int64.add
          (Int64.of_int x1)
