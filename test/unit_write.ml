@@ -132,12 +132,14 @@ struct
   open Extprot.Random_gen
   open Test_util
 
-  let check_roundtrip write read prettyprint v =
+  let check_roundtrip write read io_read prettyprint v =
     (* print_endline @@ prettyprint v; *)
     let enc = encode write v in
       (* print_endline @@ PP.pp (E.Inspect_msg.inspect ~verbose:false) (IO.input_string enc); *)
       try
-        assert_equal ~printer:(wrap_printer prettyprint) v (decode read enc)
+        assert_equal ~printer:(wrap_printer prettyprint) v (decode read enc);
+        assert_equal ~printer:(wrap_printer prettyprint) v
+          (E.Conv.read io_read (IO.input_string enc))
       with E.Error.Extprot_error (err, loc) ->
         assert_failure @@
         sprintf "%s\nfor\n %s\nencoded as\n%s =\n%s =\n%s\n"
@@ -155,7 +157,9 @@ struct
         for i = 0 to 5000 do
           let v = Gen_data.generate Gen_data.complex_rtt in
             check_roundtrip
-              Complex_rtt.write_complex_rtt Complex_rtt.read_complex_rtt
+              Complex_rtt.write_complex_rtt
+              Complex_rtt.read_complex_rtt
+              Complex_rtt.fast_io_read_complex_rtt
               (PP.pp Complex_rtt.pp_complex_rtt) v
         done
       end;
@@ -164,7 +168,9 @@ struct
         for i = 0 to 5000 do
           let v = Gen_data.generate Gen_data.rec_message in
             check_roundtrip
-              Rec_message.write_rec_message Rec_message.read_rec_message
+              Rec_message.write_rec_message
+              Rec_message.read_rec_message
+              Rec_message.fast_io_read_rec_message
               (PP.pp Rec_message.pp_rec_message) v
         done
       end;
@@ -173,7 +179,9 @@ struct
         for i = 0 to 5000 do
           let v = Gen_data.generate Gen_data.rec_message_sum in
             check_roundtrip
-              Rec_message_sum.write_rec_message_sum Rec_message_sum.read_rec_message_sum
+              Rec_message_sum.write_rec_message_sum
+              Rec_message_sum.read_rec_message_sum
+              Rec_message_sum.fast_io_read_rec_message_sum
               (PP.pp Rec_message_sum.pp_rec_message_sum) v
         done
       end;
@@ -182,7 +190,9 @@ struct
         for i = 0 to 5000 do
           let v = Gen_data.generate Gen_data.rec_fields in
             check_roundtrip
-              Rec_fields.write_rec_fields Rec_fields.read_rec_fields
+              Rec_fields.write_rec_fields
+              Rec_fields.read_rec_fields
+              Rec_fields.fast_io_read_rec_fields
               (PP.pp Rec_fields.pp_rec_fields) v
         done
       end;
@@ -190,7 +200,9 @@ struct
       "integer" >:: begin fun () ->
         let check n =
           check_roundtrip
-            Simple_int.write_simple_int Simple_int.read_simple_int
+            Simple_int.write_simple_int
+            Simple_int.read_simple_int
+            Simple_int.fast_io_read_simple_int
             (PP.pp Simple_int.pp_simple_int)
             { Simple_int.v = n }
         in
@@ -206,7 +218,9 @@ struct
       "bool" >:: begin fun () ->
         let check v =
           check_roundtrip
-            Simple_bool.write_simple_bool Simple_bool.read_simple_bool
+            Simple_bool.write_simple_bool
+            Simple_bool.read_simple_bool
+            Simple_bool.fast_io_read_simple_bool
             (PP.pp Simple_bool.pp_simple_bool)
             { Simple_bool.v = v }
         in check true; check false
@@ -215,7 +229,9 @@ struct
       "byte" >:: begin fun () ->
         let check v =
           check_roundtrip
-            Simple_byte.write_simple_byte Simple_byte.read_simple_byte
+            Simple_byte.write_simple_byte
+            Simple_byte.read_simple_byte
+            Simple_byte.fast_io_read_simple_byte
             (PP.pp Simple_byte.pp_simple_byte)
             { Simple_byte.v = v }
         in for i = 0 to 255 do check i done
@@ -224,7 +240,9 @@ struct
       "long" >:: begin fun () ->
         let check v =
           check_roundtrip
-            Simple_long.write_simple_long Simple_long.read_simple_long
+            Simple_long.write_simple_long
+            Simple_long.read_simple_long
+            Simple_long.fast_io_read_simple_long
             (PP.pp Simple_long.pp_simple_long)
             { Simple_long.v = v }
         in for i = 0 to iterations do check (Gen_data.generate rand_int64) done
@@ -234,7 +252,9 @@ struct
         let check v =
           try
             check_roundtrip
-              Simple_float.write_simple_float Simple_float.read_simple_float
+              Simple_float.write_simple_float
+              Simple_float.read_simple_float
+              Simple_float.fast_io_read_simple_float
               (PP.pp Simple_float.pp_simple_float)
               { Simple_float.v = v }
           with e -> match classify_float v with
@@ -246,7 +266,9 @@ struct
       "string" >:: begin fun () ->
         let check v =
           check_roundtrip
-            Simple_string.write_simple_string Simple_string.read_simple_string
+            Simple_string.write_simple_string
+            Simple_string.read_simple_string
+            Simple_string.fast_io_read_simple_string
             (PP.pp Simple_string.pp_simple_string)
             { Simple_string.v = v }
         in for i = 0 to iterations do
@@ -257,7 +279,9 @@ struct
       "abstract type (Digest_type.t)" >:: begin fun () ->
         let check v =
           check_roundtrip
-            Simple_digest.write_simple_digest Simple_digest.read_simple_digest
+            Simple_digest.write_simple_digest
+            Simple_digest.read_simple_digest
+            Simple_digest.fast_io_read_simple_digest
             (PP.pp Simple_digest.pp_simple_digest)
             { Simple_digest.digest = v }
         in for i = 0 to iterations / 10 do
@@ -268,7 +292,9 @@ struct
       "sum type" >:: begin fun () ->
         let check v =
           check_roundtrip
-            Simple_sum.write_simple_sum Simple_sum.read_simple_sum
+            Simple_sum.write_simple_sum
+            Simple_sum.read_simple_sum
+            Simple_sum.fast_io_read_simple_sum
             (PP.pp Simple_sum.pp_simple_sum)
             { Simple_sum.v = v } in
         let rand_simple_sum =
@@ -283,7 +309,9 @@ struct
       "lists and arrays" >:: begin fun () ->
         let check v =
           check_roundtrip
-            Lists_arrays.write_lists_arrays Lists_arrays.read_lists_arrays
+            Lists_arrays.write_lists_arrays
+            Lists_arrays.read_lists_arrays
+            Lists_arrays.fast_io_read_lists_arrays
             (PP.pp Lists_arrays.pp_lists_arrays)
             v in
         let rand_lists_arrays =
