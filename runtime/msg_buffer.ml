@@ -186,3 +186,4 @@ let write_string b s =
 
 let with_buffer f t = f t.buffer 0 t.position
 
+let unsafe_contents t = t.buffer

@@ -204,12 +204,18 @@ struct
       if Codec.ll_type hd <> Codec.Tuple then
         Error.bad_wire_type ~ll_type:(Codec.ll_type hd) ();
       let len = IO_reader.read_vint ch in
-      let m = Msg_buffer.create () in
+      let hd_len = Codec.vint_length hd in
+      let len_len = Codec.vint_length len in
+      (* could expose some
+       * from_io_reader_non_threadsafe : ?Msg_buffer.t -> IO.input -> t
+       * allowing to read into the same (msg)_buffer instead of allocating a
+       * fresh one for each message -- then we'd have to resize the buffer
+       * here (if needed) instead of allocating a new one  *)
+      let m = Msg_buffer.make (hd_len + len_len + len) in
         Msg_buffer.add_vint m hd;
         Msg_buffer.add_vint m len;
         let off = Msg_buffer.length m in
-        let buf = String.create (len + off) in
-          String.blit (Msg_buffer.contents m) 0 buf 0 off;
+        let buf = Msg_buffer.unsafe_contents m in
           IO_reader.read_bytes ch buf off len;
           (make buf 0 (String.length buf), buf)
 
