@@ -405,12 +405,6 @@ let generate_code ?width containers =
           <:str_item< >>
           containers)
 
-let list_mapi f l =
-  let i = ref (-1) in
-    List.map (fun x -> incr i; f !i x) l
-
-let make_list f n = Array.to_list (Array.init f n)
-
 module Pretty_print =
 struct
   let _loc = Loc.mk "Gen_OCaml.Pretty_print"
@@ -588,7 +582,7 @@ struct
                          else $expr$
                        in $e$
                      >>)
-          (list_mapi (fun i (ty, default) -> (i, ty, default)) lltys_and_defs)
+          (List.mapi (fun i (ty, default) -> (i, ty, default)) lltys_and_defs)
           (f (List.rev vars))
 
     and read_tuple_elms lltys_and_defs =
@@ -842,7 +836,7 @@ struct
     let e =
       List.fold_right
         (fun (i, fieldinfo) e -> read_field i fieldinfo e)
-        (list_mapi (fun i x -> (i, x)) fields)
+        (List.mapi (fun i x -> (i, x)) fields)
         record
     in
       <:match_case<
@@ -877,7 +871,7 @@ struct
         Message_single (namespace, fields) ->
           wrap_msg_reader msgname (record_case ?namespace msgname 0 fields)
       | Message_sum l ->
-          list_mapi
+          List.mapi
             (fun tag (namespace, constr, fields) ->
                record_case
                  ~namespace:(Option.default constr namespace)
@@ -1002,7 +996,7 @@ let rec write_field ?namespace fname =
       >>
 
   and write_tuple tag v lltys =
-    let var_tys = list_mapi (fun i ty -> (sprintf "v%d" i, ty)) lltys in
+    let var_tys = List.mapi (fun i ty -> (sprintf "v%d" i, ty)) lltys in
     let patt =
       Ast.paCom_of_list @@ List.map (fun (v, _) -> <:patt< $lid:v$ >>) var_tys
     in
@@ -1056,7 +1050,7 @@ let rec write_field ?namespace fname =
         let non_constant_cases =
           List.map
             (fun (c, lltys) ->
-               let var_tys = list_mapi (fun i ty -> (sprintf "v%d" i, ty)) lltys in
+               let var_tys = List.mapi (fun i ty -> (sprintf "v%d" i, ty)) lltys in
                let patt =
                  List.map (fun (v, _) -> <:patt< $lid:v$ >>) var_tys |>
                  Ast.paCom_of_list
