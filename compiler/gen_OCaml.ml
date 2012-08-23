@@ -801,8 +801,7 @@ struct
                       ~message:$str:msgname$
                       ~constructor:$str:constr_name$
                       ~field:$str:name$
-                      e loc
-              | Extprot.Error.Extprot_error _ -> $expr$ >> in
+                      e loc >> in
       let default = match default_value llty with
           Some expr -> expr
         | None ->
