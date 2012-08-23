@@ -768,7 +768,7 @@ struct
                         let eoht = $RD.reader_func `Offset$ s len in
                         let nelms = $RD.reader_func `Read_vint$ s in
                         let () = Extprot.Limits.check_message_length len in
-                        let () = Extprot.Limits.check_num_elements len in
+                        let () = Extprot.Limits.check_num_elements nelms in
                         let v = $e$ in begin
                           $RD.reader_func `Skip_to$ s eoht;
                           v
