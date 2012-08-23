@@ -572,3 +572,67 @@ let () =
             (Simple_digest.read_simple_digest reader)
       end
     ]
+
+let with_limits ?max_elements ?max_message_length ?max_string_length f () =
+  let open Extprot.Limits in
+  let limits = Extprot.Limits.get_limits () in
+  let def = Option.default in
+    try
+      let max_elements       = def limits.max_elements max_elements in
+      let max_message_length = def limits.max_message_length max_message_length in
+      let max_string_length  = def limits.max_string_length max_string_length in
+        set_limits { max_elements; max_message_length; max_string_length };
+        f ();
+        set_limits limits
+    with exn ->
+      set_limits limits;
+      raise exn
+
+let mk_reader s = E.Reader.String_reader.make s 0 (String.length s)
+
+let () =
+  Register_test.register "limits"
+    [
+      "max_elements" >:: with_limits ~max_elements:10 begin fun () ->
+        let open Extprot.Error in
+        let m1 = { Lists_arrays.lint = []; abool = Array.make 10 false } in
+        let s = Test_util.encode Lists_arrays.write m1 in
+          ignore (Lists_arrays.read (mk_reader s));
+          try
+            let m2 = { Lists_arrays.lint = []; abool = Array.make 11 false } in
+            let s = Test_util.encode Lists_arrays.write m2 in
+            let (_ : Lists_arrays.lists_arrays) = Lists_arrays.read (mk_reader s) in
+              assert_failure
+                "Should have raised Limit_exceeded (Number_of_elements 11)"
+          with Extprot_error (Limit_exceeded (Number_of_elements 11), _) -> ()
+      end;
+
+      "max_string_length" >:: with_limits ~max_string_length:10 begin fun () ->
+        let open Extprot.Error in
+        let m1 = { Simple_string.v = String.make 10 ' ' } in
+        let s = Test_util.encode Simple_string.write m1 in
+          ignore (Simple_string.read (mk_reader s));
+          try
+            let m2 = { Simple_string.v = String.make 11 ' ' } in
+            let s = Test_util.encode Simple_string.write m2 in
+              ignore (Simple_string.read (mk_reader s));
+              assert_failure
+                "Should have raised Limit_exceeded (String_length 11)"
+          with Extprot_error (Limit_exceeded (String_length 11), _) -> ()
+      end;
+
+      "max_message_length" >:: with_limits ~max_message_length:10 begin fun () ->
+        let open Extprot.Error in
+        let m1 = { Simple_string.v = "" } in
+        let s = Test_util.encode Simple_string.write m1 in
+          ignore (Simple_string.read (mk_reader s));
+          try
+            let m2 = { Simple_string.v = String.make 11 ' ' } in
+            let s = Test_util.encode Simple_string.write m2 in
+              ignore (Simple_string.read (mk_reader s));
+              assert_failure
+                "Should have raised Limit_exceeded (Message_length _)"
+          with Extprot_error (Limit_exceeded (Message_length _), _) -> ()
+      end;
+
+    ]
