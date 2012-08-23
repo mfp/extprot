@@ -179,6 +179,7 @@ let read_float t = Read_prim_type(t, Bits64_float, read_raw_float, read_float_fa
 
 let read_raw_string t =
   let len = read_vint t in
+  let () = Limits.check_string_length len in
   let s = String.create len in
     read_bytes t s 0 len;
     s

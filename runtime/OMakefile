@@ -9,6 +9,7 @@ EXTPROT_RUNTIME_OBJS[] =
 	conv
 	error
 	inspect_msg
+	limits
 	monad
 	msg_buffer
 	pretty_print
@@ -19,6 +20,7 @@ EXTPROT_RUNTIME_OBJS[] =
 section
 	OCAMLFLAGS += -for-pack Extprot
 	CamlSources($(EXTPROT_RUNTIME_OBJS))
+	reader.cmo reader.cmi reader.cmx reader.o: limits.cmi limits.cmx
 	$(CamlTargets reader): reader_impl.ml
 
 OCamlPackage(extprot, $(EXTPROT_RUNTIME_OBJS))

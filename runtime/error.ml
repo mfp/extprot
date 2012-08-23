@@ -15,6 +15,12 @@ type extprot_error =
     Missing_tuple_element of int
   | Missing_field
   | Bad_format of format_error
+  | Limit_exceeded of limit
+
+and limit =
+    Message_length of int
+  | Number_of_elements of int
+  | String_length of int
 
 exception Extprot_error of extprot_error * location
 
@@ -38,13 +44,20 @@ let pp_format_error pp = function
   | Conversion_error exn ->
       PP.fprintf pp "Conversion_error (%s)" (Printexc.to_string exn)
 
+let pp_limit pp = function
+    Message_length n -> PP.fprintf pp "Message_length %d" n
+  | Number_of_elements n -> PP.fprintf pp "Number_of_elements %d" n
+  | String_length n -> PP.fprintf pp "String_length %d" n
+
 let pp_extprot_error pp (e, loc) = match e with
     Missing_tuple_element elmno ->
       PP.pp_tuple2 ~constr:"Missing_tuple_element" PP.pp_int pp_location
         pp (elmno, loc)
-  | Missing_field -> PP.fprintf pp "@[<1>Missing_field@ (%a)@])" pp_location loc
+  | Missing_field -> PP.fprintf pp "@[<1>Missing_field@ (%a)@]" pp_location loc
   | Bad_format err ->
       PP.pp_tuple2 ~constr:"Bad_format" pp_format_error pp_location pp (err, loc)
+  | Limit_exceeded lim ->
+      PP.fprintf pp "@[<1>Limit_exceeded@ %a@]" pp_limit lim
 
 let () =
   Printexc.register_printer
@@ -81,3 +94,6 @@ let unknown_tag ?message ?constructor ?field tag =
 
 let conversion_error ?message ?constructor ?field exn =
   bad_format (Conversion_error exn) (location ~message ~constructor ~field ())
+
+let limit_exceeded ?message ?constructor ?field lim =
+  extprot_error (Limit_exceeded lim) (location ~message ~constructor ~field ())
