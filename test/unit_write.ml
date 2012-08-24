@@ -576,12 +576,12 @@ let () =
 let with_limits ?max_elements ?max_message_length ?max_string_length f () =
   let open Extprot.Limits in
   let limits = Extprot.Limits.get_limits () in
-  let def = Option.default in
+  let def x f = match x with None -> f | Some lim -> (fun n -> n <= lim) in
     try
-      let max_elements       = def limits.max_elements max_elements in
-      let max_message_length = def limits.max_message_length max_message_length in
-      let max_string_length  = def limits.max_string_length max_string_length in
-        set_limits { max_elements; max_message_length; max_string_length };
+      let is_num_elements_ok = def max_elements limits.is_num_elements_ok in
+      let is_message_length_ok = def max_message_length limits.is_message_length_ok in
+      let is_string_length_ok = def max_string_length limits.is_string_length_ok in
+        set_limits { is_num_elements_ok; is_message_length_ok; is_string_length_ok; };
         f ();
         set_limits limits
     with exn ->

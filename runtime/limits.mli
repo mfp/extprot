@@ -6,18 +6,22 @@
 
 (** Constraints verified when a message is read. *)
 type limits = {
-  (** Maximum number of elements allowed in a message, a list or an array. *)
-  max_elements : int;
+  (** Check number of elements allowed in a message, a list or an array.
+    * Return [false] if beyond the limit. *)
+  is_num_elements_ok : int -> bool;
 
-  (** Maximum allowed message length. *)
-  max_message_length : int;
+  (** Check message length. Return [false] if beyond the limit. *)
+  is_message_length_ok : int -> bool;
 
-  (** Maximum allowed string length. *)
-  max_string_length : int;
+  (** Check string length. Return [false] if beyond the limit. *)
+  is_string_length_ok : int -> bool
 }
 
-(** Default limits. Uses [Sys.max_string_length] as [max_message_length] and
-  * [max_string_length], and [Sys.max_elements] as [max_elements]. *)
+(** Default limits. They verify that:
+  * * both the number of elements in a message and in arrays/lists are
+  *   below [Sys.max_array_length],
+  * * and that both the message and the string lengths are below
+  *   [Sys.max_string_length] *)
 val default : limits
 
 (** Return current limits. *)
