@@ -322,9 +322,9 @@ let generate_container bindings =
           | Message_alias (path, name) ->
               let full_path = path @ [String.capitalize name] in
               let v = <:expr< $id:ident_with_path _loc full_path (name ^ "_default") $ >> in
+              let v = <:expr< $v$.val () >> in
                 <:str_item<
-                  value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
-                    ref (fun () -> $wrap v$)
+                  value $lid:msgname ^ "_default"$ = ref (fun () -> $wrap v$)
                 >>
           | Message_sum ((namespace, constr, fields) :: _) ->
               let namespace = Option.default constr namespace in
