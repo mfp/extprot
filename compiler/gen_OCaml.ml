@@ -512,7 +512,12 @@ struct
                           List.map constr_case s.constant;
                           List.map constr_ptexprs_case s.non_constant;
                         ]
-          in <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
+          in
+            match get_type_info opts with
+                None -> <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
+              | Some (_, _, tof) ->
+                <:expr< fun pp -> fun x ->
+                          match ($tof$ x) with [ $Ast.mcOr_of_list cases$ ] >>
         end
       | `Record (r, opts) -> begin
           let pp_field (name, _, tyexpr) =
@@ -521,7 +526,13 @@ struct
                 $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core tyexpr$ )
             >> in
           let pp_fields = List.map pp_field r.record_fields in
-            <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ >>
+            match get_type_info opts with
+                None ->
+                  <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ >>
+              | Some (_, _, tof) ->
+                  <:expr< fun ppf -> fun x ->
+                            $pp_func "pp_struct"$ $expr_of_list pp_fields$
+                              ppf ($tof$ x) >>
         end
       | #poly_type_expr_core as ptexpr ->
           let ppfunc_expr = pp_poly_texpr_core ptexpr
