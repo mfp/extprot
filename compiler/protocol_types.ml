@@ -78,6 +78,7 @@ type message_expr_app = [ `App of string * base_type_expr list * type_options ] 
 type message_expr = [
     base_message_expr
   | message_expr_app
+  | `Message_alias of string list * string
   | `Sum of (string * [base_message_expr | message_expr_app]) list
 ] with sexp
 

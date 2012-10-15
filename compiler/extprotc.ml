@@ -63,10 +63,14 @@ let inspect_reduced_decls bindings decls =
 
   List.iter
     (function
-         Ptypes.Message_decl (name, mexpr, _) ->
+         Ptypes.Message_decl (name, (`App _ | `Record _ | `Sum _ as mexpr), _) ->
            prev_const := "";
            print_header "Message %s" name;
            Gencode.iter_message bindings (print_field bindings) print_reduced_field mexpr;
+       | Ptypes.Message_decl (name, `Message_alias (path, aliased_name), _) ->
+           prev_const := "";
+           print_header "Message %s" name;
+           print "%s.%s@." (String.concat "." path) aliased_name
        | Ptypes.Type_decl _ -> ())
     decls
 
@@ -79,6 +83,8 @@ let inspect_concrete bindings decls =
   let print_msg name mexpr =
     match Gencode.low_level_msg_def bindings mexpr with
         Gencode.Message_single (_, fields) -> print_fields fields
+      | Gencode.Message_alias (path, name) ->
+          print " %s.%s@." (String.concat "." path) name
       | Gencode.Message_sum cases ->
           List.iter
             (fun (ns, cons, fields) ->

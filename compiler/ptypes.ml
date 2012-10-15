@@ -49,6 +49,7 @@ let free_type_variables decl : string list =
         concat_map (fun ty -> type_free_vars known (ty :> type_expr)) targs
     | `Record l ->
         concat_map (fun (_, _, e) -> type_free_vars known (e :> type_expr)) l
+    | `Message_alias _ -> []
     | `Sum l ->
         concat_map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l in
 
@@ -107,6 +108,7 @@ let check_declarations decls =
           let rec fold_msg acc : message_expr -> error list = function
               `Record l ->
                 List.fold_left (fun errs (_, _, ty) -> fold_base_ty errs ty) acc l
+            | `Message_alias _ -> acc
             | `App (s, params, _) ->
                 let expected = List.length params in
                 let acc = match smap_find s arities with

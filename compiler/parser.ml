@@ -18,6 +18,10 @@ let sum_of_constructor_list l =
       List.filter_map (function Non_constant (s, l) -> Some (s, l) | _ -> None) l;
   }
 
+let make_complex_msg_expr n = function
+    `Alias (p, name)  -> `Message_alias (n :: p, name)
+  | `Sum (x, l) -> `Sum ((n, x) :: l)
+
 EXTEND Gram
   GLOBAL: declarations;
 
@@ -118,7 +122,14 @@ EXTEND Gram
 
   msg_expr :
     [ [ r = record_or_app -> (r :> message_expr)
-      | l = LIST1 [ n = a_UIDENT; r = record_or_app -> (n, r) ] SEP "|" -> `Sum l ] ];
+      | n = a_UIDENT; x = complex_msg_expr -> make_complex_msg_expr n x ] ];
+
+  complex_msg_expr:
+    [ [ "."; l = LIST0 [ n = a_UIDENT -> n ] SEP "."; name = a_LIDENT ->
+          `Alias (l, name)
+      | x = record_or_app -> `Sum (x, [])
+      | x = record_or_app; "|"; l = LIST1 [ n = a_UIDENT; r = record_or_app -> (n, r) ] SEP "|" ->
+          `Sum (x, l) ] ];
 
   a_LIDENT: [ [ `LIDENT s -> s ] ];
   a_UIDENT: [ [ `UIDENT s -> s ] ];

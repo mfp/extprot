@@ -32,6 +32,7 @@ and 'a message =
     (* namespace (for poly record types) * list of  constructor * mutable * type *)
   | Message_sum of (string option * string * (string * bool * 'a) list) list
     (* list of  namespace * constructor * list of fields as above *)
+  | Message_alias of string list * string (* path * name *)
 
 and vint_meaning =
     Bool

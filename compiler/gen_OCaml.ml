@@ -216,6 +216,8 @@ let generate_container bindings =
            (ctyp_of_path tyname) (List.map ctyp_of_texpr args)
        in typedef msgname <:ctyp< $applied$ >>
 
+   | `Message_alias (path, name) -> <:str_item< >>
+
    | `Sum l ->
        let tydef_of_msg_branch (const, mexpr) =
          <:str_item<
@@ -310,6 +312,12 @@ let generate_container bindings =
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                   ref (fun () -> $ default_record ?namespace fields $)
+              >>
+          | Message_alias (path, name) ->
+              let full_path = path @ [String.capitalize name] in
+              <:str_item<
+                value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
+                  ref (fun () -> $id:ident_with_path _loc full_path (name ^ "_default") $)
               >>
           | Message_sum ((namespace, constr, fields) :: _) ->
               let namespace = Option.default constr namespace in
@@ -437,6 +445,9 @@ struct
             <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
             args
         in <:expr< $pp_func$ pp >>
+    | `Message_alias (path, name) ->
+        let full_path = path @ [String.capitalize name] in
+          <:expr< $id:ident_with_path _loc full_path ("pp_" ^ name)$ >>
     | `Sum l ->
         let match_case (const, mexpr) =
           <:match_case<
@@ -884,6 +895,10 @@ struct
   and read_message msgname = function
         Message_single (namespace, fields) ->
           wrap_msg_reader msgname (record_case ?namespace msgname 0 fields)
+      | Message_alias (path, name) ->
+          let full_path = path @ [String.capitalize name] in
+          let _loc = Loc.mk "<generated code @ read_message>" in
+            <:expr< $id:ident_with_path _loc full_path ("read_" ^ name)$ s >>
       | Message_sum l ->
           List.mapi
             (fun tag (namespace, constr, fields) ->
@@ -1119,6 +1134,9 @@ and write_message msgname =
   ignore msgname;
   let _loc = Loc.mk "<generated code @ write_message>" in function
       Message_single (namespace, fields) -> dump_fields ?namespace 0 fields
+    | Message_alias (path, name) ->
+        let full_path = path @ [String.capitalize name] in
+          <:expr< $id:ident_with_path _loc full_path ("write_" ^ name)$ b msg >>
     | Message_sum l ->
         let match_case (tag, ns, constr, fields) =
           <:match_case<

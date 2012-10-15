@@ -206,6 +206,7 @@ let rec map_message bindings (f : base_type_expr -> _) g =
         (fun r opts ->
             Message_single (Some r.record_name, List.map (map_field g) r.record_fields))
         name ty
+  | `Message_alias (path, name) -> Message_alias (path, name)
 
 let rec iter_message bindings f g =
   let proc_field f const (fname, mutabl, ty) = f const fname mutabl ty in
