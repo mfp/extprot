@@ -288,7 +288,7 @@ let generate_container bindings =
     | `Type_arg n -> <:ctyp< '$n$ >>
 
   in function
-      Message_decl (msgname, mexpr, _) -> begin
+      Message_decl (msgname, mexpr, opts) -> begin
         let default_record ?namespace fields =
           let default_values =
             maybe_all
@@ -307,25 +307,35 @@ let generate_container bindings =
                     l
                 in <:expr< { $Ast.rbSem_of_list assigns$ } >> in
 
+        let wrap x =
+          match get_type_info opts with
+              None -> x
+            | Some (_, unwrap, _) ->
+                <:expr< $unwrap$ $x$ >> in
+
         let default_func = match Gencode.low_level_msg_def bindings mexpr with
             Message_single (namespace, fields) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
-                  ref (fun () -> $ default_record ?namespace fields $)
+                  ref (fun () -> $ wrap (default_record ?namespace fields) $)
               >>
           | Message_alias (path, name) ->
               let full_path = path @ [String.capitalize name] in
-              <:str_item<
-                value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
-                  ref (fun () -> $id:ident_with_path _loc full_path (name ^ "_default") $)
-              >>
+              let v = <:expr< $id:ident_with_path _loc full_path (name ^ "_default") $ >> in
+                <:str_item<
+                  value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
+                    ref (fun () -> $wrap v$)
+                >>
           | Message_sum ((namespace, constr, fields) :: _) ->
               let namespace = Option.default constr namespace in
-              <:str_item<
-                value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
-                  ref (fun () -> $uid:String.capitalize constr$
-                                   $ default_record ~namespace fields $)
-              >>
+              let v =
+                <:expr< $uid:String.capitalize constr$
+                           $ default_record ~namespace fields $ >>
+              in
+                <:str_item<
+                  value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
+                    ref (fun () -> $wrap v$)
+                >>
           | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list" in
         let container =
           empty_container msgname ~default_func (message_types msgname mexpr)
@@ -571,6 +581,18 @@ module Make_reader
             val read_msg_func : string -> string
           end) =
 struct
+  let _loc = Loc.mk "<generated code at Make_reader>"
+
+  let wrap_reader opts expr = match get_type_info opts with
+      Some (_, fromf, _) ->
+        <:expr<
+          try
+            $fromf$ $expr$
+          with [ Extprot.Error.Extprot_error _ as e -> raise e
+               | e -> Extprot.Error.conversion_error e]
+        >>
+    | None -> expr
+
   let rec read_field msgname constr_name name llty =
     let _loc = loc "<generated code @ field_match_cases>" in
 
@@ -622,16 +644,6 @@ struct
       in read_elms mk_expr lltys
 
     and lltys_without_defaults = List.map (fun x -> (x, None))
-
-    and wrap_reader opts expr = match get_type_info opts with
-        Some (_, fromf, _) ->
-          <:expr<
-            try
-              $fromf$ $expr$
-            with [ Extprot.Error.Extprot_error _ as e -> raise e
-                 | e -> Extprot.Error.conversion_error e]
-          >>
-      | None -> expr
 
     and read = function
         Vint (Bool, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_bool$ s >>
@@ -879,25 +891,27 @@ struct
 
   and wrap_msg_reader msgname match_cases =
     let _loc = Loc.mk "<generated code @ wrap_msg_reader>" in
-    <:expr<
-      let t = $RD.reader_func `Read_prefix$ s in begin
-        if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
-          Extprot.Error.bad_wire_type
-            ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
-          else ();
-        match Extprot.Codec.ll_tag t with [
-          $match_cases$
-          | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
-        ]
-      end
-    >>
+      <:expr<
+        let t = $RD.reader_func `Read_prefix$ s in begin
+          if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
+            Extprot.Error.bad_wire_type
+              ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
+            else ();
+          match Extprot.Codec.ll_tag t with [
+            $match_cases$
+            | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
+          ]
+        end
+      >>
 
-  and read_message msgname = function
+  and read_message msgname opts = function
         Message_single (namespace, fields) ->
-          wrap_msg_reader msgname (record_case ?namespace msgname 0 fields)
+          wrap_reader opts
+            (wrap_msg_reader msgname (record_case ?namespace msgname 0 fields))
       | Message_alias (path, name) ->
           let full_path = path @ [String.capitalize name] in
           let _loc = Loc.mk "<generated code @ read_message>" in
+            wrap_reader opts
             <:expr< $id:ident_with_path _loc full_path ("read_" ^ name)$ s >>
       | Message_sum l ->
           List.mapi
@@ -905,7 +919,7 @@ struct
                record_case
                  ~namespace:(Option.default constr namespace)
                  msgname ~constr tag fields) l
-          |> Ast.mcOr_of_list |> wrap_msg_reader msgname
+          |> Ast.mcOr_of_list |> wrap_msg_reader msgname |> wrap_reader opts
 end
 
 let rec raw_rd_func reader_func =
@@ -951,7 +965,7 @@ let add_message_reader bindings msgname mexpr opts c =
 
                   let read_msg_func = ((^) "read_")
                 end) in
-  let read_expr = Mk_normal_reader.read_message msgname llrec in
+  let read_expr = Mk_normal_reader.read_message msgname opts llrec in
     {
       c with c_reader =
          Some <:str_item<
@@ -982,7 +996,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
 
                   let read_msg_func = ((^) "io_read_")
                 end) in
-  let ioread_expr = Mk_io_reader.read_message msgname llrec in
+  let ioread_expr = Mk_io_reader.read_message msgname opts llrec in
     {
       c with c_io_reader =
         Some <:str_item<
@@ -1147,10 +1161,22 @@ and write_message msgname =
           List.mapi (fun i (ns, c, fs) -> (i, ns, c, fs)) l
         in <:expr< match msg with [ $match_cases$ ] >>
 
+let wrap_writer _loc opts expr = match get_type_info opts with
+    Some (_, _, tof) ->
+      <:expr<
+        try
+          let msg = $tof$ msg in
+            $expr$
+        with [ Extprot.Error.Extprot_error _ as e -> raise e
+             | e -> Extprot.Error.conversion_error e]
+      >>
+  | None -> expr
+
 let add_message_writer bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_writer>" in
   let llrec = Gencode.low_level_msg_def bindings mexpr in
-  let write_expr = write_message msgname llrec in
+  let write_expr = write_message msgname llrec |>
+                   wrap_writer _loc opts in
   let writer =
     <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$;
                 value write = $lid:"write_" ^ msgname$; >>
