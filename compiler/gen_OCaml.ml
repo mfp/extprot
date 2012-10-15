@@ -1052,7 +1052,7 @@ let rec write_field ?namespace fname =
                 Extprot.Msg_buffer.add_buffer aux abuf
               }
          >>
-    | Sum (constant, non_constant, _) ->
+    | Sum (constant, non_constant, opts) ->
         let constant_match_cases =
           List.map
             (fun c ->
@@ -1075,10 +1075,18 @@ let rec write_field ?namespace fname =
                  >>)
             non_constant in
         let match_cases = constant_match_cases @ non_constant_cases in
-          <:expr< match $v$ with [ $Ast.mcOr_of_list match_cases$ ] >>
-    | Record (name, fields, _) ->
+          begin match get_type_info opts with
+              None -> <:expr< match $v$ with [ $Ast.mcOr_of_list match_cases$ ] >>
+            | Some (_, _, tof) ->
+                <:expr< match $tof$ $v$ with [ $Ast.mcOr_of_list match_cases$ ] >>
+          end
+
+    | Record (name, fields, opts) ->
         let fields' =
-          List.map (fun f -> (f.field_name, true, f.field_type)) fields
+          List.map (fun f -> (f.field_name, true, f.field_type)) fields in
+        let v = match get_type_info opts with
+            None -> v
+          | Some (_, _, tof) -> <:expr< $tof$ $v$ >>
         in
           <:expr< let b = aux in
                   let msg = $ v $ in
