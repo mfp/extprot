@@ -457,7 +457,7 @@ struct
         in <:expr< $pp_func$ pp >>
     | `Message_alias (path, name) ->
         let full_path = path @ [String.capitalize name] in
-          <:expr< $id:ident_with_path _loc full_path ("pp_" ^ name)$ >>
+          <:expr< $id:ident_with_path _loc full_path ("pp_" ^ name)$ pp >>
     | `Sum l ->
         let match_case (const, mexpr) =
           <:match_case<
@@ -499,9 +499,17 @@ struct
 
   let add_msgdecl_pretty_printer bindings msgname mexpr opts c =
     let expr = pp_message bindings msgname mexpr in
-      { c with c_pretty_printer =
-          Some <:str_item< value $lid:"pp_" ^ msgname$ pp = $expr$;
-                           value pp = $lid:"pp_" ^ msgname$; >> }
+      match get_type_info opts with
+          None ->
+            { c with c_pretty_printer =
+                Some <:str_item< value $lid:"pp_" ^ msgname$ pp = $expr$;
+                                 value pp = $lid:"pp_" ^ msgname$; >> }
+        | Some (_, _, wrap) ->
+            { c with c_pretty_printer =
+                Some
+                  <:str_item<
+                    value $lid:"pp_" ^ msgname$ pp x = $expr$ ($wrap$ x);
+                    value pp = $lid:"pp_" ^ msgname$; >> }
 
   let add_typedecl_pretty_printer bindings tyname typarams texpr opts c =
     let wrap expr =
