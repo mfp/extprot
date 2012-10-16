@@ -175,7 +175,11 @@ let generate_container bindings =
   let typedecl name ?(params = []) ctyp =
     Ast.TyDcl (_loc, name, params, ctyp, []) in
 
-  let typedef name ?(params = []) ctyp =
+  let typedef name ~opts ?(params = []) ctyp =
+    let ctyp = match get_type_info opts with
+        None -> ctyp
+      | Some (ty, _, _) -> ty
+    in
       <:str_item< type $typedecl name ~params ctyp $ >> in
 
   let type_equals ~params ty tyname =
@@ -194,7 +198,12 @@ let generate_container bindings =
             type_equals ~params ty (String.strip tyname)
           with Bad_option msg -> bad_option ~msg "type_equals" tyname in
 
-  let rec message_types msgname = function
+  let message_typedefs ~opts name ctyp =
+    let internal = typedef ~opts:[] ("_" ^ name) ctyp in
+    let ext      = typedef ~opts name <:ctyp< $lid:"_" ^ name$ >> in
+      <:str_item< $internal$; $ext$ >> in
+
+  let rec message_types ?(opts = []) msgname = function
       `Record l ->
         let ctyp (name, mutabl, texpr) =
           let ty = ctyp_of_texpr texpr in match mutabl with
@@ -205,7 +214,8 @@ let generate_container bindings =
             (fun ct field -> <:ctyp< $ct$; $ctyp field$ >>) l
         (* no quotations for type, wtf? *)
         (* in <:str_item< type $msgname$ = { $fields$ } >> *)
-        in typedef msgname <:ctyp< { $fields$ } >>
+        in
+          message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
 
    | `App (name, args, opts) ->
        let tyname = String.capitalize name ^ "." ^ String.uncapitalize name in
@@ -214,9 +224,12 @@ let generate_container bindings =
          List.fold_left
            (fun ty tyvar -> <:ctyp< $ty$ $tyvar$ >>)
            (ctyp_of_path tyname) (List.map ctyp_of_texpr args)
-       in typedef msgname <:ctyp< $applied$ >>
+       in message_typedefs ~opts msgname <:ctyp< $applied$ >>
 
-   | `Message_alias (path, name) -> <:str_item< >>
+   | `Message_alias (path, name) ->
+       let full_path = path @ [String.capitalize name; name ] in
+       let uid       = String.concat "." full_path in
+        message_typedefs ~opts msgname (ctyp_of_path uid)
 
    | `Sum l ->
        let tydef_of_msg_branch (const, mexpr) =
@@ -233,7 +246,11 @@ let generate_container bindings =
        let consts = foldl1 "message_types `Sum" variant
                       (fun vars c -> <:ctyp< $vars$ | $variant c$ >>) l
 
-       in <:str_item< $record_types$; $typedef msgname <:ctyp< [$consts$] >>$ >>
+       in
+         <:str_item<
+           $record_types$;
+           $message_typedefs ~opts msgname <:ctyp< [$consts$] >>$
+         >>
 
   and modules_to_include_of_texpr = function
      | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
@@ -338,7 +355,7 @@ let generate_container bindings =
                 >>
           | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list" in
         let container =
-          empty_container msgname ~default_func (message_types msgname mexpr)
+          empty_container msgname ~default_func (message_types ~opts msgname mexpr)
         in Some container
       end
     | Type_decl (name, params, texpr, opts) ->
@@ -381,7 +398,7 @@ let generate_container bindings =
         let params =
           List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params in
         let type_rhs = maybe_type_equals opts ~params ty in
-        let container = empty_container name (typedef name ~params type_rhs) in
+        let container = empty_container name (typedef name ~params ~opts type_rhs) in
           Some { container with c_import_modules = modules_to_include_of_texpr texpr }
 
 let loc = Camlp4.PreCast.Loc.mk
