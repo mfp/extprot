@@ -200,7 +200,7 @@ let generate_container bindings =
 
   let message_typedefs ~opts name ctyp =
     let internal = typedef ~opts:[] ("_" ^ name) ctyp in
-    let ext      = typedef ~opts name <:ctyp< $lid:"_" ^ name$ >> in
+    let ext      = typedef ~opts name <:ctyp< $ctyp$ >> in
       <:str_item< $internal$; $ext$ >> in
 
   let rec message_types ?(opts = []) msgname = function
