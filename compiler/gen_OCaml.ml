@@ -936,8 +936,9 @@ struct
       | Message_alias (path, name) ->
           let full_path = path @ [String.capitalize name] in
           let _loc = Loc.mk "<generated code @ read_message>" in
+          let reader_func = RD.read_msg_func name in
             wrap_reader opts
-            <:expr< $id:ident_with_path _loc full_path ("read_" ^ name)$ s >>
+            <:expr< $id:ident_with_path _loc full_path reader_func$ s >>
       | Message_sum l ->
           List.mapi
             (fun tag (namespace, constr, fields) ->
