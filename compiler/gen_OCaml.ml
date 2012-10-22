@@ -800,9 +800,13 @@ struct
             >>
       | Record (name, fields, opts) ->
           let fields' =
-            List.map (fun f -> (f.field_name, true, f.field_type)) fields
-          in wrap_reader opts
-               (wrap_msg_reader name (record_case ~namespace:name msgname 0 fields'))
+            List.map (fun f -> (f.field_name, true, f.field_type)) fields in
+          let promoted_match_cases =
+            make_promoted_match_cases msgname [ Some name, None, fields' ] in
+          let match_cases = record_case ~namespace:name msgname 0 fields' in
+            wrap_msg_reader name promoted_match_cases match_cases |>
+            wrap_reader opts
+
       | Message (path, name, opts) ->
           let full_path = path @ [String.capitalize name] in
           let id = ident_with_path _loc full_path (RD.read_msg_func name) in
@@ -914,25 +918,102 @@ struct
             with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
       >>
 
-  and wrap_msg_reader msgname match_cases =
+  and wrap_msg_reader msgname promoted_match_cases match_cases =
     let _loc = Loc.mk "<generated code @ wrap_msg_reader>" in
       <:expr<
         let t = $RD.reader_func `Read_prefix$ s in begin
-          if Extprot.Codec.ll_type t <> Extprot.Codec.Tuple then
-            Extprot.Error.bad_wire_type
-              ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
-            else ();
-          match Extprot.Codec.ll_tag t with [
-            $match_cases$
-            | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
-          ]
+          if Extprot.Codec.ll_type t = Extprot.Codec.Tuple then
+            match Extprot.Codec.ll_tag t with [
+              $match_cases$
+              | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
+            ]
+          else
+           let raise_bad_wire_type () =
+              Extprot.Error.bad_wire_type
+                ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
+           in
+             match Extprot.Codec.ll_tag t with [
+               $promoted_match_cases$
+             | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
+             ]
         end
       >>
 
+  and promoted_type_reader ?namespace ?constr msgname fields =
+    let constr_name = Option.default "<default>" constr in
+
+    let first_field_expr =
+      match fields with
+          [] -> failwith (sprintf "no fields in msg %s" msgname)
+        | (field_name, _, field_type) :: _ ->
+            match RD.raw_rd_func field_type with
+            None -> <:expr< raise_bad_wire_type () >>
+          | Some (mc, reader_expr) ->
+            <:expr<
+              match Extprot.Codec.ll_type t with [
+                  $mc$ -> $reader_expr$ s
+                | _ -> raise_bad_wire_type ()
+              ]
+            >> in
+
+    let other_field_readers =
+      match fields with
+          [] | [_] -> []
+        | _ :: others ->
+            List.map
+              (fun (name, _, llty) ->
+                 match default_value llty with
+                     Some expr -> expr
+                   | None ->
+                       <:expr< Extprot.Error.missing_field
+                                 ~message:$str:msgname$
+                                 ~constructor:$str:constr_name$
+                                 ~field:$str:name$
+                                 ()
+                       >>)
+              others in
+
+    let field_assigns =
+      List.mapi
+        (fun i (name, _, _) -> match namespace with
+             None -> <:rec_binding< $lid:name$ = $lid:sprintf "v%d" i$ >>
+           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ =
+                                          $lid:sprintf "v%d" i$ >>)
+        fields in
+    (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
+    let record =
+      let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
+          None -> r
+        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+
+    let read_others_and_assign =
+      List.fold_right
+        (fun (idx, read_expr) e ->
+           <:expr<
+             let $lid:sprintf "v%d" idx$ = $read_expr$ in $e$ >>)
+        (List.mapi (fun i r -> (i + 1, r)) other_field_readers)
+        record
+    in
+      <:expr<
+         let v0 = $first_field_expr$ in
+           $read_others_and_assign$ >>
+
+  and make_promoted_match_cases msgname field_infos =
+    List.mapi
+      (fun tag (namespace, constr, fields) ->
+         <:match_case<
+           $int:string_of_int tag$ ->
+             $promoted_type_reader ?namespace ?constr msgname fields$ >>)
+      field_infos |>
+    Ast.mcOr_of_list
+
   and read_message msgname opts = function
         Message_single (namespace, fields) ->
-          wrap_reader opts
-            (wrap_msg_reader msgname (record_case ?namespace msgname 0 fields))
+          let promoted_match_cases =
+            make_promoted_match_cases msgname [ namespace, None, fields ] in
+          let match_cases = record_case ?namespace msgname 0 fields in
+            wrap_msg_reader msgname promoted_match_cases match_cases |>
+            wrap_reader opts
       | Message_alias (path, name) ->
           let full_path = path @ [String.capitalize name] in
           let _loc = Loc.mk "<generated code @ read_message>" in
@@ -940,12 +1021,21 @@ struct
             wrap_reader opts
             <:expr< $id:ident_with_path _loc full_path reader_func$ s >>
       | Message_sum l ->
-          List.mapi
-            (fun tag (namespace, constr, fields) ->
-               record_case
-                 ~namespace:(Option.default constr namespace)
-                 msgname ~constr tag fields) l
-          |> Ast.mcOr_of_list |> wrap_msg_reader msgname |> wrap_reader opts
+          let promoted_match_cases =
+            make_promoted_match_cases msgname
+              (List.map
+                 (fun (ns, constr, fields) ->
+                    (Some (Option.default constr ns), Some constr, fields))
+                 l) in
+          let match_cases =
+            List.mapi
+              (fun tag (namespace, constr, fields) ->
+                 record_case
+                   ~namespace:(Option.default constr namespace)
+                   msgname ~constr tag fields) l
+            |> Ast.mcOr_of_list
+          in wrap_msg_reader msgname promoted_match_cases match_cases |>
+             wrap_reader opts
 end
 
 let rec raw_rd_func reader_func =

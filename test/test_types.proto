@@ -78,3 +78,9 @@ type widen 'a 'b 'c 'd = { a : 'a; b : 'b; c : 'c; d : 'd }
 message widen1 = widen< byte, int, long, byte >
 message widen2 = widen< int, long, float, long >
 message widen3 = widen< long, float, float, float>
+
+message prim_promotion0 = { v : string }
+message prim_promotion1 = { v : string; foo : sum_type<int, int, int> }
+message prim_promotion2 = { v : prim_promotion1; }
+
+(* vim:set ft=omlet: *)

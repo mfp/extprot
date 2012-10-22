@@ -116,6 +116,13 @@ let () = Register_test.register "extensions"
         { Msg1e.a = Node2.Node (123, Color.Red, tup)  }
     end;
 
+    "primitive type promoted to message" >:: begin fun () ->
+      check_roundtrip
+        Prim_promotion2.pp Prim_promotion0.write Prim_promotion2.read
+        { Prim_promotion0.v = "foo" }
+        { Prim_promotion2.v = { Prim_promotion1.v = "foo"; foo = Sum_type.D; } }
+    end;
+
     "numeric type widening" >:: begin fun () ->
       check_roundtrip Widen2.pp_widen2 Widen1.write_widen1 Widen2.read_widen2
         { Widen.a = 1; b = 2; c = 3L; d = 4 }
