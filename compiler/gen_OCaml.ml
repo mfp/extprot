@@ -947,14 +947,14 @@ struct
           [] -> failwith (sprintf "no fields in msg %s" msgname)
         | (field_name, _, field_type) :: _ ->
             match RD.raw_rd_func field_type with
-            None -> <:expr< raise_bad_wire_type () >>
-          | Some (mc, reader_expr) ->
-            <:expr<
-              match Extprot.Codec.ll_type t with [
-                  $mc$ -> $reader_expr$ s
-                | _ -> raise_bad_wire_type ()
-              ]
-            >> in
+                None -> <:expr< raise_bad_wire_type () >>
+              | Some (mc, reader_expr) ->
+                <:expr<
+                  match Extprot.Codec.ll_type t with [
+                      $mc$ -> $reader_expr$ s
+                    | _ -> raise_bad_wire_type ()
+                  ]
+                >> in
 
     let other_field_readers =
       match fields with
