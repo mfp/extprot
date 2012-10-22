@@ -905,17 +905,12 @@ struct
     in
       <:match_case<
         $int:string_of_int tag$ ->
-          let len = $RD.reader_func `Read_vint$ s in
-          let eom = $RD.reader_func `Offset$ s len in
-          let nelms = $RD.reader_func `Read_vint$ s in
-            try
-              let () = Extprot.Limits.check_num_elements ~message:$str:msgname$ nelms in
-              let () = Extprot.Limits.check_message_length ~message:$str:msgname$ len in
-              let v = $e$ in begin
-                $RD.reader_func `Skip_to$ s eom;
-                v
-              end
-            with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
+          try
+            let v = $e$ in begin
+              $RD.reader_func `Skip_to$ s eom;
+              v
+            end
+          with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
       >>
 
   and wrap_msg_reader msgname promoted_match_cases match_cases =
@@ -923,10 +918,15 @@ struct
       <:expr<
         let t = $RD.reader_func `Read_prefix$ s in begin
           if Extprot.Codec.ll_type t = Extprot.Codec.Tuple then
-            match Extprot.Codec.ll_tag t with [
-              $match_cases$
-              | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
-            ]
+            let len   = $RD.reader_func `Read_vint$ s in
+            let eom   = $RD.reader_func `Offset$ s len in
+            let nelms = $RD.reader_func `Read_vint$ s in
+            let () = Extprot.Limits.check_num_elements ~message:$str:msgname$ nelms in
+            let () = Extprot.Limits.check_message_length ~message:$str:msgname$ len in
+              match Extprot.Codec.ll_tag t with [
+                $match_cases$
+                | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
+              ]
           else
            let raise_bad_wire_type () =
               Extprot.Error.bad_wire_type
