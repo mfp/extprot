@@ -29,7 +29,7 @@ let beta_reduce_sum self bindings s opts =
       s.non_constant
   in `Sum ({ s with non_constant = non_const }, opts)
 
-let rec beta_reduce_record self bindings r opts =
+let beta_reduce_record self bindings r opts =
   let fields' =
     List.map
       (fun (name, ismutable, ty) -> (name, ismutable, self bindings ty))
@@ -180,7 +180,7 @@ let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
   | `Record (r, opts) -> beta_reduce_record reduce_to_poly_texpr_core bindings r opts
   | #base_type_expr as x -> (reduce_to_poly_texpr_core bindings x :> poly_type_expr)
 
-let rec map_message bindings (f : base_type_expr -> _) g =
+let map_message bindings (f : base_type_expr -> _) g =
   let map_field f (fname, mutabl, ty) = (fname, mutabl, f ty) in
   let expand_record_type f name ty =
     match beta_reduce_texpr bindings ty with
@@ -208,7 +208,7 @@ let rec map_message bindings (f : base_type_expr -> _) g =
         name ty
   | `Message_alias (path, name) -> Message_alias (path, name)
 
-let rec iter_message bindings f g =
+let iter_message bindings f g =
   let proc_field f const (fname, mutabl, ty) = f const fname mutabl ty in
   let iter_expanded_type const name ty =
     match beta_reduce_texpr bindings ty with

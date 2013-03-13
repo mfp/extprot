@@ -1,4 +1,3 @@
-open Printf
 module PP = Pretty_print
 
 type location =

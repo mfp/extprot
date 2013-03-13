@@ -4,7 +4,7 @@ BYTE_ENABLED = true
 
 ENDIANNESS = LITTLE_ENDIAN
 
-OCAMLFLAGS = -dtypes -w Az -warn-error Az
+OCAMLFLAGS = -dtypes -warn-error +a-4-6-7-9-18-27..29-32..99
 OCAMLOPTFLAGS = -S -inline 100
 OCAMLCFLAGS += -g
 

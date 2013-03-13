@@ -1,6 +1,3 @@
-open Camlp4.PreCast
-open Printf
-open Syntax
 
 include Protocol_types
 

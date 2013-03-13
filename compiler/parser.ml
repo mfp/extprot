@@ -1,5 +1,4 @@
 open Camlp4.PreCast
-open Printf
 open Syntax
 open Ptypes
 open ExtList

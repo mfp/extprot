@@ -46,8 +46,6 @@ struct
     let r = f x in
       (r, R.get_state ())
 
-  let lift f (x, s) = (f x, s)
-
   let rand_integer n = random R.int n
 
   let rand_bool = random R.bool ()
