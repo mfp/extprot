@@ -16,3 +16,4 @@ OMakefile.omc
 /.omakedb.lock
 /OMakeroot.omc
 /extprotc
+/test/run_tests
