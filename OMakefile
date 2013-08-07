@@ -40,17 +40,17 @@ BASE = $(dir .)
 
 .SUBDIRS: compiler examples runtime test
 
-extprotc: compiler/extprotc
+extprotc$(EXE): compiler/extprotc$(EXE)
 	cp $^ $@
 
 .PHONY: install
 install:
-	$(INSTALL) compiler/extprotc $(prefix)/bin/
+	$(INSTALL) compiler/extprotc$(EXE) $(prefix)/bin/
 	ocamlfind install -patch-version "git" extprot runtime/META $(addsuffixes .cma .cmxa .cmx .cmi .a, runtime/extprot) runtime/*.mli
 
 .PHONY: uninstall
 uninstall:
-	$(RM) $(prefix)/extprotc
+	$(RM) $(prefix)/extprotc$(EXE)
 	ocamlfind remove extprot
 
 .PHONY: clean
