@@ -12,21 +12,28 @@ BYTE_ENABLED = true
 
 ENDIANNESS = LITTLE_ENDIAN
 
-OCAMLFLAGS    = -bin-annot -w +a-4-6-9-27..29-32..99 -warn-error +a-4-6-7-9-18-27..29-32..99
+match $(string $(shell ocaml -version))
+case $"\([0-9]\)\.\([0-9]+\)\."
+       OCAML_MAJOR = $1
+       OCAML_MINOR = $2
+       export
+
+OCAMLFLAGS    = -w +a-4-6-9-27..29-32..99 -warn-error +a-4-6-7-9-18-27..29-32..99
 OCAMLOPTFLAGS = -g -inline 100
 OCAMLCFLAGS  += -g
+
+if $(ge $(OCAML_MAJOR), 4)
+       OCAMLFLAGS += -bin-annot
+       export
 
 OCAMLPACKS[] =
 	camlp4
 	extlib
 
 # workaround for missing dep in camlp4's META for >= 3.11
-match $(string $(shell ocaml -version))
-case $"\([0-9]\)\.\([0-9]+\)\."
-    if $(or $(gt $1, 3), $(and $(equal $1, 3), $(ge $2, 11)))
+if $(or $(gt $(OCAML_MAJOR), 3), $(and $(equal $(OCAML_MAJOR), 3), $(ge $(OCAML_MINOR), 11)))
 	OCAMLPACKS = dynlink $(OCAMLPACKS)
 	export
-    export
 
 CamlSources(mods) =
 	foreach(mod, $(mods))
