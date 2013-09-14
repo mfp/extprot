@@ -451,19 +451,22 @@ struct
 
   let rec pp_message ?namespace bindings msgname = function
       `Record l ->
-        let pp_field (name, _, tyexpr) =
+        let pp_field i (name, _, tyexpr) =
           let selector = match namespace with
               None -> <:expr< (fun t -> t.$lid:name$) >>
             | Some ns -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >> in
-          let label = match namespace with
-              None -> String.capitalize msgname ^ "." ^ name
-            | Some ns -> sprintf "%s.%s.%s"
-                           (String.capitalize msgname) (String.capitalize ns) name
+          let prefix = match namespace with
+              None -> String.capitalize msgname
+            | Some ns -> sprintf "%s.%s"
+                           (String.capitalize msgname) (String.capitalize ns) in
+          let label =
+            if i = 0 then prefix ^ "." ^ name
+            else name
           in <:expr<
                ( $str:label$,
                  $pp_func "pp_field"$ $selector$ $pp_texpr bindings tyexpr$ )
              >> in
-        let pp_fields = List.map pp_field l in
+        let pp_fields = List.mapi pp_field l in
           <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
     | `App(name, args, _) ->
         let pp_func =
@@ -566,12 +569,16 @@ struct
                           match ($tof$ x) with [ $Ast.mcOr_of_list cases$ ] >>
         end
       | `Record (r, opts) -> begin
-          let pp_field (name, _, tyexpr) =
-            <:expr<
-              ( $str:String.capitalize r.record_name ^ "." ^ name$,
-                $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core tyexpr$ )
-            >> in
-          let pp_fields = List.map pp_field r.record_fields in
+          let pp_field i (name, _, tyexpr) =
+            let field_name =
+              if i = 0 then String.capitalize r.record_name ^ "." ^ name
+              else name
+            in
+              <:expr<
+                ( $str:field_name$,
+                  $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core tyexpr$ )
+              >> in
+          let pp_fields = List.mapi pp_field r.record_fields in
             match get_type_info opts with
                 None ->
                   <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ >>
