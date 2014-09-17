@@ -96,7 +96,8 @@ let rec default_value = let _loc = Loc.ghost in function
     | Message (path, name, _) ->
         let full_path = path @ [String.capitalize name] in
         let id = ident_with_path _loc full_path (name ^ "_default") in
-          Some <:expr< ! $id:id$ () >>
+        let e1 = <:expr< ! $id:id$ >> in
+          Some <:expr< $e1$ () >>
     | Tuple (tys, _) -> match maybe_all default_value tys with
           None -> None
         | Some [] -> failwith "default_value: empty tuple"
