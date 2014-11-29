@@ -4,4 +4,7 @@ Changes since version 1.1.1
 * conditionally enable -bin-annot for ocaml >= 4.00 (ygrek)
 * change in generated pretty-printers for records: print module path only for
   first field
+* keep relative order of constant and non-constant constructors in generated
+  OCaml type definition (required for "type_equals").
+* OCaml 4.02.0 compatibility
 
