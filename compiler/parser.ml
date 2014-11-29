@@ -6,15 +6,13 @@ open ExtList
 let declarations = Gram.Entry.mk "type_expr"
 
 type constructor =
-    Constant of string
-  | Non_constant of string * base_type_expr list
+  [ `Constant of string
+  | `Non_constant of string * base_type_expr list ]
 
 let sum_of_constructor_list l =
   {
     type_name = "bogus";
-    constant = List.filter_map (function Constant s -> Some s | _ -> None) l;
-    non_constant =
-      List.filter_map (function Non_constant (s, l) -> Some (s, l) | _ -> None) l;
+    constructors = l;
   }
 
 let make_complex_msg_expr n = function
@@ -59,8 +57,8 @@ EXTEND Gram
       [ t = type_expr_simple -> (t : base_type_expr :> type_expr)] ] ;
 
   const_declarations :
-    [ [ n = a_UIDENT; t = const_params -> Non_constant (n, t)
-      | n = a_UIDENT -> Constant n ] ];
+    [ [ n = a_UIDENT; t = const_params -> `Non_constant (n, t)
+      | n = a_UIDENT -> `Constant n ] ];
 
   const_params :
     [ [ l = LIST1 [ type_expr_simple ] -> l ] ];

@@ -10,7 +10,7 @@ type low_level =
   | Bitstring32 of type_options
   | Bitstring64 of b64_meaning * type_options
   | Bytes of type_options
-  | Sum of constructor list * (constructor * low_level list) list * type_options
+  | Sum of [`Constant of constructor | `Non_constant of constructor * low_level list] list * type_options
   | Record of string * field list * type_options
   | Tuple of low_level list * type_options
   | Htuple of htuple_meaning * low_level * type_options

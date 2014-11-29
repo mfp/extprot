@@ -22,7 +22,12 @@ message msg_sum =
 
 type sum_type 'a 'b 'c = A 'a | B 'b | C 'c | D
 
+type sum_type2 'a = A | B 'a | C | D string
+  options "ocaml.type_equals" = "Dummy_type.sum"
+
 message simple_sum = { v : sum_type<bool, byte, string> }
+
+message test_constructor_order_kept = { v : sum_type2<int> }
 
 message nested_message = { v : simple_sum; b : int }
 

@@ -22,12 +22,14 @@ let beta_reduce_base_texpr_aux f self (bindings : bindings) : base_type_expr -> 
   | (`App _ | `Ext_app _ | `Type_param _) as x -> f bindings x
 
 let beta_reduce_sum self bindings s opts =
-  let non_const =
+  let constructors =
     List.map
-      (fun (const, tys) ->
-         (const, List.map (self bindings) tys))
-      s.non_constant
-  in `Sum ({ s with non_constant = non_const }, opts)
+      (function
+         | `Constant _ as x -> x
+         | `Non_constant (const, tys) ->
+           `Non_constant (const, List.map (self bindings) tys))
+      s.constructors
+  in `Sum ({ s with constructors }, opts)
 
 let beta_reduce_record self bindings r opts =
   let fields' =
@@ -138,17 +140,20 @@ and alpha_convert =
               (bindings, [])
           in (bs, `Record ({ r with record_fields = fields }, opts))
       | `Sum (s, opts) ->
-          let bs, non_constant =
+          let bs, constructors =
             List.fold_right
-              (fun (cons, tys) (bs, l) ->
-                 let bs, tys =
-                   List.fold_right
-                     (fun ty (bs, l) -> let bs, ty = do_convert bs ty in (bs, ty :: l))
-                     tys (bs, [])
-                 in (bs, (cons, tys) :: l))
-              s.non_constant
+              (fun constructor (bs, l) ->
+                 match constructor with
+                   | `Constant _ as x -> (bs, x :: l)
+                   | `Non_constant (cons, tys) ->
+                       let bs, tys =
+                         List.fold_right
+                           (fun ty (bs, l) -> let bs, ty = do_convert bs ty in (bs, ty :: l))
+                           tys (bs, [])
+                       in (bs, `Non_constant (cons, tys) :: l))
+              s.constructors
               (bindings, [])
-          in (bs, `Sum ({ s with non_constant = non_constant }, opts))
+          in (bs, `Sum ({ s with constructors }, opts))
       | #base_type_expr as x ->
           let bs, ty = convert_base_texpr bindings x in (bs, type_expr ty)
 
@@ -251,17 +256,24 @@ let low_level_msg_def bindings (msg : message_expr) =
             r.record_fields
         in Record (r.record_name, fields, opts)
     | `Sum (sum, opts) ->
-        let constant =
-          List.mapi
-            (fun i s -> { const_tag = i; const_name = s; const_type = sum.type_name })
-            sum.constant in
-        let non_constant =
-          List.mapi
-            (fun i (const, tys) ->
-               ({ const_tag = i; const_name = const; const_type = sum.type_name},
-                List.map low_level_of_rtexp tys))
-            sum.non_constant
-        in Sum (constant, non_constant, opts) in
+        let const_idx    = ref 0 in
+        let nonconst_idx = ref 0 in
+
+        let constructors =
+          List.map
+            (function
+               | `Constant const_name ->
+                   let const_tag = !const_idx in
+                     incr const_idx;
+                     `Constant { const_tag; const_name; const_type = sum.type_name }
+               | `Non_constant (const_name, tys) ->
+                   let const_tag = !nonconst_idx in
+                     incr nonconst_idx;
+                     `Non_constant
+                       ({ const_tag; const_name; const_type = sum.type_name},
+                        List.map low_level_of_rtexp tys))
+            sum.constructors
+        in Sum (constructors, opts) in
 
   let low_level_field ty = beta_reduce_texpr bindings ty |> low_level_of_rtexp
   in
@@ -359,16 +371,17 @@ struct
     | #base_type_expr_simple as x -> pp_base_expr_simple ppf x
 
   let rec pp_reduced_type_expr ppf : reduced_type_expr -> unit = function
-      `Sum (s, _) -> begin match s.non_constant with
-          [] -> pp ppf "@[<1>%a@]" (list (pp' "%s") "@ | ") s.constant
+      `Sum (s, _) -> begin match (Protocol_types.non_constant_constructors s) with
+          [] -> pp ppf "@[<1>%a@]" (list (pp' "%s") "@ | ")
+                  (Protocol_types.constant_constructors s)
         | non_const ->
             let pp_non_constant ppf cases =
               let elt ppf (const, l) =
                 pp ppf "%s @[<1>(%a)@]" const (list pp_reduced_type_expr "@ ") l
               in list elt "@ | " ppf cases
-            in match s.constant with
+            in match Protocol_types.constant_constructors s with
                 [] -> pp ppf "@[<1>%a@]" pp_non_constant non_const
-              | _ -> pp ppf "@[<1>%a@ | %a@]" (list (pp' "%s") "@ | ") s.constant
+              | l -> pp ppf "@[<1>%a@ | %a@]" (list (pp' "%s") "@ | ") l
                        pp_non_constant non_const
       end
     | `Record (r, _) ->
@@ -397,8 +410,8 @@ struct
   let inspect_sum_dtype f ppf s =
     pp ppf "{@[<1>@ type_name = %S;@ constant = [@[<1>@ %a ]@];@ non_constant = [@[<1> %a ]@] }@]"
       s.type_name
-      (list (pp' "%S") ",@ ") s.constant
-      (pp_non_constant f) s.non_constant
+      (list (pp' "%S") ",@ ") (Protocol_types.constant_constructors s)
+      (pp_non_constant f) (Protocol_types.non_constant_constructors s)
 
   let pp_fields f ppf l =
     list

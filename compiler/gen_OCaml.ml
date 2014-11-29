@@ -87,9 +87,16 @@ let maybe_all f = function
 let rec default_value = let _loc = Loc.ghost in function
       Vint (Bool, _) -> Some <:expr< False >>
     | Vint ((Int | Int8), _) | Bitstring32 _ | Bitstring64 _ | Bytes _ -> None
-    | Sum ([], _, _) -> None
-    | Sum (c :: _, _, _) -> (* first constant constructor = default*)
-        Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
+    | Sum (l, _) -> begin (* first constant constructor = default*)
+        match
+          try
+            Some (List.find_map (function `Constant x -> Some x | _ -> None) l)
+          with Not_found -> None
+        with
+          | None -> None
+          | Some c ->
+              Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
+      end
     | Record (name, _, _) -> None
     | Htuple (List, _, _) -> Some <:expr< [] >>
     | Htuple (Array, _, _) -> Some <:expr< [| |] >>
@@ -377,7 +384,17 @@ let generate_container bindings =
                 let tys = List.map ctyp_of_poly_texpr_core ptexprs in
                   <:ctyp< $uid:const$ of $Ast.tyAnd_of_list tys$>>
 
-              in let sum_ty = match s.constant with
+              in let sum_ty =
+                foldl1 "generate_container Type_decl `Sum"
+                  (function
+                     | `Constant tyn -> <:ctyp< $uid:tyn$ >>
+                     | `Non_constant l -> ty_of_const_texprs l)
+                  (fun ctyp c -> match c with
+                     | `Constant tyn -> <:ctyp< $ctyp$ | $uid:tyn$ >>
+                     | `Non_constant c -> <:ctyp< $ctyp$ | $ty_of_const_texprs c$>>)
+                  s.constructors
+                (*
+                match s.constant with
                   [] -> foldl1 "generate_container Type_decl `Sum"
                           ty_of_const_texprs
                           (fun ctyp c -> <:ctyp< $ctyp$ | $ty_of_const_texprs c$ >>)
@@ -392,6 +409,7 @@ let generate_container bindings =
                     in List.fold_left
                          (fun ctyp c -> <:ctyp< $ctyp$ | $ty_of_const_texprs c$ >>)
                          const s.non_constant
+                 *)
               in <:ctyp< [ $sum_ty$ ] >>
             end
           | #poly_type_expr_core as ptexpr ->
@@ -557,11 +575,11 @@ struct
                 $uid:constr$ -> $pp_func "fprintf"$ pp
                                   $str:String.capitalize tyname ^ "." ^ constr$
             >> in
-          let cases = List.concat
-                        [
-                          List.map constr_case s.constant;
-                          List.map constr_ptexprs_case s.non_constant;
-                        ]
+          let cases = List.map
+                        (function
+                           | `Constant c -> constr_case c
+                           | `Non_constant (n, l) -> constr_ptexprs_case (n, l))
+                        s.constructors
           in
             match get_type_info opts with
                 None -> <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
@@ -606,6 +624,11 @@ struct
       { c with c_pretty_printer =
           Some <:str_item< value $lid:"pp_" ^ tyname$ = $expr_of_string s$ >> }
 end
+
+let partition_constructors l =
+  let c = List.filter_map (function `Constant x -> Some x | _ -> None) l in
+  let nc = List.filter_map (function `Non_constant x -> Some x | _ -> None) l in
+    (c, nc)
 
 module Make_reader
          (RD : sig
@@ -725,7 +748,8 @@ struct
                    | $other_cases$
                  ]
              >>
-      | Sum (constant, non_constant, opts) ->
+      | Sum (constructors, opts) ->
+          let constant, non_constant = partition_constructors constructors in
           let constant_match_cases =
             List.map
               (fun c ->
@@ -1205,7 +1229,8 @@ let rec write_field ?namespace fname =
                 Extprot.Msg_buffer.add_buffer aux abuf
               }
          >>
-    | Sum (constant, non_constant, opts) ->
+    | Sum (constructors, opts) ->
+        let constant, non_constant = partition_constructors constructors in
         let constant_match_cases =
           List.map
             (fun c ->

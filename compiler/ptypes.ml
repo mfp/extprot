@@ -1,5 +1,6 @@
 
 include Protocol_types
+open ExtList
 
 let declaration_name = function Message_decl (n, _, _) | Type_decl (n, _, _, _) -> n
 
@@ -39,7 +40,7 @@ let free_type_variables decl : string list =
     | `Sum (sum, _) ->
         concat_map
           (fun (_, l) -> concat_map (type_free_vars known) (l :> type_expr list))
-          sum.non_constant in
+          (non_constant_constructors sum) in
 
   let rec msg_free_vars known = function
     | `App (_, targs, _) ->
@@ -126,7 +127,7 @@ let check_declarations decls =
             | `Sum (sum, _) ->
                 List.fold_left
                   (fun acc (_, l) -> List.fold_left fold_base_ty acc l)
-                  acc sum.non_constant
+                  acc (non_constant_constructors sum)
 
           in match decl with
               Message_decl (_, msg, _) -> loop (fold_msg errs msg) arities tl

@@ -1,5 +1,6 @@
 open Printf
 open Sexplib.Conv
+open ExtList
 
 TYPE_CONV_PATH "Extprot_compiler.Protocol_types"
 
@@ -67,8 +68,7 @@ and 'a record_data_type = {
 
 and 'a sum_data_type = {
   type_name : string;
-  constant : string list;
-  non_constant : (string * 'a list) list
+  constructors : [`Constant of string | `Non_constant of string * 'a list] list
 } with sexp
 
 type base_message_expr = [ `Record of (string * bool * base_type_expr) list ] with sexp
@@ -89,3 +89,13 @@ with sexp
 
 let base_type_expr e = (e :> base_type_expr)
 let type_expr e = (e :> type_expr)
+
+let constant_constructors sum =
+  List.filter_map
+    (function `Constant x -> Some x | `Non_constant _ -> None)
+    sum.constructors
+
+let non_constant_constructors sum =
+  List.filter_map
+    (function `Constant _ -> None | `Non_constant (n, l) -> Some (n, l))
+    sum.constructors

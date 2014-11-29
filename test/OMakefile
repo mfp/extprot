@@ -7,6 +7,7 @@ OCAMLINCLUDES += $(BASE)/runtime
 OCAML_LIBS[] += $(BASE)/runtime/extprot
 
 TEST_MODULES[] =
+    dummy_type
     digest_type
     test_types
     gen_data
