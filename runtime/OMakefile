@@ -5,6 +5,7 @@ OCAMLDEPFLAGS += -syntax camlp4o $(PP)
 OCAMLFLAGS += -syntax camlp4o $(PP)
 
 EXTPROT_RUNTIME_OBJS[] =
+	buffer_pool
 	codec
 	conv
 	error

@@ -24,17 +24,35 @@ type t =
  {mutable buffer : string;
   mutable position : int;
   mutable length : int;
-  initial_buffer : string}
+  mutable release : unit -> unit;
+ }
+
+
+let `Round_up get_bytes, _ =
+  Buffer_pool.make_buffer_pool ~min_size:256 ~max_size:(4 * 1024 * 1024)
+    Bytes.create
+    (fun size ->
+       if size < 65536 then 128
+       else 2 * 4 * 1024 * 1024 / size)
+
+let dummy_get_bytes n = (Bytes.create n, (fun () -> ()))
+
+let if_not_disabled normal dummy =
+  try
+    ignore (Unix.getenv "EXTPROT_DISABLE_BUFFER_POOL");
+    dummy
+  with Not_found ->
+    normal
+
+let get_bytes = if_not_disabled get_bytes dummy_get_bytes
 
 let make n =
  let n = if n < 1 then 1 else n in
  let n = if n > Sys.max_string_length then Sys.max_string_length else n in
- let s = String.create n in
- {buffer = s; position = 0; length = n; initial_buffer = s}
+ let buffer, release = get_bytes n in
+ { buffer; position = 0; length = Bytes.length buffer; release; }
 
-(* TODO: obtain histogram of lengths for typical structures, pick default size
- * accordingly *)
-let create () = make 8
+let create () = make 32
 
 let contents b = String.sub b.buffer 0 b.position
 
@@ -57,22 +75,28 @@ let length b = b.position
 let clear b = b.position <- 0
 
 let reset b =
-  b.position <- 0; b.buffer <- b.initial_buffer;
-  b.length <- String.length b.buffer
+  b.buffer <- Bytes.create 8;
+  b.length <- Bytes.length b.buffer;
+  b.release ();
+  b.position <- 0
+
+let discard = reset
+
+let round_to_pow2 n =
+  let m = ref 1 in
+    while !m < n do
+      m := !m * 2;
+    done;
+    !m
 
 let resize b more =
-  let len = b.length in
-  let new_len = ref len in
-  while b.position + more > !new_len do new_len := 2 * !new_len done;
-  if !new_len > Sys.max_string_length then begin
-    if b.position + more <= Sys.max_string_length
-    then new_len := Sys.max_string_length
-    else failwith "Buffer.add: cannot grow buffer"
-  end;
-  let new_buffer = String.create !new_len in
+  let new_len = round_to_pow2 (b.position + more) in
+  let new_buffer, release = get_bytes new_len in
   String.blit b.buffer 0 new_buffer 0 b.position;
+  b.release ();
   b.buffer <- new_buffer;
-  b.length <- !new_len
+  b.length <- Bytes.length new_buffer;
+  b.release <- release
 
 let add_char b c =
   let pos = b.position in

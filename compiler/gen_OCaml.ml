@@ -1182,7 +1182,8 @@ let rec write_field ?namespace fname =
             (Extprot.Msg_buffer.length abuf +
              $int:string_of_int @@ Extprot.Codec.vint_length nelms$);
           Extprot.Msg_buffer.add_vint aux $int:string_of_int nelms$;
-          Extprot.Msg_buffer.add_buffer aux abuf
+          Extprot.Msg_buffer.add_buffer aux abuf;
+          Extprot.Msg_buffer.discard abuf
         }
       >>
 
@@ -1226,7 +1227,8 @@ let rec write_field ?namespace fname =
                   (Extprot.Msg_buffer.length abuf +
                    Extprot.Codec.vint_length nelms.contents);
                 Extprot.Msg_buffer.add_vint aux nelms.contents;
-                Extprot.Msg_buffer.add_buffer aux abuf
+                Extprot.Msg_buffer.add_buffer aux abuf;
+                Extprot.Msg_buffer.discard abuf
               }
          >>
     | Sum (constructors, opts) ->
@@ -1289,7 +1291,8 @@ and dump_fields ?namespace tag fields =
              (Extprot.Msg_buffer.length aux +
               $int:string_of_int @@ Extprot.Codec.vint_length nelms$);
            Extprot.Msg_buffer.add_vint b nelms;
-           Extprot.Msg_buffer.add_buffer b aux
+           Extprot.Msg_buffer.add_buffer b aux;
+           Extprot.Msg_buffer.discard aux
          }
       >>
 

@@ -2,7 +2,7 @@ open Extprot.Random_gen
 open Test_types
 
 let generate = run
-let rand_len = rand_integer 10
+let rand_len = rand_integer 60
 (* let rand_len = return 1 *)
 
 let rand_sum_type a b c =
