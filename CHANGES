@@ -1,3 +1,8 @@
+Changes since version 1.1.2
+===========================
+* use internal buffer pool in Extprot.Msg_buffer in order to avoid allocating
+  large buffers when serializing. It can be disabled by defining the
+  EXTPROT_DISABLE_BUFFER_POOL environment variable.
 
 Changes since version 1.1.1
 ===========================
