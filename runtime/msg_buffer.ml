@@ -48,7 +48,7 @@ let get_bytes = if_not_disabled get_bytes dummy_get_bytes
 
 let make n =
  let n = if n < 1 then 1 else n in
- let n = if n > Sys.max_string_length then Sys.max_string_length else n in
+ let n = if n > Sys.max_string_length then Sys.max_string_length / 2 else n in
  let buffer, release = get_bytes n in
  { buffer; position = 0; length = Bytes.length buffer; release; }
 
@@ -91,12 +91,19 @@ let round_to_pow2 n =
 
 let resize b more =
   let new_len = round_to_pow2 (b.position + more) in
-  let new_buffer, release = get_bytes new_len in
-  String.blit b.buffer 0 new_buffer 0 b.position;
-  b.release ();
-  b.buffer <- new_buffer;
-  b.length <- Bytes.length new_buffer;
-  b.release <- release
+  let new_buffer, release =
+    if new_len <= Sys.max_string_length then
+      get_bytes new_len
+    else if b.position + more < Sys.max_string_length then
+      (Bytes.create (b.position + more), (fun () -> ()))
+    else
+      failwith "Msg_buffer.resize: cannot grow buffer"
+  in
+    String.blit b.buffer 0 new_buffer 0 b.position;
+    b.release ();
+    b.buffer <- new_buffer;
+    b.length <- Bytes.length new_buffer;
+    b.release <- release
 
 let add_char b c =
   let pos = b.position in
