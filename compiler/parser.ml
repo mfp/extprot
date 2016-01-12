@@ -1,7 +1,9 @@
 open Camlp4.PreCast
-open Syntax
 open Ptypes
 open ExtList
+
+(* use fresh module *)
+module Gram = MakeGram(Lexer)
 
 let declarations = Gram.Entry.mk "type_expr"
 

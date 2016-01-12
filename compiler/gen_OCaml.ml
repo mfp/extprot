@@ -2,9 +2,7 @@
 open Printf
 open Ptypes
 open Gencode
-open Camlp4
-open PreCast
-open Ast
+open Camlp4.PreCast
 open ExtList
 open ExtString
 
@@ -131,28 +129,18 @@ let ident_of_ctyp ty =
       <:ctyp< $id:Ast.ident_of_ctyp ty$ >>
     with Invalid_argument _ -> ty
 
-let ctyp_of_path path = match List.rev @@ String.nsplit path "." with
-    [] -> raise (Bad_option "Empty ctyp path")
-  | ty :: mods ->
-      let _loc = Loc.ghost in
-        (* TODO: check that path is correct *)
-        List.fold_left
-          (fun ctyp m -> ident_of_ctyp <:ctyp< $uid:m$.$id:Ast.ident_of_ctyp ctyp$ >>)
-          <:ctyp< $lid:ty$ >>
-          mods
+module Caml = Camlp4OCamlParser.Make(Camlp4OCamlRevisedParser.Make(Syntax))
 
-module Caml =
-  Camlp4OCamlParser.Make
-    (Camlp4OCamlRevisedParser.Make
-       (Camlp4.OCamlInitSyntax.Make(Ast)(Gram)(Quotation)))
-
-let expr_of_string s =
+let parse_string kind entry s =
   try
-    Gram.parse_string Caml.expr (Loc.mk "<string>") s
+    Gram.parse_string entry (Loc.mk "<string>") s
   with Loc.Exc_located (_, b) as e ->
-    Printf.eprintf "Parse error in OCaml expression: %s\nin\n%s\n"
-      (Printexc.to_string b) s;
+    Printf.eprintf "Parse error in OCaml %s: %s\nin\n%s\n"
+      kind (Printexc.to_string b) s;
     raise e
+
+let ctyp_of_path = parse_string "type" Syntax.ctyp
+let expr_of_string = parse_string "expression" Syntax.expr
 
 let expr_of_path expr = match List.rev @@ String.nsplit expr "." with
     [] -> raise (Bad_option "Empty expr")
@@ -687,7 +675,7 @@ struct
 
     and read_tuple_elms lltys_and_defs =
       let mk_tup vars =
-        exCom_of_list @@ List.map (fun v -> <:expr< $lid:v$ >>) vars
+        Ast.exCom_of_list @@ List.map (fun v -> <:expr< $lid:v$ >>) vars
       in read_elms mk_tup lltys_and_defs
 
     and read_sum_elms constr lltys =
