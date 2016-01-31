@@ -58,7 +58,7 @@ let read_raw_bool t = match read_byte t with
     0 -> false
   | _ -> true
 
-let nil_fallback t p llty =
+let nil_fallback t p _llty =
   skip_value t p;
   Error.bad_wire_type ()
 
@@ -116,7 +116,7 @@ let load_i64_buf =
   else
     (* otherwise, allocate a new buf *)
     (fun t ->
-       let buf = String.create 8 in
+       let buf = Bytes.create 8 in
          read_bytes t buf 0 8;
          buf)
 
@@ -180,7 +180,7 @@ let read_float t = Read_prim_type(t, Bits64_float, read_raw_float, read_float_fa
 let read_raw_string t =
   let len = read_vint t in
   let () = Limits.check_string_length len in
-  let s = String.create len in
+  let s = Bytes.create len in
     read_bytes t s 0 len;
     s
 

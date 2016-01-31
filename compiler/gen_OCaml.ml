@@ -97,7 +97,7 @@ let rec default_value = let _loc = Loc.ghost in function
           | Some c ->
               Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
       end
-    | Record (name, _, _) -> None
+    | Record (_name, _, _) -> None
     | Htuple (List, _, _) -> Some <:expr< [] >>
     | Htuple (Array, _, _) -> Some <:expr< [| |] >>
     | Message (path, name, _) ->
@@ -888,7 +888,7 @@ struct
                   ~field:$str:name$
                   e loc
             >>
-        | Some expr ->
+        | Some _expr ->
             <:match_case<
                 Extprot.Error.Extprot_error
                   ((Extprot.Error.Bad_format (Extprot.Error.Bad_wire_type _) as e), loc) ->
@@ -977,7 +977,7 @@ struct
     let first_field_expr =
       match fields with
           [] -> failwith (sprintf "no fields in msg %s" msgname)
-        | (field_name, _, field_type) :: _ ->
+        | (_field_name, _, field_type) :: _ ->
             match RD.raw_rd_func field_type with
                 None -> <:expr< raise_bad_wire_type () >>
               | Some (mc, reader_expr) ->
@@ -1070,7 +1070,7 @@ struct
              wrap_reader opts
 end
 
-let rec raw_rd_func reader_func =
+let raw_rd_func reader_func =
   let _loc = Loc.ghost in
   let wrap opts readerf = match get_type_info opts with
         Some (_, fromf, _) ->

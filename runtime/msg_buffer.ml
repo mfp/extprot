@@ -60,7 +60,7 @@ let sub b ofs len =
   if ofs < 0 || len < 0 || ofs > b.position - len
   then invalid_arg "Buffer.sub"
   else begin
-    let r = String.create len in
+    let r = Bytes.create len in
     String.blit b.buffer ofs r 0 len;
     r
   end

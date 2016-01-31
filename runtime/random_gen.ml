@@ -63,7 +63,7 @@ struct
 
   let rand_string len =
     len >>= fun n ->
-      let s = String.create n in
+      let s = Bytes.create n in
       let rec loop = function
           n when n < 0 -> return s
         | n -> rand_integer 255 >>= fun c -> s.[n] <- Char.chr c; loop (n - 1)
