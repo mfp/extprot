@@ -31,4 +31,4 @@ OCamlLibrary(extprot, extprot)
 
 .PHONY: clean
 clean:
-	rm -f $(filter-proper-targets $(ls R, .))
+	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot *.cmt *.cmti

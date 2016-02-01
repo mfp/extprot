@@ -67,5 +67,4 @@ uninstall:
 
 .PHONY: clean
 clean:
-	$(RM) $(filter-proper-targets $(ls R, .)) *.s *.annot
-
+	$(RM) $(filter-proper-targets $(ls R, .)) *.s *.annot *.cmt *.cmti
