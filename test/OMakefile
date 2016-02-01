@@ -1,6 +1,6 @@
 OCAMLPACKS [] += oUnit
 
-OCAMLFLAGS += -w Aelz
+OCAMLFLAGS += -w Aelz-32-35-41-44-48
 
 OCAMLINCLUDES += $(BASE)/runtime
 
@@ -18,7 +18,7 @@ TEST_MODULES[] =
 
 GENERATOR = $(BASE)/extprotc
 
-OCAMLDEP_MODULES_ENABLED = false
+#OCAMLDEP_MODULES_ENABLED = false
 LocalOCamlGeneratedFiles(test_types.ml)
 
 test_types.ml: $(GENERATOR) test_types.proto
