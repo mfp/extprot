@@ -80,7 +80,7 @@ let inspect_concrete bindings decls =
       (fun (name, mut, llty) ->
          print " %s%s : " (if mut then "mutable " else "") name;
          print "@[%a@]@.@." Sexplib.Sexp.pp_hum (Gencode.sexp_of_low_level llty)) in
-  let print_msg name mexpr =
+  let print_msg mexpr =
     match Gencode.low_level_msg_def bindings mexpr with
         Gencode.Message_single (_, fields) -> print_fields fields
       | Gencode.Message_alias (path, name) ->
@@ -95,7 +95,7 @@ let inspect_concrete bindings decls =
   in List.iter
        (function
             Ptypes.Message_decl (name, mexpr, _) -> print_header "Message %s" name;
-                                                    print_msg name mexpr
+                                                    print_msg mexpr
           | Ptypes.Type_decl _ -> ())
        decls
 

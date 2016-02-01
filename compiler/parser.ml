@@ -1,6 +1,5 @@
 open Camlp4.PreCast
 open Ptypes
-open ExtList
 
 (* use fresh module *)
 module Gram = MakeGram(Lexer)
@@ -136,17 +135,9 @@ EXTEND Gram
 
 END
 
-let input_file fname =
-  let b = Buffer.create 4096 in
-  let buf = String.create 4096 in
-  let rec loop ic = match input ic buf 0 4096 with
-      0 -> close_in ic; Buffer.contents b
-    | n -> Buffer.add_substring b buf 0 n; loop ic
-  in loop (open_in fname)
-
 let parse text = Gram.parse_string declarations (Loc.mk "<string>") text
 let parse_file fname =
-  Gram.parse_string declarations (Loc.mk fname) (input_file fname)
+  Gram.parse_string declarations (Loc.mk fname) (Std.input_file fname)
 
 let print_synerr f x =
   try

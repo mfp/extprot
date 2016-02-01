@@ -87,7 +87,7 @@ DEFINE Read_msg(t) =
               Msg_buffer.add_vint b len;
               Msg_buffer.contents b in
           let prefix_len = String.length prefix_s in
-          let s = String.create (prefix_len + len) in
+          let s = Bytes.create (prefix_len + len) in
             String.blit prefix_s 0 s 0 prefix_len;
             read_bytes t s prefix_len len;
             s
@@ -150,7 +150,7 @@ struct
 
   let read_vint t = Read_vint(t)
 
-  let skip_buf = String.create 4096
+  let skip_buf = Bytes.create 4096
 
   let rec skip_n t = function
       0 -> ()

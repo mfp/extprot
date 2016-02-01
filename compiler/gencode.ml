@@ -47,11 +47,11 @@ let merge_rtexpr_options (rtexpr : reduced_type_expr) (opts : type_options)
     | `Byte opts2 -> `Byte (m opts opts2)
     | `Float opts2 -> `Float (m opts opts2)
     | `Int opts2 -> `Int (m opts opts2)
-    | `List (t, opts2) -> `List (t, opts2)
+    | `List (t, opts2) -> `List (t, m opts opts2)
     | `Long_int opts2 -> `Long_int (m opts opts2)
     | `Message (n, opts2) -> `Message (n, m opts opts2)
     | `Ext_message (p, n, opts2) -> `Ext_message (p, n, m opts opts2)
-    | `Record (fs, opts2) -> `Record (fs, m opts opts)
+    | `Record (fs, opts2) -> `Record (fs, m opts opts2)
     | `String opts2 -> `String (m opts opts2)
     | `Sum (t, opts2) -> `Sum (t, m opts opts2)
     | `Tuple (l, opts2) -> `Tuple (l, m opts opts2)
@@ -200,15 +200,15 @@ let map_message bindings (f : base_type_expr -> _) g =
         (List.map
            (function
                 (const, `Record fields) -> (None, const, List.map (map_field f) fields)
-              | (const, (`App (name, args, opts) as ty)) ->
+              | (const, (`App (name, _args, _opts) as ty)) ->
                   expand_record_type
-                    (fun r opts -> (Some name, const, List.map (map_field g) r.record_fields))
+                    (fun r _opts -> (Some name, const, List.map (map_field g) r.record_fields))
                     name ty)
            cases)
   | `Record fields -> Message_single (None, List.map (map_field f) fields)
-  | `App (name, args, opts) as ty ->
+  | `App (name, _args, _opts) as ty ->
       expand_record_type
-        (fun r opts ->
+        (fun r _opts ->
             Message_single (Some r.record_name, List.map (map_field g) r.record_fields))
         name ty
   | `Message_alias (path, name) -> Message_alias (path, name)
@@ -217,7 +217,7 @@ let iter_message bindings f g =
   let proc_field f const (fname, mutabl, ty) = f const fname mutabl ty in
   let iter_expanded_type const name ty =
     match beta_reduce_texpr bindings ty with
-        `Record (r, opts) -> List.iter (proc_field g const) r.record_fields
+        `Record (r, _opts) -> List.iter (proc_field g const) r.record_fields
         | _ ->
             failwithfmt
               "Wrong type abbreviation in message (%S): must be a record type."
@@ -228,11 +228,11 @@ let iter_message bindings f g =
         List.iter
           (function
                (const, `Record fields) -> List.iter (proc_field f const) fields
-             | (const, (`App (name, args, opts) as ty)) ->
+             | (const, (`App (name, _args, _opts) as ty)) ->
                  iter_expanded_type const name ty)
           cases
   | `Record fields -> List.iter (proc_field f "") fields
-  | `App(name, args, opts) as ty -> iter_expanded_type "" name ty
+  | `App(name, _args, _opts) as ty -> iter_expanded_type "" name ty
 
 let low_level_msg_def bindings (msg : message_expr) =
 
@@ -251,7 +251,7 @@ let low_level_msg_def bindings (msg : message_expr) =
     | `Record (r, opts) ->
         let fields =
           List.map
-            (fun (name, ismutable, ty) ->
+            (fun (name, _ismutable, ty) ->
                { field_name = name; field_type = low_level_of_rtexp ty; })
             r.record_fields
         in Record (r.record_name, fields, opts)

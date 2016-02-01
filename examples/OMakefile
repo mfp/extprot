@@ -22,4 +22,4 @@ examples: test_grafff test_address_book
 
 .PHONY: clean
 clean:
-	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot
+	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot *.cmt *.cmti
