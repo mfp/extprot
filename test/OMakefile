@@ -18,7 +18,7 @@ TEST_MODULES[] =
 
 GENERATOR = $(BASE)/extprotc
 
-OCAMLDEP_MODULES_ENABLED = false
+#OCAMLDEP_MODULES_ENABLED = false
 LocalOCamlGeneratedFiles(test_types.ml)
 
 test_types.ml: $(GENERATOR) test_types.proto
