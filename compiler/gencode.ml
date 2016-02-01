@@ -162,20 +162,16 @@ and alpha_convert =
 let rec reduce_to_poly_texpr_core bindings (btexpr : base_type_expr) : poly_type_expr_core =
   let self = reduce_to_poly_texpr_core in
 
-  let aux bindings x : poly_type_expr_core = match x with
+  let aux bindings x : poly_type_expr_core =
+    match x with
     | `Type_param p -> `Type_arg (type_param_name p)
     | `Ext_app (path, name, args, opts) ->
         `Ext_type (path, name, List.map (self bindings) args, opts)
-    | `App (name, args, opts) -> match smap_find name bindings with
-          Some (Message_decl (_, _, opts2)) -> `Type (name, [], merge_options opts opts2)
-        | Some (Type_decl (name, _, `Sum _, opts2)) ->
-            `Type (name, List.map (self bindings) args, merge_options opts opts2)
-        | Some (Type_decl (name, _, _, opts2)) ->
-            `Type (name, List.map (self bindings) args, merge_options opts opts2)
-            (* let bindings = *)
-              (* update_bindings bindings (List.map string_of_type_param params) *)
-                (* (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty)) args) *)
-            (* in self bindings exp *)
+    | `App (name, args, opts) ->
+        match smap_find name bindings with
+        | Some (Message_decl (_, _, opts2)) -> `Type (name, [], [], merge_options opts opts2)
+        | Some (Type_decl (name, params, _, opts2)) ->
+            `Type (name, params, List.map (self bindings) args, merge_options opts opts2)
         | None -> `Type_arg name
 
   in beta_reduce_base_texpr_aux aux self bindings btexpr

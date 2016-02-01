@@ -290,14 +290,32 @@ let generate_container bindings =
         in get_type
              (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
              opts
-    | `Type (name, args, opts) ->
+    | `Type (name, params, args, opts) ->
+        let args = List.map ctyp_of_poly_texpr_core args in
         let t = List.fold_left (* apply *)
-                  (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core ptexpr$ >>)
+                  (fun ty ty_arg -> <:ctyp< $ty$ $ty_arg$ >>)
                   <:ctyp< $uid:String.capitalize name$.$lid:name$ >>
                   args
-        in get_type
-             (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
-             opts
+        in
+        begin match get_type_info opts with
+        | None ->
+          (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
+        | Some (t,_,_) ->
+          (* Substitute free variables in "ocaml.type" annotation
+             with specific [args] from type application *)
+          assert (List.length args = List.length params); (* checked in Ptypes *)
+          let params_map = List.combine (List.map type_param_name params) args in
+          let substitute = function
+          | <:ctyp@_loc< '$param$ >> ->
+            begin try
+              <:ctyp< $List.assoc param params_map$ >>
+            with
+            | Not_found -> failwith @@ sprintf "Unbound type parameter '%s in %s" param name
+            end
+          | t -> t
+          in
+          (Ast.map_ctyp substitute)#ctyp t
+        end
     | `Type_arg n -> <:ctyp< '$n$ >>
 
   in function
@@ -510,7 +528,7 @@ struct
           (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
           (pp_func ("pp_tuple" ^ string_of_int (List.length l)))
           l
-    | `Type (name, args, _) ->
+    | `Type (name, _params, args, _) ->
         List.fold_left
           (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
           <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
