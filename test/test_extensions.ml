@@ -1,4 +1,3 @@
-open Printf
 open OUnit
 open Test_types
 open Test_util
