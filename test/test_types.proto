@@ -88,4 +88,8 @@ message prim_promotion0 = { v : string }
 message prim_promotion1 = { v : string; foo : sum_type<int, int, int> }
 message prim_promotion2 = { v : prim_promotion1; }
 
-(* vim:set ft=omlet: *)
+type ocaml_type_poly1 'a = [ (string * 'a) ] options "ocaml.type" = "(string * 'a) list, List.rev, List.rev"
+message otp1i = { f : ocaml_type_poly1<int> }
+message otp1f = { f : ocaml_type_poly1<float> }
+
+(* vim:set ft=ocaml: *)
