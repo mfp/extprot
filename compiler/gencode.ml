@@ -84,10 +84,9 @@ let rec beta_reduce_texpr bindings (texpr : base_type_expr) : reduced_type_expr 
     | `App (name, args, opts) -> match smap_find name bindings with
           Some (Message_decl (_, _, opts2)) -> `Message (name, merge_options opts opts2)
         | Some (Type_decl (_, params, exp, opts2)) ->
-            let opts = merge_options opts opts2 in
             let bindings =
               update_bindings bindings (List.map string_of_type_param params)
-                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty, opts)) args) in
+                (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty, [])) args) in
             let bindings, exp = alpha_convert bindings exp in
               merge_rtexpr_options (reduce_texpr bindings exp) opts2
         | None -> failwithfmt "beta_reduce_texpr: unbound type variable %S" name;
