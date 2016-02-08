@@ -116,8 +116,11 @@ let get_type_info opts =
     let (ty,fromf,tof,default) =
       match List.map String.strip @@ String.nsplit v "," with
       | [ty; fromf; tof] -> ty, fromf, tof, None
-      | [ty; fromf; tof; default] -> ty, fromf, tof, Some default
-      | _ -> bad_option "type" v
+      | _ ->
+        match List.map String.strip @@ String.nsplit v ";" with
+        | [ty; fromf; tof] -> ty, fromf, tof, None
+        | [ty; fromf; tof; default] -> ty, fromf, tof, Some default
+        | _ -> bad_option "type" v
     in
     try
       Some {
