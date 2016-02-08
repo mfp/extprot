@@ -88,11 +88,11 @@ message prim_promotion0 = { v : string }
 message prim_promotion1 = { v : string; foo : sum_type<int, int, int> }
 message prim_promotion2 = { v : prim_promotion1; }
 
-type ocaml_type_poly1 'a = [ (string * 'a) ] options "ocaml.type" = "(string * 'a) list, List.rev, List.rev"
+type ocaml_type_poly1 'a = [ (string * 'a) ] options "ocaml.type" = "(string * 'a) list, List.rev, List.rev, []"
 message otp1i = { f : ocaml_type_poly1<int> }
 message otp1f = { f : ocaml_type_poly1<float> }
 
-type ocaml_type_poly2 'a 'b = [ ('a * 'b) ] options "ocaml.type" = "('a * 'b) array, Array.of_list, Array.to_list"
+type ocaml_type_poly2 'a 'b = [ ('a * 'b) ] options "ocaml.type" = "('a * 'b) array, Array.of_list, Array.to_list, [||]"
 type otp2i 'a = { i : ocaml_type_poly2<ocaml_type_poly1<int>,'a>; }
 message otp2if = { f : otp2i<float>; }
 

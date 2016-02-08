@@ -82,8 +82,72 @@ let maybe_all f = function
                 init tl
       in Option.map List.rev l
 
-let rec default_value = let _loc = Loc.ghost in function
-      Vint (Bool, _) -> Some <:expr< False >>
+let lookup_option name ?(global = false) (opts : type_options) =
+  let pick n = (global && n = name || n = "ocaml." ^ name) in
+    List.fold_left (fun _ x -> Some x) None @@
+    List.filter_map (function (n, v) when pick n -> Some v | _ -> None) @@
+    opts
+
+let bad_option ?msg name v = match msg with
+    Some m ->
+      Printf.ksprintf failwith "Bad OCaml option value for %S: %S --- %s" name v m
+  | None ->
+      Printf.ksprintf failwith "Bad OCaml option value for %S: %S" name v
+
+module Caml = Camlp4OCamlParser.Make(Camlp4OCamlRevisedParser.Make(Syntax))
+
+let parse_string kind entry s =
+  try
+    Gram.parse_string entry (Loc.mk "<string>") s
+  with Loc.Exc_located (_, b) as e ->
+    Printf.eprintf "Parse error in OCaml %s: %s\nin\n%s\n"
+      kind (Printexc.to_string b) s;
+    raise e
+
+let ctyp_of_path = parse_string "type" Syntax.ctyp
+let expr_of_string = parse_string "expression" Syntax.expr
+
+type type_info = { ty : string; ctyp : Ast.ctyp; fromf : Ast.expr; tof : Ast.expr; default : Ast.expr option; }
+
+let get_type_info opts =
+  match lookup_option "type" opts with
+  | None -> None
+  | Some v ->
+    let (ty,fromf,tof,default) =
+      match List.map String.strip @@ String.nsplit v "," with
+      | [ty; fromf; tof] -> ty, fromf, tof, None
+      | [ty; fromf; tof; default] -> ty, fromf, tof, Some default
+      | _ -> bad_option "type" v
+    in
+    try
+      Some {
+        ty = ty;
+        ctyp = ctyp_of_path ty;
+        fromf = expr_of_string fromf;
+        tof = expr_of_string tof;
+        default = Option.map expr_of_string default;
+      }
+    with exn -> bad_option ~msg:(Printexc.to_string exn) "type" v
+
+let get_type default opts =
+  Option.map_default (fun { ctyp; _ } -> ctyp) default (get_type_info opts)
+
+let get_type_opts = function
+| Vint (_, opts)
+| Bitstring32 opts
+| Bitstring64 (_,opts)
+| Bytes opts
+| Sum (_, opts)
+| Record (_, _, opts)
+| Htuple (_, _, opts)
+| Message (_, _, opts)
+| Tuple (_, opts) -> opts
+
+let rec default_value t =
+  let _loc = Loc.ghost in
+  let default_value =
+    match t with
+    | Vint (Bool, _) -> Some <:expr< False >>
     | Vint ((Int | Int8), _) | Bitstring32 _ | Bitstring64 _ | Bytes _ -> None
     | Sum (l, _) -> begin (* first constant constructor = default*)
         match
@@ -108,62 +172,18 @@ let rec default_value = let _loc = Loc.ghost in function
         | Some [] -> failwith "default_value: empty tuple"
         | Some [_] -> failwith "default_value: tuple with only 1 element"
         | Some (hd::tl) -> Some <:expr< ($hd$, $Ast.exCom_of_list tl$) >>
-
-let lookup_option name ?(global = false) (opts : type_options) =
-  let pick n = (global && n = name || n = "ocaml." ^ name) in
-    List.fold_left (fun _ x -> Some x) None @@
-    List.filter_map (function (n, v) when pick n -> Some v | _ -> None) @@
-    opts
-
-let bad_option ?msg name v = match msg with
-    Some m ->
-      Printf.ksprintf failwith "Bad OCaml option value for %S: %S --- %s" name v m
-  | None ->
-      Printf.ksprintf failwith "Bad OCaml option value for %S: %S" name v
-
-exception Bad_option of string
+  in
+  match get_type_info @@ get_type_opts t, default_value with
+  | Some { default=None; ty; _ }, Some _ -> failwith @@ sprintf "no default value specified for external type %s" ty
+  | Some { default=None; _ }, None -> None
+  | Some { default=Some override; _ }, _ -> Some override
+  | None, v -> v
 
 let ident_of_ctyp ty =
   let _loc = Loc.ghost in
     try
       <:ctyp< $id:Ast.ident_of_ctyp ty$ >>
     with Invalid_argument _ -> ty
-
-module Caml = Camlp4OCamlParser.Make(Camlp4OCamlRevisedParser.Make(Syntax))
-
-let parse_string kind entry s =
-  try
-    Gram.parse_string entry (Loc.mk "<string>") s
-  with Loc.Exc_located (_, b) as e ->
-    Printf.eprintf "Parse error in OCaml %s: %s\nin\n%s\n"
-      kind (Printexc.to_string b) s;
-    raise e
-
-let ctyp_of_path = parse_string "type" Syntax.ctyp
-let expr_of_string = parse_string "expression" Syntax.expr
-
-let expr_of_path expr = match List.rev @@ String.nsplit expr "." with
-    [] -> raise (Bad_option "Empty expr")
-  | e :: mods ->
-      let _loc = Loc.ghost in
-        (* TODO: check that path is correct *)
-        List.fold_left
-          (fun e m -> let m = <:expr< $uid:m$ >> in <:expr< $m$.$e$ >>)
-          <:expr< $lid:e$ >>
-          mods
-
-let get_type_info opts = match lookup_option "type" opts with
-    None -> None
-  | Some v -> match List.map String.strip @@ String.nsplit v "," with
-        [ty; from_fun; to_fun] -> begin
-          try
-            Some (ctyp_of_path ty, expr_of_path from_fun, expr_of_path to_fun)
-          with Bad_option msg -> bad_option ~msg "type" v
-        end
-      | _ -> bad_option "type" v
-
-let get_type default opts =
-  Option.map_default (fun (ctyp, _, _) -> ctyp) default (get_type_info opts)
 
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
@@ -172,11 +192,8 @@ let generate_container bindings =
     Ast.TyDcl (_loc, name, params, ctyp, []) in
 
   let typedef name ~opts ?(params = []) ctyp =
-    let ctyp = match get_type_info opts with
-        None -> ctyp
-      | Some (ty, _, _) -> ty
-    in
-      <:str_item< type $typedecl name ~params ctyp $ >> in
+    let ctyp = get_type ctyp opts in
+    <:str_item< type $typedecl name ~params ctyp $ >> in
 
   let type_equals ~params ty tyname =
     let applied =
@@ -192,7 +209,7 @@ let generate_container bindings =
       | Some tyname  ->
           try
             type_equals ~params ty (String.strip tyname)
-          with Bad_option msg -> bad_option ~msg "type_equals" tyname in
+          with exn -> bad_option ~msg:(Printexc.to_string exn) "type_equals" tyname in
 
   let message_typedefs ~opts name ctyp =
     let internal = typedef ~opts:[] ("_" ^ name) ctyp in
@@ -300,7 +317,7 @@ let generate_container bindings =
         begin match get_type_info opts with
         | None ->
           (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
-        | Some (t,_,_) ->
+        | Some { ctyp = t; _ } ->
           (* Substitute free variables in "ocaml.type" annotation
              with specific [args] from type application *)
           assert (List.length args = List.length params); (* checked in Ptypes *)
@@ -341,8 +358,8 @@ let generate_container bindings =
         let wrap x =
           match get_type_info opts with
               None -> x
-            | Some (_, unwrap, _) ->
-                <:expr< $unwrap$ $x$ >> in
+            | Some { fromf; _ } ->
+                <:expr< $fromf$ $x$ >> in
 
         let default_func = match Gencode.low_level_msg_def bindings mexpr with
             Message_single (namespace, fields) ->
@@ -549,11 +566,11 @@ struct
             { c with c_pretty_printer =
                 Some <:str_item< value $lid:"pp_" ^ msgname$ pp = $expr$;
                                  value pp = $lid:"pp_" ^ msgname$; >> }
-        | Some (_, _, wrap) ->
+        | Some { tof; _ } ->
             { c with c_pretty_printer =
                 Some
                   <:str_item<
-                    value $lid:"pp_" ^ msgname$ pp x = $expr$ ($wrap$ x);
+                    value $lid:"pp_" ^ msgname$ pp x = $expr$ ($tof$ x);
                     value pp = $lid:"pp_" ^ msgname$; >> }
 
   let add_typedecl_pretty_printer bindings tyname typarams texpr opts c =
@@ -589,7 +606,7 @@ struct
           in
             match get_type_info opts with
                 None -> <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
-              | Some (_, _, tof) ->
+              | Some { tof; _ } ->
                 <:expr< fun pp -> fun x ->
                           match ($tof$ x) with [ $Ast.mcOr_of_list cases$ ] >>
         end
@@ -607,7 +624,7 @@ struct
             match get_type_info opts with
                 None ->
                   <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ >>
-              | Some (_, _, tof) ->
+              | Some { tof; _ } ->
                   <:expr< fun ppf -> fun x ->
                             $pp_func "pp_struct"$ $expr_of_list pp_fields$
                               ppf ($tof$ x) >>
@@ -616,7 +633,7 @@ struct
           let ppfunc_expr = pp_poly_texpr_core ptexpr
           in match get_type_info opts with
               None -> ppfunc_expr
-            | Some (_, _, tof) ->
+            | Some { tof; _ } ->
                 <:expr< fun ppf -> fun x -> $ppfunc_expr$ ppf ($tof$ x) >>
 
     in
@@ -646,7 +663,7 @@ struct
   let _loc = Loc.mk "<generated code at Make_reader>"
 
   let wrap_reader opts expr = match get_type_info opts with
-      Some (_, fromf, _) ->
+      Some { fromf; _ } ->
         <:expr<
           try
             $fromf$ $expr$
@@ -1079,7 +1096,7 @@ end
 let raw_rd_func reader_func =
   let _loc = Loc.ghost in
   let wrap opts readerf = match get_type_info opts with
-        Some (_, fromf, _) ->
+        Some { fromf; _ } ->
           <:expr<
             (fun s ->
                try
@@ -1204,7 +1221,7 @@ let rec write_field ?namespace fname =
       >>
 
   and wrap_value opts expr = match get_type_info opts with
-        Some (_, _, tof) -> <:expr< $tof$ $expr$ >>
+        Some { tof; _ } -> <:expr< $tof$ $expr$ >>
       | None -> expr
 
   and write v = function
@@ -1263,7 +1280,7 @@ let rec write_field ?namespace fname =
         let match_cases = constant_match_cases @ non_constant_cases in
           begin match get_type_info opts with
               None -> <:expr< match $v$ with [ $Ast.mcOr_of_list match_cases$ ] >>
-            | Some (_, _, tof) ->
+            | Some { tof; _ } ->
                 <:expr< match $tof$ $v$ with [ $Ast.mcOr_of_list match_cases$ ] >>
           end
 
@@ -1272,7 +1289,7 @@ let rec write_field ?namespace fname =
           List.map (fun f -> (f.field_name, true, f.field_type)) fields in
         let v = match get_type_info opts with
             None -> v
-          | Some (_, _, tof) -> <:expr< $tof$ $v$ >>
+          | Some { tof; _ } -> <:expr< $tof$ $v$ >>
         in
           <:expr< let b = aux in
                   let msg = $ v $ in
@@ -1320,7 +1337,7 @@ and write_message msgname =
         in <:expr< match msg with [ $match_cases$ ] >>
 
 let wrap_writer _loc opts expr = match get_type_info opts with
-    Some (_, _, tof) ->
+    Some { tof; _ } ->
       <:expr<
         try
           let msg = $tof$ msg in
