@@ -27,7 +27,10 @@ section
 OCamlPackage(extprot, $(EXTPROT_RUNTIME_OBJS))
 OCamlLibrary(extprot, extprot)
 
-.DEFAULT: extprot.cma extprot.cmxa
+%.cmxs: %.cmxa
+    ocamlopt -shared -o $@ $< -linkall
+
+.DEFAULT: extprot.cma extprot.cmxa extprot.cmxs
 
 .PHONY: clean
 clean:
