@@ -116,8 +116,11 @@ let get_type_info opts =
     let (ty,fromf,tof,default) =
       match List.map String.strip @@ String.nsplit v "," with
       | [ty; fromf; tof] -> ty, fromf, tof, None
-      | [ty; fromf; tof; default] -> ty, fromf, tof, Some default
-      | _ -> bad_option "type" v
+      | _ ->
+        match List.map String.strip @@ String.nsplit v ";" with
+        | [ty; fromf; tof] -> ty, fromf, tof, None
+        | [ty; fromf; tof; default] -> ty, fromf, tof, Some default
+        | _ -> bad_option "type" v
     in
     try
       Some {
@@ -132,7 +135,7 @@ let get_type_info opts =
 let get_type default opts =
   Option.map_default (fun { ctyp; _ } -> ctyp) default (get_type_info opts)
 
-let get_type_opts = function
+let type_opts = function
 | Vint (_, opts)
 | Bitstring32 opts
 | Bitstring64 (_,opts)
@@ -173,7 +176,7 @@ let rec default_value t =
         | Some [_] -> failwith "default_value: tuple with only 1 element"
         | Some (hd::tl) -> Some <:expr< ($hd$, $Ast.exCom_of_list tl$) >>
   in
-  match get_type_info @@ get_type_opts t, default_value with
+  match get_type_info @@ type_opts t, default_value with
   | Some { default=None; ty; _ }, Some _ -> failwith @@ sprintf "no default value specified for external type %s" ty
   | Some { default=None; _ }, None -> None
   | Some { default=Some override; _ }, _ -> Some override
@@ -724,15 +727,16 @@ struct
 
     and lltys_without_defaults = List.map (fun x -> (x, None))
 
-    and read = function
-        Vint (Bool, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_bool$ s >>
-      | Vint (Int, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_rel_int$ s >>
-      | Vint (Int8, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_i8$ s >>
-      | Bitstring32 opts -> wrap_reader opts <:expr< $RD.reader_func `Read_i32$ s >>
-      | Bitstring64 (Long, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_i64$ s >>
-      | Bitstring64 (Float, opts) -> wrap_reader opts <:expr< $RD.reader_func `Read_float$ s >>
-      | Bytes opts -> wrap_reader opts <:expr< $RD.reader_func `Read_string$ s >>
-      | Tuple (lltys, opts) ->
+    and read t =
+      let expr = match t with
+      | Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
+      | Vint (Int, _) -> <:expr< $RD.reader_func `Read_rel_int$ s >>
+      | Vint (Int8, _) -> <:expr< $RD.reader_func `Read_i8$ s >>
+      | Bitstring32 _ -> <:expr< $RD.reader_func `Read_i32$ s >>
+      | Bitstring64 (Long, _) -> <:expr< $RD.reader_func `Read_i64$ s >>
+      | Bitstring64 (Float, _) -> <:expr< $RD.reader_func `Read_float$ s >>
+      | Bytes _ -> <:expr< $RD.reader_func `Read_string$ s >>
+      | Tuple (lltys, _) ->
           let bad_type_case =
             <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
           let other_cases = match lltys with
@@ -757,7 +761,7 @@ struct
             | _ -> (* can't happen *) bad_type_case in
           let tys_with_defvalues =
             List.map (fun llty -> (llty, default_value llty)) lltys
-          in wrap_reader opts <:expr<
+          in <:expr<
                let t = $RD.reader_func `Read_prefix$ s in
                  match Extprot.Codec.ll_type t with [
                      Extprot.Codec.Tuple ->
@@ -771,7 +775,7 @@ struct
                    | $other_cases$
                  ]
              >>
-      | Sum (constructors, opts) ->
+      | Sum (constructors, _) ->
           let constant, non_constant = partition_constructors constructors in
           let constant_match_cases =
             List.map
@@ -847,26 +851,25 @@ struct
               end
             | _ -> bad_type_case
           in
-            wrap_reader opts <:expr< let t = $RD.reader_func `Read_prefix$ s in
+            <:expr< let t = $RD.reader_func `Read_prefix$ s in
               match Extprot.Codec.ll_type t with [
                 $Ast.mcOr_of_list match_cases$
                 | $other_cases$
               ]
             >>
-      | Record (name, fields, opts) ->
+      | Record (name, fields, _) ->
           let fields' =
             List.map (fun f -> (f.field_name, true, f.field_type)) fields in
           let promoted_match_cases =
             make_promoted_match_cases msgname [ Some name, None, fields' ] in
           let match_cases = record_case ~namespace:name msgname 0 fields' in
-            wrap_msg_reader name promoted_match_cases match_cases |>
-            wrap_reader opts
+            wrap_msg_reader name promoted_match_cases match_cases
 
-      | Message (path, name, opts) ->
+      | Message (path, name, _) ->
           let full_path = path @ [String.capitalize name] in
           let id = ident_with_path _loc full_path (RD.read_msg_func name) in
-          wrap_reader opts <:expr< $id:id$ s >>
-      | Htuple (kind, llty, opts) ->
+          <:expr< $id:id$ s >>
+      | Htuple (kind, llty, _) ->
           let e = match kind with
               List ->
                 let loop = new_lid "loop" in
@@ -878,7 +881,7 @@ struct
                   >>
               | Array ->
                   <:expr< Array.init nelms (fun _ -> $read llty$) >>
-          in wrap_reader opts <:expr<
+          in <:expr<
                 let t = $RD.reader_func `Read_prefix$ s in
                   match Extprot.Codec.ll_type t with [
                       Extprot.Codec.Htuple ->
@@ -894,7 +897,10 @@ struct
                     | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
                   ]
               >>
-    in read llty
+    in
+    wrap_reader (type_opts t) expr
+    in
+    read llty
 
   and record_case msgname ?namespace ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
@@ -1095,7 +1101,7 @@ end
 
 let raw_rd_func reader_func =
   let _loc = Loc.ghost in
-  let wrap opts readerf = match get_type_info opts with
+  let wrap t readerf = match get_type_info @@ type_opts t with
         Some { fromf; _ } ->
           <:expr<
             (fun s ->
@@ -1106,22 +1112,21 @@ let raw_rd_func reader_func =
           >>
       | None -> readerf in
   let patt = patt_of_ll_type in
-  let module C = Extprot.Codec in function
-      Vint (Bool, opts) ->
-        Some (patt C.Bits8, wrap opts @@ reader_func `Read_raw_bool)
-    | Vint (Int8, opts) ->
-        Some (patt C.Bits8, wrap opts @@ reader_func `Read_raw_i8)
-    | Vint (Int, opts) ->
-        Some (patt C.Vint, wrap opts @@ reader_func `Read_raw_rel_int)
-    | Bitstring32 opts ->
-        Some (patt C.Bits32, wrap opts @@ reader_func `Read_raw_i32)
-    | Bitstring64 (Long, opts) ->
-        Some (patt C.Bits64_long, wrap opts @@ reader_func `Read_raw_i64)
-    | Bitstring64 (Float, opts) ->
-        Some (patt C.Bits64_float, wrap opts @@ reader_func `Read_raw_float)
-    | Bytes opts ->
-        Some (patt C.Bytes, wrap opts @@ reader_func `Read_raw_string)
+  let module C = Extprot.Codec in
+  fun t ->
+    let x = match t with
+    | Vint (Bool, _) -> Some (patt C.Bits8, reader_func `Read_raw_bool)
+    | Vint (Int8, _) -> Some (patt C.Bits8, reader_func `Read_raw_i8)
+    | Vint (Int, _) -> Some (patt C.Vint, reader_func `Read_raw_rel_int)
+    | Bitstring32 _ -> Some (patt C.Bits32, reader_func `Read_raw_i32)
+    | Bitstring64 (Long, _) -> Some (patt C.Bits64_long, reader_func `Read_raw_i64)
+    | Bitstring64 (Float, _) -> Some (patt C.Bits64_float, reader_func `Read_raw_float)
+    | Bytes _ -> Some (patt C.Bytes, reader_func `Read_raw_string)
     | Sum _ | Record _ | Tuple _ | Htuple _ | Message _ -> None
+    in
+    match x with
+    | None -> None
+    | Some (pat, reader) -> Some (pat, wrap t reader)
 
 let add_message_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in

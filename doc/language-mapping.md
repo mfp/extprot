@@ -60,13 +60,19 @@ The generated code can convert automatically values from the serialization
 type to an external one by using suitable conversion functions; e.g.,
 
     type timestamp = long
-      options "ocaml.type" = "Time.t, Time.of_int64, Time.to_int64"
+      options "ocaml.type" = "Time.t; Time.of_int64; Time.to_int64"
 
 will serialize Time.t values by converting them to 64-bit integers
 (using Time.to_int64), and deserialize by reading a 64-bit integer and
 converting it into a Time.t value with Time.of_int64. The "ocaml.type" option
-value _must_ be a comma-separated list of identifiers (with optional module
-paths).
+value must be a semicolon-separated list.
+
+In most cases extprot can derive default value for "ocaml.type" automatically,
+except for compound polymorphic types where encoded type doesn't match type on
+OCaml side. In such cases specify default value with fourth field, e.g.:
+
+    type map 'a 'b = [ ('a * 'b) ] options "ocaml.type" =
+      "('a,'b) PMap.t; (fun l -> PMap.of_enum @@ ExtLib.List.enum l); (fun m -> ExtLib.List.of_enum @@ PMap.enum m); PMap.empty"
 
 ##### Type equality
 
