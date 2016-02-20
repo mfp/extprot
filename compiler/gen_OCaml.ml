@@ -96,41 +96,57 @@ let bad_option ?msg name v = match msg with
 
 module Caml = Camlp4OCamlParser.Make(Camlp4OCamlRevisedParser.Make(Syntax))
 
-let parse_string kind entry s =
+let parse_string ?(verbose=true) kind entry s =
   try
     Gram.parse_string entry (Loc.mk "<string>") s
   with Loc.Exc_located (_, b) as e ->
-    Printf.eprintf "Parse error in OCaml %s: %s\nin\n%s\n"
-      kind (Printexc.to_string b) s;
+    if verbose then
+      Printf.eprintf "Parse error in OCaml %s: %s\nin\n%s\n"
+        kind (Printexc.to_string b) s;
     raise e
 
-let ctyp_of_path = parse_string "type" Syntax.ctyp
-let expr_of_string = parse_string "expression" Syntax.expr
+let ctyp_of_path ?verbose s = parse_string ?verbose "type" Syntax.ctyp s
+let expr_of_string ?verbose s = parse_string ?verbose "expression" Syntax.expr s
 
 type type_info = { ty : string; ctyp : Ast.ctyp; fromf : Ast.expr; tof : Ast.expr; default : Ast.expr option; }
 
-let get_type_info opts =
-  match lookup_option "type" opts with
+let hd_opt = function [] -> None | x :: _ -> Some x
+
+let get_type_info opts = match lookup_option "type" opts with
   | None -> None
   | Some v ->
-    let (ty,fromf,tof,default) =
-      match List.map String.strip @@ String.nsplit v "," with
-      | [ty; fromf; tof] -> ty, fromf, tof, None
-      | _ ->
+      let parses_ok ty fromf tof default =
+        try
+          ignore (ctyp_of_path ~verbose:false ty);
+          ignore (expr_of_string ~verbose:false fromf);
+          ignore (expr_of_string ~verbose:false tof);
+          Option.may (fun s -> ignore (expr_of_string ~verbose:false s)) (hd_opt default);
+          true
+        with _ -> false
+      in
+
+      let split_with_semicolons () =
         match List.map String.strip @@ String.nsplit v ";" with
-        | [ty; fromf; tof] -> ty, fromf, tof, None
-        | [ty; fromf; tof; default] -> ty, fromf, tof, Some default
-        | _ -> bad_option "type" v
-    in
-    try
-      Some {
-        ty = ty;
-        ctyp = ctyp_of_path ty;
-        fromf = expr_of_string fromf;
-        tof = expr_of_string tof;
-        default = Option.map expr_of_string default;
-      }
-    with exn -> bad_option ~msg:(Printexc.to_string exn) "type" v
+          | [ty; fromf; tof] -> ty, fromf, tof, None
+          | [ty; fromf; tof; default] -> ty, fromf, tof, Some default
+          | _ -> bad_option "type" v in
+
+      let (ty,fromf,tof,default) =
+        match List.map String.strip @@ String.nsplit v "," with
+          | ty :: fromf :: tof :: ([] | [_] as default) ->
+              if parses_ok ty fromf tof default then (ty, fromf, tof, hd_opt default)
+              else split_with_semicolons ()
+          | _ -> split_with_semicolons ()
+      in
+        try
+          Some {
+            ty = ty;
+            ctyp = ctyp_of_path ty;
+            fromf = expr_of_string fromf;
+            tof = expr_of_string tof;
+            default = Option.map expr_of_string default;
+          }
+        with exn -> bad_option ~msg:(Printexc.to_string exn) "type" v
 
 let get_type default opts =
   Option.map_default (fun { ctyp; _ } -> ctyp) default (get_type_info opts)

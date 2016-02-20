@@ -96,4 +96,9 @@ type ocaml_type_poly2 'a 'b = [ ('a * 'b) ] options "ocaml.type" = "('a * 'b) ar
 type otp2i 'a = { i : ocaml_type_poly2<ocaml_type_poly1<int>,'a>; }
 message otp2if = { f : otp2i<float>; }
 
+type ocaml_type_poly3 'a 'b 'c = [ ('a * 'b * 'c) ] options "ocaml.type" = "('a, 'b, 'c) Dummy_type.t2; Dummy_type.id; Dummy_type.id; []"
+type otp3i 'a = { i : ocaml_type_poly3<int,'a, int>; }
+message otp3if = { f : otp3i<float>; }
+
+
 (* vim:set ft=ocaml: *)
