@@ -59,7 +59,7 @@ type reduced_type_expr = [
 
 type poly_type_expr_core = [
     poly_type_expr_core base_type_expr_core
-  | `Type of string * poly_type_expr_core list * type_options (* polymorphic sum type name, type args *)
+  | `Type of string * type_param list * poly_type_expr_core list * type_options (* polymorphic sum type name, type args *)
   | `Ext_type of string list * string * poly_type_expr_core list * type_options
   | `Type_arg of string
 ]
