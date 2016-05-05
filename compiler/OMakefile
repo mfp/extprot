@@ -1,6 +1,6 @@
-OCAMLINCLUDES[] += $(BASE)/runtime
-OCAML_LIBS[] =
-	$(BASE)/runtime/extprot
+
+OCAMLINCLUDES =
+OCAML_LIBS[]  =
 
 CAMLP4PATH = $(shell ocamlfind query camlp4)
 PARSERS_PATH = $(CAMLP4PATH)/Camlp4Parsers
@@ -8,18 +8,29 @@ PARSERS_PATH = $(CAMLP4PATH)/Camlp4Parsers
 OCAMLFLAGS += -syntax camlp4o -I $(PARSERS_PATH)
 OCAMLDEPFLAGS += -syntax camlp4o
 
+OCAMLDEP_MODULES_ENABLED = false
+
 OCAMLPACKS[] +=
+	camlp4.lib
 	camlp4.quotations
 	sexplib
 	sexplib.syntax
 
 EXTPROT_OBJS[] =
-	parser
-	ptypes
-	protocol_types
+	buffer_pool
+	codec
+	error
 	gencode
 	gencode_types
 	gen_OCaml
+	limits
+	msg_buffer
+	parser
+	protocol_types
+	pretty_print
+	ptypes
+	reader
+	types
 
 CAMLP4_OBJS[] =
 	Camlp4OCamlRevisedParser
@@ -34,9 +45,17 @@ section
 	OCAMLFLAGS += -w e
 	CamlSources(protocol_types gencode_types)
 
-OCAMLPACKS += camlp4.lib
-OCamlProgram(extprotc, \
-    $(addprefix $(PARSERS_PATH)/, $(CAMLP4_OBJS)) $(EXTPROT_OBJS) extprotc)
+section
+	OCAMLPACKS[] =
+		extlib
+		camlp4.macro
+	CamlSources(msg_buffer reader)
+
+OCamlLibrary(libextprotc, $(addprefix $(PARSERS_PATH)/, $(CAMLP4_OBJS)) $(EXTPROT_OBJS))
+
+OCAML_LIBS[] = libextprotc
+
+OCamlProgram(extprotc, extprotc)
 
 .DEFAULT: extprotc$(EXE)
 
