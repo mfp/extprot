@@ -62,7 +62,7 @@ let exTup_of_lidlist _loc l = match exLids_of_strings _loc l with
 
 let patt_of_ll_type t =
   let _loc = Loc.mk "<genererated code @ patt_of_ll_type>" in
-    <:patt< Extprot.Codec.$uid:Extprot.Codec.string_of_low_level_type t$ >>
+    <:patt< Extprot.Codec.$uid:Codec.string_of_low_level_type t$ >>
 
 let ident_with_path _loc path ident =
   List.fold_right
@@ -674,7 +674,7 @@ let partition_constructors l =
 
 module Make_reader
          (RD : sig
-            val reader_func : Extprot.Reader.reader_func -> Ast.expr
+            val reader_func : Reader.reader_func -> Ast.expr
             val raw_rd_func : low_level -> (Ast.patt * Ast.expr) option
             val read_msg_func : string -> string
           end) =
@@ -836,8 +836,8 @@ struct
           let match_cases =
             List.filter_map maybe_match_case
               [
-                Extprot.Codec.Enum, (fun e -> e), constant_match_cases;
-                Extprot.Codec.Tuple, wrap_non_constant, nonconstant_match_cases;
+                Codec.Enum, (fun e -> e), constant_match_cases;
+                Codec.Tuple, wrap_non_constant, nonconstant_match_cases;
               ] in
 
           let bad_type_case =
@@ -1128,7 +1128,7 @@ let raw_rd_func reader_func =
           >>
       | None -> readerf in
   let patt = patt_of_ll_type in
-  let module C = Extprot.Codec in
+  let module C = Codec in
   fun t ->
     let x = match t with
     | Vint (Bool, _) -> Some (patt C.Bits8, reader_func `Read_raw_bool)
@@ -1151,7 +1151,7 @@ let add_message_reader bindings msgname mexpr opts c =
     Make_reader(struct
                   let reader_func t =
                     <:expr< Extprot.Reader.String_reader.
-                              $lid:Extprot.Reader.string_of_reader_func t$ >>
+                              $lid:Reader.string_of_reader_func t$ >>
 
                   let raw_rd_func = raw_rd_func reader_func
 
@@ -1182,7 +1182,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
     Make_reader(struct
                   let reader_func t =
                     <:expr< Extprot.Reader.IO_reader.
-                              $lid:Extprot.Reader.string_of_reader_func t$ >>
+                              $lid:Reader.string_of_reader_func t$ >>
 
                   let raw_rd_func = raw_rd_func reader_func
 
@@ -1224,7 +1224,7 @@ let rec write_field ?namespace fname =
           Extprot.Msg_buffer.add_tuple_prefix aux $int:string_of_int tag$;
           Extprot.Msg_buffer.add_vint aux
             (Extprot.Msg_buffer.length abuf +
-             $int:string_of_int @@ Extprot.Codec.vint_length nelms$);
+             $int:string_of_int @@ Codec.vint_length nelms$);
           Extprot.Msg_buffer.add_vint aux $int:string_of_int nelms$;
           Extprot.Msg_buffer.add_buffer aux abuf;
           Extprot.Msg_buffer.discard abuf
@@ -1333,7 +1333,7 @@ and dump_fields ?namespace tag fields =
            $write_fields ?namespace fields$;
            Extprot.Msg_buffer.add_vint b
              (Extprot.Msg_buffer.length aux +
-              $int:string_of_int @@ Extprot.Codec.vint_length nelms$);
+              $int:string_of_int @@ Codec.vint_length nelms$);
            Extprot.Msg_buffer.add_vint b nelms;
            Extprot.Msg_buffer.add_buffer b aux;
            Extprot.Msg_buffer.discard aux
