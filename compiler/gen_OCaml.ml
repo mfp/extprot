@@ -741,8 +741,6 @@ struct
           vars
       in read_elms mk_expr lltys
 
-    and lltys_without_defaults = List.map (fun x -> (x, None))
-
     and read t =
       let expr = match t with
       | Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
@@ -808,7 +806,7 @@ struct
             let mc (c, lltys) =
               <:match_case<
                  $int:string_of_int c.const_tag$ ->
-                      $read_sum_elms c (lltys_without_defaults lltys)$
+                      $read_sum_elms c (List.map (fun llty -> (llty, default_value llty)) lltys)$
               >>
             in List.map mc non_constant @
                [ <:match_case<
