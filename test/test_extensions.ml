@@ -134,8 +134,18 @@ let () = Register_test.register "extensions"
 
     "constructor extension" >:: begin fun () ->
       check_roundtrip Se_2.pp Se_1.write_se_1 Se_2.read_se_2
-        { Se_1.x = Sum_ext1.A 42; }
-        { Se_2.x = Sum_ext2.A (42, Sum_type.D, false) }
+        { Se_1.x = Sum_ext1.A 42; y = "foobar"; z = Sum_ext1.A 4242}
+        { Se_2.x = Sum_ext2.A (42, Sum_type.D, false);
+          y = "foobar"; z = Sum_ext2.A (4242, Sum_type.D, false);
+        };
+
+      (* Check that extended constructors can be read by old proto readers
+       * (i.e., unknown elements are skipped correctly). *)
+      check_roundtrip Se_1.pp Se_2.write_se_2 Se_1.read_se_1
+        { Se_2.x = Sum_ext2.A (42, Sum_type.D, false);
+          y = "foobar"; z = Sum_ext2.A (4242, Sum_type.D, false);
+        }
+        { Se_1.x = Sum_ext1.A 42; y = "foobar"; z = Sum_ext1.A 4242};
     end;
 
     default_value_tests;
