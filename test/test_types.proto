@@ -100,5 +100,10 @@ type ocaml_type_poly3 'a 'b 'c = [ ('a * 'b * 'c) ] options "ocaml.type" = "('a,
 type otp3i 'a = { i : ocaml_type_poly3<int,'a, int>; }
 message otp3if = { f : otp3i<float>; }
 
+type sum_ext1 = A int | B
+type sum_ext2 = A int sum_type<int, string, long> bool | B
+
+message se_1 = { x : sum_ext1 }
+message se_2 = { x : sum_ext2 }
 
 (* vim:set ft=ocaml: *)

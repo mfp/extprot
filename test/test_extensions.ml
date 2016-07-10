@@ -132,5 +132,11 @@ let () = Register_test.register "extensions"
         { Widen.a = 1L; b = 2.; c = 3.; d = 4. };
     end;
 
+    "constructor extension" >:: begin fun () ->
+      check_roundtrip Se_2.pp Se_1.write_se_1 Se_2.read_se_2
+        { Se_1.x = Sum_ext1.A 42; }
+        { Se_2.x = Sum_ext2.A (42, Sum_type.D, false) }
+    end;
+
     default_value_tests;
   ]
