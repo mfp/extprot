@@ -15,8 +15,7 @@ OCAMLDEP_MODULES_ENABLED = false
 OCAMLPACKS[] +=
 	camlp4.lib
 	camlp4.quotations
-	sexplib
-	sexplib.syntax
+	unix
 
 EXTPROT_OBJS[] =
 	buffer_pool

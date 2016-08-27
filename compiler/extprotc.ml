@@ -12,8 +12,6 @@ let (@@) f x = f x
 let file = ref None
 let output = ref None
 let generators = ref None
-let dump_reduced = ref false
-let dump_concrete = ref false
 let width = ref 100
 
 let arg_spec =
@@ -24,8 +22,6 @@ let arg_spec =
         "LIST Generators to use (comma-separated).";
       "-w", Arg.Set_int width,
         sprintf "N Set width to N characters in generated code (default: %d)." !width;
-      "--debug-reduced", Arg.Set dump_reduced, " Dump beta reduced message definitions.";
-      "--debug-concrete", Arg.Set dump_concrete, " Dump concrete message definitions.";
     ]
 
 let usage_msg =
@@ -49,55 +45,6 @@ let print_header ?(sub = '=') fmt =
     fmt
 
 let print fmt = Format.fprintf Format.err_formatter fmt
-
-let inspect_reduced_decls bindings decls =
-  let prev_const = ref "" in
-  let print_reduced_field const fname mutabl reduced =
-    if const <> !prev_const then print_header ~sub:'-' "Branch %s" const;
-    print " %s%S@. reduced: @[%a@]@.@."
-      (if mutabl then "mutable " else "") fname PP.inspect_reduced_type_expr reduced;
-    prev_const := const in
-  let print_field bindings const fname mutabl ty =
-    let reduced = Gencode.beta_reduce_texpr bindings ty in
-      print_reduced_field const fname mutabl reduced in
-
-  List.iter
-    (function
-         Ptypes.Message_decl (name, (`App _ | `Record _ | `Sum _ as mexpr), _) ->
-           prev_const := "";
-           print_header "Message %s" name;
-           Gencode.iter_message bindings (print_field bindings) print_reduced_field mexpr;
-       | Ptypes.Message_decl (name, `Message_alias (path, aliased_name), _) ->
-           prev_const := "";
-           print_header "Message %s" name;
-           print "%s.%s@." (String.concat "." path) aliased_name
-       | Ptypes.Type_decl _ -> ())
-    decls
-
-let inspect_concrete bindings decls =
-  let print_fields =
-    List.iter
-      (fun (name, mut, llty) ->
-         print " %s%s : " (if mut then "mutable " else "") name;
-         print "@[%a@]@.@." Sexplib.Sexp.pp_hum (Gencode.sexp_of_low_level llty)) in
-  let print_msg mexpr =
-    match Gencode.low_level_msg_def bindings mexpr with
-        Gencode.Message_single (_, fields) -> print_fields fields
-      | Gencode.Message_alias (path, name) ->
-          print " %s.%s@." (String.concat "." path) name
-      | Gencode.Message_sum cases ->
-          List.iter
-            (fun (ns, cons, fields) ->
-               print_header ~sub:'-' "Branch %s (namespace: %s)"
-                 cons (Option.default "" ns);
-               print_fields fields)
-            cases
-  in List.iter
-       (function
-            Ptypes.Message_decl (name, mexpr, _) -> print_header "Message %s" name;
-                                                    print_msg mexpr
-          | Ptypes.Type_decl _ -> ())
-       decls
 
 let () =
   Arg.parse arg_spec (fun fname -> file := Some fname) usage_msg;
@@ -123,7 +70,5 @@ let () =
                  print "@.@]";
                  exit 1
          end;
-         let bs = Gencode.collect_bindings decls in
-         if !dump_reduced then inspect_reduced_decls bs decls;
-         if !dump_concrete then inspect_concrete bs decls)
+         ignore @@ Gencode.collect_bindings decls)
     !file
