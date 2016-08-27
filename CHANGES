@@ -1,11 +1,27 @@
-Changes since version 1.1.2
-===========================
+Changes since 1.2.0
+===================
+* support polymorphic type in ocaml.type
+* allow to specify default value for ocaml.type
+* use of semicolon separators in ocaml.type to allow multi-parametric types
+* support cross-compilation using OCAMLFIND_TOOLCHAIN
+* allow "horizontal" sum type extension, e.g.
+
+  type foo = A int    ->     type bar = Bar | Baz int
+                             type foo = A int bar
+
+  where the "bar" field will have the default value Bar in old values lacking
+  lack that 'constructor field'
+* remove sexplib dependency (along with rarely if ever used --debug-concrete
+  and --debug-reduced compiler flags)
+
+Changes since 1.1.2
+===================
 * use internal buffer pool in Extprot.Msg_buffer in order to avoid allocating
   large buffers when serializing. It can be disabled by defining the
   EXTPROT_DISABLE_BUFFER_POOL environment variable.
 
-Changes since version 1.1.1
-===========================
+Changes since 1.1.1
+-------------------
 * conditionally enable -bin-annot for ocaml >= 4.00 (ygrek)
 * change in generated pretty-printers for records: print module path only for
   first field
