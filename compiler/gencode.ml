@@ -287,12 +287,15 @@ type 'container typedecl_generator =
 
 module type GENCODE =
 sig
+  type toplevel
   type container
+  type entry = Toplevel of toplevel | Container of container
 
+  val generate_include : string -> toplevel
   val generate_container : bindings -> declaration -> container option
   val msgdecl_generators : (string * container msgdecl_generator) list
   val typedecl_generators : (string * container typedecl_generator) list
-  val generate_code : ?width:int -> container list -> string
+  val generate_code : ?width:int -> entry list -> string
 end
 
 let (|>) x f = f x
@@ -306,18 +309,20 @@ struct
       names Gen.typedecl_generators @ names Gen.msgdecl_generators |>
         List.unique |> List.sort
 
-  let generate_code ?width ?(generators : string list option) (decls : declaration list) =
+  let generate_code ?width ?(generators : string list option) bindings entries =
     let use_generator name = match generators with
         None -> true
       | Some l -> List.mem name l in
 
-    let bindings = collect_bindings decls in
-      decls |>
-      List.filter_map begin fun decl ->
+    entries |>
+      List.filter_map begin function
+      | Include file -> Some (Toplevel (generate_include file))
+      | Decl decl ->
         generate_container bindings decl |>
           Option.map begin fun cont ->
-            match decl with
-               Type_decl (name, params, expr, opts) ->
+           let container =
+             match decl with
+             | Type_decl (name, params, expr, opts) ->
                  List.fold_left
                    (fun cont (gname, f) ->
                       if use_generator gname then f bindings name params expr opts cont
@@ -331,6 +336,8 @@ struct
                       else cont)
                    cont
                    Gen.msgdecl_generators
+           in
+           Container container
           end
       end |>
       Gen.generate_code ?width

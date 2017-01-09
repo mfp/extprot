@@ -19,6 +19,10 @@ type container = {
   c_default_func : Ast.str_item option;
 }
 
+type toplevel = Ast.str_item
+
+type entry = Toplevel of toplevel | Container of container
+
 let empty_container name ?default_func ty_str_item =
   {
     c_name = name;
@@ -203,6 +207,11 @@ let ident_of_ctyp ty =
     try
       <:ctyp< $id:Ast.ident_of_ctyp ty$ >>
     with Invalid_argument _ -> ty
+
+let generate_include file =
+  let _loc = Loc.mk "gen_OCaml" in
+  let modul = String.capitalize @@ Filename.chop_extension file in
+  <:str_item< open $uid:modul$ >>
 
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
@@ -497,7 +506,11 @@ let generate_code ?width containers =
        end >>
   in string_of_ast ?width (fun o -> o#implem)
        (List.fold_left
-          (fun s c -> <:str_item< $s$; $container_of_str_item c$ >>)
+          begin fun s e ->
+            match e with
+            | Toplevel t -> <:str_item< $s$; $t$; >>
+            | Container c -> <:str_item< $s$; $container_of_str_item c$ >>
+          end
           <:str_item< >>
           containers)
 
