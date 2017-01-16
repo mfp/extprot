@@ -1,0 +1,12 @@
+
+include "a.proto"
+
+message metadata =
+    Text { author: meta<string>; pages : meta<int> }
+  | Image { dims : meta<dim>; colors : meta<int> }
+
+message tuple = {
+  tup : sum
+}
+
+type foo2 = A foo | B foo foo | C
