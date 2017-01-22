@@ -81,6 +81,12 @@ type declaration =
     Message_decl of string * message_expr * type_options
   | Type_decl of string * type_param list * type_expr * type_options
 
+type origin = Extern | Local
+
+type toplevel =
+  | Decl of declaration
+  | Include of string
+
 let base_type_expr e = (e :> base_type_expr)
 let type_expr e = (e :> type_expr)
 

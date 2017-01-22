@@ -3,6 +3,7 @@
 *.cmx
 *.cma
 *.cmxa
+*.cmxs
 *.annot
 *.cmt
 *.cmti

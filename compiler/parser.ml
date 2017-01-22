@@ -4,7 +4,7 @@ open Ptypes
 (* use fresh module *)
 module Gram = MakeGram(Lexer)
 
-let declarations = Gram.Entry.mk "type_expr"
+let entries = Gram.Entry.mk "type_expr"
 
 type constructor =
   [ `Constant of string
@@ -21,17 +21,19 @@ let make_complex_msg_expr n = function
   | `Sum (x, l) -> `Sum ((n, x) :: l)
 
 EXTEND Gram
-  GLOBAL: declarations;
+  GLOBAL: entries;
 
-  declarations :
+  entries :
     [
-      [ m = declaration; l = declarations -> (m :: l)
+      [ m = entry; l = entries -> (m :: l)
       | `EOI -> [] ] ];
 
-  declaration :
+  entry :
     [ "message"
         [ "message"; name = a_LIDENT; "="; e = msg_expr; opts = type_options ->
-            Message_decl (name, e, opts) ]
+            `Decl (Message_decl (name, e, opts)) ]
+    | "include"
+        [ "include"; file = a_STRING -> `Include file ]
     | "type"
         [ "type"; name = a_LIDENT;
           par = LIST0 [ "'"; n = a_LIDENT -> type_param_of_string n];
@@ -40,7 +42,7 @@ EXTEND Gram
                 `Sum (s, opts) -> `Sum ({ s with type_name = name }, opts)
               | `Record (r, opts) -> `Record ({ r with record_name = name }, opts)
               | e -> e
-            in Type_decl (name, par, e, opts) ] ];
+            in `Decl (Type_decl (name, par, e, opts)) ] ];
 
   type_options :
     [ [ -> []
@@ -135,9 +137,17 @@ EXTEND Gram
 
 END
 
-let parse text = Gram.parse_string declarations (Loc.mk "<string>") text
-let parse_file fname =
-  Gram.parse_string declarations (Loc.mk fname) (Std.input_file fname)
+(* let parse text = Gram.parse_string entries (Loc.mk "<string>") text *)
+let rec parse_file fname =
+  let l = Gram.parse_string entries (Loc.mk fname) (Std.input_file fname) in
+  let l = List.map begin function
+    | `Decl decl -> [Decl decl,Local]
+    | `Include file ->
+      let included = List.map (fun (x,_) -> x, match x with Decl _ -> Extern | Include _ -> Local) (parse_file file) in
+      included @ [ Include file, Local ]
+    end l
+  in
+  List.flatten l
 
 let print_synerr f x =
   try

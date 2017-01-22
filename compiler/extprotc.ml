@@ -48,8 +48,9 @@ let print fmt = Format.fprintf Format.err_formatter fmt
 
 let () =
   Arg.parse arg_spec (fun fname -> file := Some fname) usage_msg;
-  Option.may
-    (fun file ->
+  match !file with
+  | None -> ()
+  | Some file ->
        let output = match !output with
            None -> Filename.chop_extension file ^ ".ml"
          | Some f -> f in
@@ -60,15 +61,16 @@ let () =
        end;
 
        let och = open_out output in
-       let decls = Parser.print_synerr Parser.parse_file file in
+       let entries = Parser.print_synerr Parser.parse_file file in
+       let decls = List.filter_map (function (Ptypes.Decl decl, _) -> Some decl | _ -> None) entries in
+       let bindings = Gencode.collect_bindings decls in
+       let local = List.filter_map (function (entry,Ptypes.Local) -> Some entry | (_,Ptypes.Extern) -> None) entries in
          begin
            match Ptypes.check_declarations decls with
-               [] -> G.generate_code ~width:!width ?generators:!generators decls |> output_string och
+               [] -> G.generate_code ~width:!width ?generators:!generators bindings local |> output_string och
              | errors ->
                  print "Found %d errors:@." (List.length errors);
                  Ptypes.pp_errors Format.err_formatter errors;
                  print "@.@]";
                  exit 1
-         end;
-         ignore @@ Gencode.collect_bindings decls)
-    !file
+         end

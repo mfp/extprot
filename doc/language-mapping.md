@@ -86,6 +86,24 @@ You can indicate that a type is equal to an existing one with the
 defines an opt type that is equal to the usual option type. The
 "ocaml.type_equals" value must be an idenfifier with optional module path.
 
+#### Include
+
+It is possible to split extprot file into several smaller files and include as needed,
+for modularity and better ocaml compilation times, e.g.:
+
+		include "a.proto"
+
+		type my = Empty | My of t (* where type t is defined in a.proto *)
+
+will produce:
+
+		open A
+
+		module My = ...
+
+"include" assumes that the OCaml file generated from included extprot file
+will be named following the default convention (i.e. "a.ml" from "a.proto")
+
 #### Pretty-printers
 
 You can provide a customized pretty-printer function that overrides the
