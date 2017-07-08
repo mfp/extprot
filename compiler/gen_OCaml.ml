@@ -514,6 +514,12 @@ let generate_code ?width containers =
           <:str_item< >>
           containers)
 
+let wrap_value opts expr =
+  let _loc = Loc.ghost in
+  match get_type_info opts with
+  | Some { tof; _ } -> <:expr< $tof$ $expr$ >>
+  | None -> expr
+
 module Pretty_print =
 struct
   let _loc = Loc.mk "Gen_OCaml.Pretty_print"
@@ -593,17 +599,11 @@ struct
 
   let add_msgdecl_pretty_printer bindings msgname mexpr opts c =
     let expr = pp_message bindings msgname mexpr in
-      match get_type_info opts with
-          None ->
-            { c with c_pretty_printer =
-                Some <:str_item< value $lid:"pp_" ^ msgname$ pp = $expr$;
-                                 value pp = $lid:"pp_" ^ msgname$; >> }
-        | Some { tof; _ } ->
-            { c with c_pretty_printer =
-                Some
-                  <:str_item<
-                    value $lid:"pp_" ^ msgname$ pp x = $expr$ ($tof$ x);
-                    value pp = $lid:"pp_" ^ msgname$; >> }
+    { c with c_pretty_printer =
+        Some
+          <:str_item<
+            value $lid:"pp_" ^ msgname$ pp x = $expr$ ($wrap_value opts <:expr<x>>$);
+            value pp = $lid:"pp_" ^ msgname$; >> }
 
   let add_typedecl_pretty_printer bindings tyname typarams texpr opts c =
     let wrap expr =
@@ -636,11 +636,7 @@ struct
                            | `Non_constant (n, l) -> constr_ptexprs_case (n, l))
                         s.constructors
           in
-            match get_type_info opts with
-                None -> <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
-              | Some { tof; _ } ->
-                <:expr< fun pp -> fun x ->
-                          match ($tof$ x) with [ $Ast.mcOr_of_list cases$ ] >>
+          <:expr< fun pp -> fun x -> match ($wrap_value opts <:expr<x>>$) with [ $Ast.mcOr_of_list cases$ ] >>
         end
       | `Record (r, opts) -> begin
           let pp_field i (name, _, tyexpr) =
@@ -653,21 +649,11 @@ struct
                   $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core tyexpr$ )
               >> in
           let pp_fields = List.mapi pp_field r.record_fields in
-            match get_type_info opts with
-                None ->
-                  <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ >>
-              | Some { tof; _ } ->
-                  <:expr< fun ppf -> fun x ->
-                            $pp_func "pp_struct"$ $expr_of_list pp_fields$
-                              ppf ($tof$ x) >>
+          <:expr< fun ppf -> fun x -> $pp_func "pp_struct"$ $expr_of_list pp_fields$ ppf ($wrap_value opts <:expr<x>>$) >>
         end
       | #poly_type_expr_core as ptexpr ->
-          let ppfunc_expr = pp_poly_texpr_core ptexpr
-          in match get_type_info opts with
-              None -> ppfunc_expr
-            | Some { tof; _ } ->
-                <:expr< fun ppf -> fun x -> $ppfunc_expr$ ppf ($tof$ x) >>
-
+          let ppfunc_expr = pp_poly_texpr_core ptexpr in
+          <:expr< fun ppf -> fun x -> $ppfunc_expr$ ppf ($wrap_value opts <:expr<x>> $) >>
     in
       { c with c_pretty_printer =
           Some <:str_item< value $lid:"pp_" ^ tyname$ = $wrap expr$ >> }
@@ -1251,10 +1237,6 @@ let rec write_field ?namespace fname =
         let $patt$ = $v$ in
           $write_values tag var_tys$
       >>
-
-  and wrap_value opts expr = match get_type_info opts with
-        Some { tof; _ } -> <:expr< $tof$ $expr$ >>
-      | None -> expr
 
   and write v = function
       Vint (_, opts) | Bitstring32 opts | Bitstring64 (_, opts)
