@@ -389,7 +389,7 @@ let generate_container bindings =
             | Some { fromf; _ } ->
                 <:expr< $fromf$ $x$ >> in
 
-        let default_func = match Gencode.low_level_msg_def bindings mexpr with
+        let default_func = match Gencode.low_level_msg_def bindings msgname mexpr with
             Message_single (namespace, fields) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
@@ -1143,7 +1143,7 @@ let raw_rd_func reader_func =
 
 let add_message_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
-  let llrec = Gencode.low_level_msg_def bindings mexpr in
+  let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_normal_reader =
     Make_reader(struct
                   let reader_func t =
@@ -1174,7 +1174,7 @@ let add_message_reader bindings msgname mexpr opts c =
 
 let add_message_io_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_io_reader>" in
-  let llrec = Gencode.low_level_msg_def bindings mexpr in
+  let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_io_reader =
     Make_reader(struct
                   let reader_func t =
@@ -1363,7 +1363,7 @@ let wrap_writer _loc opts expr = match get_type_info opts with
 
 let add_message_writer bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_writer>" in
-  let llrec = Gencode.low_level_msg_def bindings mexpr in
+  let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let write_expr = write_message msgname llrec |>
                    wrap_writer _loc opts in
   let writer =
