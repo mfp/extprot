@@ -17,6 +17,7 @@ type container = {
   c_pretty_printer : Ast.str_item option;
   c_writer : Ast.str_item option;
   c_default_func : Ast.str_item option;
+  c_reflection : Ast.str_item option;
 }
 
 type toplevel = Ast.str_item
@@ -33,6 +34,7 @@ let empty_container name ?default_func ty_str_item =
     c_pretty_printer = None;
     c_writer = None;
     c_default_func = default_func;
+    c_reflection = None;
   }
 
 let (|>) x f = f x
@@ -207,6 +209,10 @@ let ident_of_ctyp ty =
     try
       <:ctyp< $id:Ast.ident_of_ctyp ty$ >>
     with Invalid_argument _ -> ty
+
+let expr_of_list l =
+  let _loc = Loc.ghost in
+  List.fold_right (fun x l -> <:expr< [ $x$ :: $l$ ] >>) l <:expr< [] >>
 
 let generate_include file =
   let _loc = Loc.mk "gen_OCaml" in
@@ -498,6 +504,7 @@ let generate_code ?width containers =
        module $String.capitalize c.c_name$ = struct
          $maybe_str_item c.c_import_modules$;
          $maybe_str_item c.c_types$;
+         $maybe_str_item c.c_reflection$;
          $maybe_str_item c.c_default_func$;
          $maybe_str_item c.c_pretty_printer$;
          $maybe_str_item c.c_reader$;
@@ -517,9 +524,6 @@ let generate_code ?width containers =
 module Pretty_print =
 struct
   let _loc = Loc.mk "Gen_OCaml.Pretty_print"
-
-  let expr_of_list l =
-    List.fold_right (fun x l -> <:expr< [ $x$ :: $l$ ] >>) l <:expr< [] >>
 
   let pp_func name = <:expr< Extprot.Pretty_print.$lid:name$ >>
 
@@ -679,6 +683,76 @@ struct
       { c with c_pretty_printer =
           Some <:str_item< value $lid:"pp_" ^ tyname$ = $expr_of_string s$ >> }
 end
+
+module Reflection =
+struct
+  let _loc = Loc.mk "Gen_OCaml.Reflection"
+
+  let repr_name path name = <:expr< $id:ident_with_path _loc path ("repr_"^name)$ >>
+
+  let rec repr_message bindings msgname = function
+    | `Record l ->
+        let repr_field (name, _, tyexpr) = <:expr< ($str:name$, $repr_texpr bindings tyexpr$) >> in
+        <:expr< `Record $expr_of_list @@ List.map repr_field l$ >>
+    | `App(name, args, _) ->
+        List.fold_left
+          (fun e ptexpr -> <:expr< $e$ $repr_texpr bindings ptexpr$ >>)
+          (repr_name [String.capitalize name] name)
+          args
+    | `Message_alias (path, name) -> if true then failwith name; repr_name path name
+    | `Sum l ->
+      let repr_constr (name, mexpr) = <:expr< $str:name$, $repr_message bindings msgname (mexpr :> message_expr)$ >> in
+      <:expr< `Sum $expr_of_list @@ List.map repr_constr l$ >>
+
+  and repr_texpr bindings texpr =
+    reduce_to_poly_texpr_core bindings texpr |> repr_poly_texpr_core
+
+  and repr_poly_type path name args =
+    let path = path @ [String.capitalize name] in
+    List.fold_left
+      (fun e ptexpr -> <:expr< $e$ $repr_poly_texpr_core ptexpr$ >>)
+      (repr_name path name)
+      args
+
+  and repr_poly_texpr_core = function
+    | `Bool _ -> <:expr<`Bool>>
+    | `Byte _ -> <:expr<`Byte>>
+    | `Int _ -> <:expr<`Int>>
+    | `Long_int _ -> <:expr<`Long>>
+    | `Float _ -> <:expr<`Float>>
+    | `String _ -> <:expr<`String>>
+    | `List (ty, _) -> <:expr< `List $repr_poly_texpr_core ty$ >>
+    | `Array (ty, _) -> <:expr< `Array $repr_poly_texpr_core ty$ >>
+    | `Tuple (l, _) -> <:expr< `Tuple $expr_of_list (List.map repr_poly_texpr_core l)$ >>
+    | `Type (name, _params, args, _) -> repr_poly_type [] name args
+    | `Ext_type (path, name, args, _) -> repr_poly_type path name args
+    | `Type_arg n -> <:expr< $lid:n$ >>
+
+  let add_msgdecl_reflection bindings msgname mexpr _opts c =
+    let expr = repr_message bindings msgname mexpr in
+    { c with c_reflection = Some <:str_item< value $lid:"repr_"^msgname$ = $expr$; >> }
+
+  let add_typedecl_reflection bindings tyname typarams texpr _opts c =
+    let expr =
+      match poly_beta_reduce_texpr bindings texpr with
+      | `Sum (s, _opts) ->
+          let repr_constr (name, ptexprs) = <:expr< $str:name$, $expr_of_list @@ List.map repr_poly_texpr_core ptexprs$ >> in
+          let cases = List.map (function `Constant n -> (n, []) | `Non_constant (n, l) -> (n, l)) s.constructors in
+          <:expr< `Sum $expr_of_list @@ List.map repr_constr cases$ >>
+      | `Record (r, _opts) ->
+        let repr_field (name, _, tyexpr) = <:expr< ($str:name$, $repr_poly_texpr_core tyexpr$) >> in
+        <:expr< `Record $expr_of_list @@ List.map repr_field r.record_fields$ >>
+      | #poly_type_expr_core as ptexpr -> repr_poly_texpr_core ptexpr
+    in
+    let expr =
+      List.fold_right
+        (fun typaram e -> <:expr< fun $lid:type_param_name typaram$ -> $e$ >>) (* lid referenced by Type_arg *)
+        typarams
+        expr
+    in
+    { c with c_reflection = Some <:str_item< value $lid:"repr_"^tyname$ = $expr$; >> }
+
+end (** Reflection *)
 
 let partition_constructors l =
   let c = List.filter_map (function `Constant x -> Some x | _ -> None) l in
@@ -1395,9 +1469,11 @@ let msgdecl_generators : (string * _ msgdecl_generator) list =
     "io_reader", add_message_io_reader;
     "writer", add_message_writer;
     "pretty_printer", Pretty_print.add_msgdecl_pretty_printer;
+    "reflection", Reflection.add_msgdecl_reflection;
   ]
 
 let typedecl_generators : (string * _ typedecl_generator) list =
   [
     "pretty_printer", Pretty_print.add_typedecl_pretty_printer;
+    "reflection", Reflection.add_typedecl_reflection;
   ]
