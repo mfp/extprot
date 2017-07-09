@@ -529,6 +529,8 @@ struct
 
   let pp_func name = <:expr< Extprot.Pretty_print.$lid:name$ >>
 
+  let pp_name path name = <:expr< $id:ident_with_path _loc path ("pp_" ^ name)$ >>
+
   let rec pp_message ?namespace bindings msgname = function
       `Record l ->
         let pp_field i (name, _, tyexpr) =
@@ -552,12 +554,12 @@ struct
         let pp_func =
           List.fold_left
             (fun e ptexpr -> <:expr< $e$ $pp_texpr bindings ptexpr$ >>)
-            <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
+            (pp_name [String.capitalize name] name)
             args
         in <:expr< $pp_func$ pp >>
     | `Message_alias (path, name) ->
         let full_path = path @ [String.capitalize name] in
-          <:expr< $id:ident_with_path _loc full_path ("pp_" ^ name)$ pp >>
+        <:expr< $pp_name full_path name$ pp >>
     | `Sum l ->
         let match_case (const, mexpr) =
           <:match_case<
@@ -567,6 +569,13 @@ struct
 
   and pp_texpr bindings texpr =
     reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
+
+  and pp_poly_type path name args =
+    let path = path @ [String.capitalize name] in
+    List.fold_left
+      (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
+      (pp_name path name)
+      args
 
   and pp_poly_texpr_core = function
       `Bool _ -> pp_func "pp_bool"
@@ -583,18 +592,8 @@ struct
           (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
           (pp_func ("pp_tuple" ^ string_of_int (List.length l)))
           l
-    | `Type (name, _params, args, _) ->
-        List.fold_left
-          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
-          <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
-          args
-    | `Ext_type (path, name, args, _) ->
-        let full_path = path @ [String.capitalize name] in
-        let id = ident_with_path _loc full_path ("pp_" ^ name) in
-        List.fold_left
-          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
-          <:expr< $id:id$ >>
-          args
+    | `Type (name, _params, args, _) -> pp_poly_type [] name args
+    | `Ext_type (path, name, args, _) -> pp_poly_type path name args
     | `Type_arg n -> <:expr< $lid:"pp_" ^ n$ >>
 
   let add_msgdecl_pretty_printer bindings msgname mexpr opts c =
