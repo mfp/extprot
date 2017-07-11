@@ -389,7 +389,7 @@ let generate_container bindings =
             | Some { fromf; _ } ->
                 <:expr< $fromf$ $x$ >> in
 
-        let default_func = match Gencode.low_level_msg_def bindings mexpr with
+        let default_func = match Gencode.low_level_msg_def bindings msgname mexpr with
             Message_single (namespace, fields) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
@@ -514,6 +514,12 @@ let generate_code ?width containers =
           <:str_item< >>
           containers)
 
+let wrap_value opts expr =
+  let _loc = Loc.ghost in
+  match get_type_info opts with
+  | Some { tof; _ } -> <:expr< $tof$ $expr$ >>
+  | None -> expr
+
 module Pretty_print =
 struct
   let _loc = Loc.mk "Gen_OCaml.Pretty_print"
@@ -522,6 +528,8 @@ struct
     List.fold_right (fun x l -> <:expr< [ $x$ :: $l$ ] >>) l <:expr< [] >>
 
   let pp_func name = <:expr< Extprot.Pretty_print.$lid:name$ >>
+
+  let pp_name path name = <:expr< $id:ident_with_path _loc path ("pp_" ^ name)$ >>
 
   let rec pp_message ?namespace bindings msgname = function
       `Record l ->
@@ -546,12 +554,12 @@ struct
         let pp_func =
           List.fold_left
             (fun e ptexpr -> <:expr< $e$ $pp_texpr bindings ptexpr$ >>)
-            <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
+            (pp_name [String.capitalize name] name)
             args
         in <:expr< $pp_func$ pp >>
     | `Message_alias (path, name) ->
         let full_path = path @ [String.capitalize name] in
-          <:expr< $id:ident_with_path _loc full_path ("pp_" ^ name)$ pp >>
+        <:expr< $pp_name full_path name$ pp >>
     | `Sum l ->
         let match_case (const, mexpr) =
           <:match_case<
@@ -561,6 +569,13 @@ struct
 
   and pp_texpr bindings texpr =
     reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
+
+  and pp_poly_type path name args =
+    let path = path @ [String.capitalize name] in
+    List.fold_left
+      (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
+      (pp_name path name)
+      args
 
   and pp_poly_texpr_core = function
       `Bool _ -> pp_func "pp_bool"
@@ -577,33 +592,17 @@ struct
           (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
           (pp_func ("pp_tuple" ^ string_of_int (List.length l)))
           l
-    | `Type (name, _params, args, _) ->
-        List.fold_left
-          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
-          <:expr< $uid:String.capitalize name$.$lid:"pp_" ^ name$ >>
-          args
-    | `Ext_type (path, name, args, _) ->
-        let full_path = path @ [String.capitalize name] in
-        let id = ident_with_path _loc full_path ("pp_" ^ name) in
-        List.fold_left
-          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
-          <:expr< $id:id$ >>
-          args
+    | `Type (name, _params, args, _) -> pp_poly_type [] name args
+    | `Ext_type (path, name, args, _) -> pp_poly_type path name args
     | `Type_arg n -> <:expr< $lid:"pp_" ^ n$ >>
 
   let add_msgdecl_pretty_printer bindings msgname mexpr opts c =
     let expr = pp_message bindings msgname mexpr in
-      match get_type_info opts with
-          None ->
-            { c with c_pretty_printer =
-                Some <:str_item< value $lid:"pp_" ^ msgname$ pp = $expr$;
-                                 value pp = $lid:"pp_" ^ msgname$; >> }
-        | Some { tof; _ } ->
-            { c with c_pretty_printer =
-                Some
-                  <:str_item<
-                    value $lid:"pp_" ^ msgname$ pp x = $expr$ ($tof$ x);
-                    value pp = $lid:"pp_" ^ msgname$; >> }
+    { c with c_pretty_printer =
+        Some
+          <:str_item<
+            value $lid:"pp_" ^ msgname$ pp x = $expr$ ($wrap_value opts <:expr<x>>$);
+            value pp = $lid:"pp_" ^ msgname$; >> }
 
   let add_typedecl_pretty_printer bindings tyname typarams texpr opts c =
     let wrap expr =
@@ -636,11 +635,7 @@ struct
                            | `Non_constant (n, l) -> constr_ptexprs_case (n, l))
                         s.constructors
           in
-            match get_type_info opts with
-                None -> <:expr< fun pp -> fun [ $Ast.mcOr_of_list cases$ ] >>
-              | Some { tof; _ } ->
-                <:expr< fun pp -> fun x ->
-                          match ($tof$ x) with [ $Ast.mcOr_of_list cases$ ] >>
+          <:expr< fun pp -> fun x -> match ($wrap_value opts <:expr<x>>$) with [ $Ast.mcOr_of_list cases$ ] >>
         end
       | `Record (r, opts) -> begin
           let pp_field i (name, _, tyexpr) =
@@ -653,21 +648,11 @@ struct
                   $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core tyexpr$ )
               >> in
           let pp_fields = List.mapi pp_field r.record_fields in
-            match get_type_info opts with
-                None ->
-                  <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ >>
-              | Some { tof; _ } ->
-                  <:expr< fun ppf -> fun x ->
-                            $pp_func "pp_struct"$ $expr_of_list pp_fields$
-                              ppf ($tof$ x) >>
+          <:expr< fun ppf -> fun x -> $pp_func "pp_struct"$ $expr_of_list pp_fields$ ppf ($wrap_value opts <:expr<x>>$) >>
         end
       | #poly_type_expr_core as ptexpr ->
-          let ppfunc_expr = pp_poly_texpr_core ptexpr
-          in match get_type_info opts with
-              None -> ppfunc_expr
-            | Some { tof; _ } ->
-                <:expr< fun ppf -> fun x -> $ppfunc_expr$ ppf ($tof$ x) >>
-
+          let ppfunc_expr = pp_poly_texpr_core ptexpr in
+          <:expr< fun ppf -> fun x -> $ppfunc_expr$ ppf ($wrap_value opts <:expr<x>> $) >>
     in
       { c with c_pretty_printer =
           Some <:str_item< value $lid:"pp_" ^ tyname$ = $wrap expr$ >> }
@@ -1157,7 +1142,7 @@ let raw_rd_func reader_func =
 
 let add_message_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
-  let llrec = Gencode.low_level_msg_def bindings mexpr in
+  let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_normal_reader =
     Make_reader(struct
                   let reader_func t =
@@ -1188,7 +1173,7 @@ let add_message_reader bindings msgname mexpr opts c =
 
 let add_message_io_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_io_reader>" in
-  let llrec = Gencode.low_level_msg_def bindings mexpr in
+  let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_io_reader =
     Make_reader(struct
                   let reader_func t =
@@ -1251,10 +1236,6 @@ let rec write_field ?namespace fname =
         let $patt$ = $v$ in
           $write_values tag var_tys$
       >>
-
-  and wrap_value opts expr = match get_type_info opts with
-        Some { tof; _ } -> <:expr< $tof$ $expr$ >>
-      | None -> expr
 
   and write v = function
       Vint (_, opts) | Bitstring32 opts | Bitstring64 (_, opts)
@@ -1381,7 +1362,7 @@ let wrap_writer _loc opts expr = match get_type_info opts with
 
 let add_message_writer bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_writer>" in
-  let llrec = Gencode.low_level_msg_def bindings mexpr in
+  let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let write_expr = write_message msgname llrec |>
                    wrap_writer _loc opts in
   let writer =

@@ -21,12 +21,26 @@ type base_type_expr_simple = [
   | `String of type_options
 ]
 
+let kind_of_base_type_expr_simple = function
+| `Bool _ -> "bool"
+| `Byte _ -> "byte"
+| `Int _ -> "int"
+| `Long_int _ -> "long"
+| `Float _ -> "float"
+| `String _ -> "string"
+
 type 'a base_type_expr_core = [
     base_type_expr_simple
   | `Tuple of 'a list * type_options
   | `List of 'a * type_options
   | `Array of 'a * type_options
 ]
+
+let kind_of_base_type_expr_core = function
+| #base_type_expr_simple as x -> kind_of_base_type_expr_simple x
+| `Tuple _ -> "tuple"
+| `List _ -> "list"
+| `Array _ -> "array"
 
 module Type_param : sig
   type type_param
@@ -50,6 +64,12 @@ type base_type_expr = [
   | `Type_param of type_param
 ]
 
+let kind_of_base_type_expr = function
+| #base_type_expr_core as x -> kind_of_base_type_expr_core x
+| `App _ -> "type application"
+| `Ext_app _ -> "external type application"
+| `Type_param _ -> "type parameter"
+
 type type_expr = [
     base_type_expr
   | `Record of base_type_expr record_data_type * type_options
@@ -66,6 +86,11 @@ and 'a sum_data_type = {
   constructors : [`Constant of string | `Non_constant of string * 'a list] list
 }
 
+let kind_of_type_expr = function
+| #base_type_expr as x -> kind_of_base_type_expr x
+| `Record -> "record"
+| `Sum -> "union"
+
 type base_message_expr = [ `Record of (string * bool * base_type_expr) list ]
 
 type message_expr_app = [ `App of string * base_type_expr list * type_options ]
@@ -76,6 +101,12 @@ type message_expr = [
   | `Message_alias of string list * string
   | `Sum of (string * [base_message_expr | message_expr_app]) list
 ]
+
+let kind_of_message_expr = function
+| `Record _ -> "record"
+| `App _ -> "application"
+| `Message_alias -> "message alias"
+| `Sum -> "union"
 
 type declaration =
     Message_decl of string * message_expr * type_options

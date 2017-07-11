@@ -52,6 +52,13 @@ type reduced_type_expr = [
   | `Ext_message of string list * string * type_options
 ]
 
+let kind_of_reduced_type_expr : reduced_type_expr -> string = function
+| #base_type_expr_core as x -> kind_of_base_type_expr_core x
+| `Sum _ -> "union"
+| `Record _ -> "record"
+| `Message _ -> "message"
+| `Ext_message _ -> "external message"
+
 type poly_type_expr_core = [
     poly_type_expr_core base_type_expr_core
   | `Type of string * type_param list * poly_type_expr_core list * type_options (* polymorphic sum type name, type args *)
