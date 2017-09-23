@@ -64,6 +64,20 @@ let default_value_tests = "default_values" >::: [
       }
   end;
 
+  "explicit default values for primitive types 3" >:: begin fun () ->
+    check_roundtrip Defv2b.pp Defv2a.write Defv2b.read
+      { Defv2a.c = Color.Red; }
+      { Defv2b.c = Color.Red; p = (42, -43);
+      }
+  end;
+
+  "propagation of default values across polymorphic types" >:: begin fun () ->
+    check_roundtrip Defv2c.pp Defv2a.write Defv2c.read
+      { Defv2a.c = Color.Red; }
+      { Defv2c.c = Color.Red; p = (42, -43);
+      }
+  end;
+
   "default value for message whose fields have default values 1" >:: begin fun () ->
     assert_equal
       { Defv1b.c = Color.Red; b = true; i1 = 42; i2 = -43;
@@ -78,6 +92,18 @@ let default_value_tests = "default_values" >::: [
         b2 = 44; l1 = 45L; l2 = -46L; f1 = 3.14; f2 = -3.14;
       }
       (!Defv1c.defv1c_default ());
+  end;
+
+  "default value for message whose fields have default values 3" >:: begin fun () ->
+    assert_equal
+      { Defv2b.c = Color.Red; p = (42, -43); }
+      (!Defv2b.defv2b_default ());
+  end;
+
+  "default value for message with polymorphic types" >:: begin fun () ->
+    assert_equal
+      { Defv2c.c = Color.Red; p = (42, -43); }
+      (!Defv2c.defv2c_default ());
   end;
 ]
 

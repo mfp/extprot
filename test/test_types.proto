@@ -143,4 +143,12 @@ message defv1c =
     f2 : float [@default -3.14]
   }
 
+type pair_int_42__43 = (int_42 * int__43)
+
+message defv2a = { c : color }
+
+message defv2b = { c : color; p : pair_int_42__43 }
+
+message defv2c = { c : color; p : tuple<int_42, int__43> }
+
 (* vim:set ft=ocaml: *)
