@@ -166,12 +166,49 @@ let type_opts = function
 | Message (_, _, opts)
 | Tuple (_, opts) -> opts
 
+let default_value_or f default opts =
+  try
+    Some (f @@ List.assoc "default" opts)
+  with Not_found -> default
+
+let bad_default_value ty s =
+  failwith @@ sprintf "invalid %s default value: %S" ty s
+
 let rec default_value t =
   let _loc = Loc.ghost in
   let default_value =
     match t with
-    | Vint (Bool, _) -> Some <:expr< False >>
-    | Vint ((Int | Int8), _) | Bitstring32 _ | Bitstring64 _ | Bytes _ -> None
+    | Vint (Bool, opts) ->
+        default_value_or
+          (fun s -> match String.lowercase s with
+             | "true" -> <:expr< True >>
+             | "false" -> <:expr< False >>
+             | _ -> bad_default_value "boolean" s)
+          (Some <:expr< False >>) opts
+    | Vint (Int, opts) ->
+        default_value_or
+          (fun s ->
+             try
+               ignore (int_of_string s);
+               <:expr< $int:s$ >>
+             with _ -> bad_default_value "int" s)
+          None opts
+    | Vint (Int8, opts) ->
+        default_value_or
+          (fun s ->
+             try
+               let n = int_of_string s in
+                 if n < 0 || n > 255 then bad_default_value "byte" s;
+                 <:expr< $int:s$ >>
+             with _ -> bad_default_value "byte" s)
+          None opts
+    | Bytes opts ->
+        default_value_or (fun s -> <:expr< $str:s$ >>) None opts
+    | Bitstring64 (Long, opts) ->
+        default_value_or (fun s -> <:expr< $int64:s$ >>) None opts
+    | Bitstring64 (Float, opts) ->
+        default_value_or (fun s -> <:expr< $flo:s$ >>) None opts
+    | Bitstring32 _ -> None
     | Sum (l, _) -> begin (* first constant constructor = default*)
         match
           try
