@@ -106,4 +106,41 @@ type sum_ext2 = A int sum_type<int, string, long> bool | B
 message se_1 = { x : sum_ext1; y : string; z : sum_ext1; }
 message se_2 = { x : sum_ext2; y : string; z : sum_ext2; }
 
+type bool_true = bool options "default" = "true"
+type int_42    = int options "default" = "42"
+type int__43   = int options "default" = "-43"
+type byte_44   = byte options "default" = "44"
+type long_45   = long options "default" = "45"
+type long__46  = long options "default" = "-46"
+type float_pi  = float options "default" = "3.14"
+type float__pi = float options "default" = "-3.14"
+
+message defv1a = { c : color; }
+
+message defv1b =
+  {
+    c  : color;
+    b  : bool_true;
+    i1 : int_42;
+    i2 : int__43;
+    b2 : byte_44;
+    l1 : long_45;
+    l2 : long__46;
+    f1 : float_pi;
+    f2 : float__pi;
+  }
+
+message defv1c =
+  {
+    c  : color;
+    b  : bool [@default true];
+    i1 : int [@default 42];
+    i2 : int [@default -43];
+    b2 : byte [@default 44];
+    l1 : long [@default 45];
+    l2 : long [@default -46];
+    f1 : float [@default 3.14];
+    f2 : float [@default -3.14]
+  }
+
 (* vim:set ft=ocaml: *)

@@ -47,6 +47,22 @@ let default_value_tests = "default_values" >::: [
     check_roundtrip Msg2d.pp_msg2d Msg2.write_msg2 Msg2d.read_msg2d
       { Msg2.a = 123 } { Msg2d.a = 123; b = false }
   end;
+
+  "explicit default values for primitive types 1" >:: begin fun () ->
+    check_roundtrip Defv1b.pp Defv1a.write Defv1b.read
+      { Defv1a.c = Color.Red; }
+      { Defv1b.c = Color.Red; b = true; i1 = 42; i2 = -43;
+        b2 = 44; l1 = 45L; l2 = -46L; f1 = 3.14; f2 = -3.14;
+      }
+  end;
+
+  "explicit default values for primitive types 2" >:: begin fun () ->
+    check_roundtrip Defv1c.pp Defv1a.write Defv1c.read
+      { Defv1a.c = Color.Red; }
+      { Defv1c.c = Color.Red; b = true; i1 = 42; i2 = -43;
+        b2 = 44; l1 = 45L; l2 = -46L; f1 = 3.14; f2 = -3.14;
+      }
+  end;
 ]
 
 let () = Register_test.register "extensions"
