@@ -81,11 +81,28 @@ EXTEND Gram
 
     | "simple"
         [ "bool" -> `Bool []
+        | "bool"; "[@"; "default"; "true"; "]" -> `Bool ["default", "true"]
+        | "bool"; "[@"; "default"; "false"; "]" -> `Bool ["default", "false"]
         | "byte" -> `Byte []
+        | "byte"; "[@"; "default"; `INT (_, s); "]" -> `Byte ["default", s]
         | "int" -> `Int []
+        | "int"; "[@"; "default"; `INT (_, s); "]" -> `Int ["default", s]
+        | "int"; "[@"; "default"; "-"; `INT (_, s); "]" -> `Int ["default", "-" ^ s]
         | "long" -> `Long_int []
+        | "long"; "[@"; "default"; `INT64 (_, s); "]" -> `Long_int ["default", s]
+        | "long"; "[@"; "default"; "-"; `INT64 (_, s); "]" -> `Long_int ["default", "-" ^ s]
+        | "long"; "[@"; "default"; `INT (_, s); "]" -> `Long_int ["default", s]
+        | "long"; "[@"; "default"; "-"; `INT (_, s); "]" -> `Long_int ["default", "-" ^ s]
         | "float" -> `Float []
-        | "string" -> `String [] ] ] ;
+        | "float"; "[@"; "default"; `FLOAT (_, s); "]" -> `Float ["default", s]
+        | "float"; "[@"; "default"; "-"; `FLOAT (_, s); "]" -> `Float ["default", "-" ^ s]
+        | "float"; "[@"; "default"; `INT (_, s); "]" -> `Float ["default", s ^ "."]
+        | "float"; "[@"; "default"; "-"; `INT (_, s); "]" -> `Float ["default", "-" ^ s ^ "."]
+        | "float"; "[@"; "default"; `INT64 (_, s); "]" -> `Float ["default", s ^ "."]
+        | "float"; "[@"; "default"; "-"; `INT64 (_, s); "]" -> `Float ["default", "-" ^ s ^ "."]
+        | "string" -> `String []
+        | "string"; "[@"; "default"; `STRING (s, _); "]" -> `String ["default", s]
+        ] ] ;
 
   ident_with_path :
     [
