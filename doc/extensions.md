@@ -205,7 +205,7 @@ This table summarizes the extensions possible in extprot:
 
 ## Default values
 
-The default values is defined for each type inductively: the default value of ...
+The default value is defined for each type inductively: the default value of ...
 
 * a sum type is its first constant contructor.
 * a list is the empty list.
@@ -217,33 +217,56 @@ The default values is defined for each type inductively: the default value of ..
   defined.
 * a bool is `false`
 
-Otherwise, the type/message has got no default value.
+Otherwise, the type/message has got no default value by default.
+
+The default value for primitive types (bool, int, byte, long, float, string)
+can be defined with the `option "default" = "..."` syntax when declaring a
+type, or more conveniently with `[@default xxx]` which can be used directly in
+any context where the primitive type can be used; e.g.
+
+
+    type int_default_42 = int options "default" = "42"
+
+    type int_42 = int [@default 42]
+
+    message foo =
+        { bar : int;
+          i : int [@default 42];
+          b : bool [@default true];
+          s : string [@default "foo"];
+          f : float [@default 3.14]
+         }
 
 ### Examples
 
              type                                  default value
-    --------------------------------- -----------------------------------------
-     type bo = bool                    false
+    ---------------------------------         ----------------------------------
+     type bo = bool                            false
 
-     type a = A int | B | C            B
+     type a = A int | B | C                    B
 
-     type b = (a * a)                  (B, B)
+     type b = (a * a)                          (B, B)
 
-     type c = [b]                      []       (empty list)
+     type c = [b]                              []       (empty list)
 
-     type d = [|c|]                    [||]     (empty array)
+     type d = [|c|]                            [||]     (empty array)
 
-     message m = { v1 : c; v2 : b }    { v1 = []; v2 = (B, B) }
+     message m = { v1 : c; v2 : b }            { v1 = []; v2 = (B, B) }
 
-     message n = { a : a; m : m }      { a = B; m = { v1 = []; v2 = (B, B) } }
+     message n = { a : a; m : m }              { a = B;
+                                                 m = { v1 = []; v2 = (B, B) } }
 
-     message o = { a : a; b : bo }     { a = B; b = false }
+     message o = { a : a; b : bo }             { a = B; b = false }
 
-     type id = int                     undefined
+     type id = int                             undefined
+     type id2 = int options "default" = "4"    4
+     type id2 = int [@default 42]              42
 
-     type nodef1 = (a * int)           undefined
+     type nodef1 = (a * int)                   undefined
 
-     message p = { v : int }           undefined
+     message p = { v : int }                   undefined
+
+     message p = { v : int [@default 42] }     { v = 42 }
 
 See the [target language documentation](language-mapping.md) for more
 information about the mapping of the default value to the target language.

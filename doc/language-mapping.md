@@ -54,6 +54,26 @@ You can give hints to the code generator by appending
 
 to the type definition.
 
+#### Default values
+
+Default values for primitive types (bool, int, byte, long, float, string)
+can be specified with two syntaxes: `options "default" = "..."` and
+`[@default ...]`. The former can only be used in type definitions, but the
+second can be used in any reference to the primitive type:
+
+    type int_default_42 = int options "default" = "42"
+
+    type int_42 = int [@default 42]
+
+
+    message foo =
+        { bar : int;
+          i : int [@default 42];
+          b : bool [@default true];
+          s : string [@default "foo"];
+          f : float [@default 3.14]
+         }
+
 #### Using external types and type aliases
 
 The generated code can convert automatically values from the serialization
