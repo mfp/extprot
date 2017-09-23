@@ -55,6 +55,8 @@ BASE = $(dir .)
 extprotc$(EXE): compiler/extprotc$(EXE)
 	cp $^ $@
 
+.DEFAULT: extprotc$(EXE)
+
 .PHONY: install
 install:
 	$(INSTALL) compiler/extprotc$(EXE) $(prefix)/bin/
