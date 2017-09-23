@@ -63,6 +63,22 @@ let default_value_tests = "default_values" >::: [
         b2 = 44; l1 = 45L; l2 = -46L; f1 = 3.14; f2 = -3.14;
       }
   end;
+
+  "default value for message whose fields have default values 1" >:: begin fun () ->
+    assert_equal
+      { Defv1b.c = Color.Red; b = true; i1 = 42; i2 = -43;
+        b2 = 44; l1 = 45L; l2 = -46L; f1 = 3.14; f2 = -3.14;
+      }
+      (!Defv1b.defv1b_default ());
+  end;
+
+  "default value for message whose fields have default values 2" >:: begin fun () ->
+    assert_equal
+      { Defv1c.c = Color.Red; b = true; i1 = 42; i2 = -43;
+        b2 = 44; l1 = 45L; l2 = -46L; f1 = 3.14; f2 = -3.14;
+      }
+      (!Defv1c.defv1c_default ());
+  end;
 ]
 
 let () = Register_test.register "extensions"
