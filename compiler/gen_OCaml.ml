@@ -874,7 +874,7 @@ struct
             List.map (fun f -> (f.field_name, true, f.field_type)) fields in
           let promoted_match_cases =
             make_promoted_match_cases msgname [ Some name, None, fields' ] in
-          let match_cases = record_case ~namespace:name msgname 0 fields' in
+          let match_cases = record_case_inlined ~namespace:name msgname 0 fields' in
             wrap_msg_reader name promoted_match_cases match_cases
 
       | Message (path, name, _) ->
@@ -914,11 +914,76 @@ struct
     in
     read llty
 
-  and record_case msgname ?namespace ?constr tag fields =
-    let _loc = Loc.mk "<generated code @ record_case>" in
+  and field_reader_funcname ~msgname ~constr ~name =
+    let mangle s =
+      let b = Buffer.create 13 in
+        String.iter
+          (function
+            | '_' -> Buffer.add_string b "__"
+            | c -> Buffer.add_char b c)
+          s;
+        Buffer.contents b
+    in
+      "__read_" ^ mangle msgname ^ "_x" ^
+      Option.map_default mangle "" constr ^ "_x" ^ mangle name
+
+  and record_case_field_readers msgname ?constr tag fields =
+    let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
+    let constr_name = Option.default "<default>" constr in
+
+    let read_field fieldno (name, _, llty) =
+      let rescue_match_case = match default_value llty with
+          None ->
+            <:match_case<
+              Extprot.Error.Extprot_error (e, loc) ->
+                Extprot.Error.failwith_location
+                  ~message:$str:msgname$
+                  ~constructor:$str:constr_name$
+                  ~field:$str:name$
+                  e loc
+            >>
+        | Some _expr ->
+            <:match_case<
+                Extprot.Error.Extprot_error
+                  ((Extprot.Error.Bad_format (Extprot.Error.Bad_wire_type _) as e), loc) ->
+                    Extprot.Error.failwith_location
+                      ~message:$str:msgname$
+                      ~constructor:$str:constr_name$
+                      ~field:$str:name$
+                      e loc >> in
+      let default = match default_value llty with
+          Some expr -> expr
+        | None ->
+            <:expr< Extprot.Error.missing_field
+                      ~message:$str:msgname$
+                      ~constructor:$str:constr_name$
+                      ~field:$str:name$
+                      ()
+            >> in
+
+      let funcname = field_reader_funcname ~msgname ~constr ~name in
+
+        <:str_item<
+          value $lid:funcname$ s nelms =
+             if nelms >= $int:string_of_int (fieldno + 1)$ then
+               try
+                 $read_field msgname constr_name name llty$
+               with [$rescue_match_case$]
+             else $default$
+        >>
+    in
+      List.fold_right
+        (fun (i, fieldinfo) functions ->
+           <:str_item< $read_field i fieldinfo$; $functions$ >>)
+        (List.mapi (fun i x -> (i, x)) fields)
+        <:str_item< >>
+
+  and record_case_inlined msgname ?namespace ?constr tag fields =
+    let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
     let constr_name = Option.default "<default>" constr in
 
     let read_field fieldno (name, _, llty) expr =
+
       let rescue_match_case = match default_value llty with
           None ->
             <:match_case<
@@ -958,6 +1023,46 @@ struct
                  $default$
            in $expr$
         >> in
+
+    let field_assigns =
+      List.map
+        (fun (name, _, _) -> match namespace with
+             None -> <:rec_binding< $lid:name$ = $lid:name$ >>
+           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
+        fields in
+    (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
+    let record =
+      let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
+          None -> r
+        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+    let e =
+      List.fold_right
+        (fun (i, fieldinfo) e -> read_field i fieldinfo e)
+        (List.mapi (fun i x -> (i, x)) fields)
+        record
+    in
+      <:match_case<
+        $int:string_of_int tag$ ->
+          try
+            let v = $e$ in begin
+              $RD.reader_func `Skip_to$ s eom;
+              v
+            end
+          with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
+      >>
+
+  and record_case msgname ?namespace ?constr tag fields =
+    let _loc = Loc.mk "<generated code @ record_case>" in
+
+    let read_field fieldno (name, _, llty) expr =
+
+      let funcname = field_reader_funcname ~msgname ~constr ~name in
+
+        <:expr<
+          let $lid:name$ = $lid:funcname$ s nelms in
+            $expr$
+        >>
+    in
 
     let field_assigns =
       List.map
@@ -1082,17 +1187,27 @@ struct
 
   and read_message msgname opts = function
         Message_single (namespace, fields) ->
+
           let promoted_match_cases =
             make_promoted_match_cases msgname [ namespace, None, fields ] in
-          let match_cases = record_case ?namespace msgname 0 fields in
+
+          let match_cases   = record_case ?namespace msgname 0 fields in
+          let field_readers = record_case_field_readers msgname 0 fields in
+
+          let main_expr =
             wrap_msg_reader msgname promoted_match_cases match_cases |>
             wrap_reader opts
+          in
+            (field_readers, main_expr)
       | Message_alias (path, name) ->
           let full_path = path @ [String.capitalize name] in
           let _loc = Loc.mk "<generated code @ read_message>" in
           let reader_func = RD.read_msg_func name in
+          let main_expr =
             wrap_reader opts
             <:expr< $id:ident_with_path _loc full_path reader_func$ s >>
+          in
+            (<:str_item< >>, main_expr)
       | Message_sum l ->
           let promoted_match_cases =
             make_promoted_match_cases msgname
@@ -1100,15 +1215,31 @@ struct
                  (fun (ns, constr, fields) ->
                     (Some (Option.default constr ns), Some constr, fields))
                  l) in
+
+          let field_readers =
+            List.fold_left
+              (fun funcs func ->
+                 <:str_item< $func$; $funcs$ >>)
+              <:str_item< >> @@
+            List.rev @@
+            List.mapi
+              (fun tag (namespace, constr, fields) ->
+                 record_case_field_readers ~constr msgname tag fields)
+              l in
+
           let match_cases =
             List.mapi
               (fun tag (namespace, constr, fields) ->
                  record_case
                    ~namespace:(Option.default constr namespace)
                    msgname ~constr tag fields) l
-            |> Ast.mcOr_of_list
-          in wrap_msg_reader msgname promoted_match_cases match_cases |>
-             wrap_reader opts
+            |> Ast.mcOr_of_list in
+
+          let main_expr =
+            wrap_msg_reader msgname promoted_match_cases match_cases |>
+            wrap_reader opts
+          in
+            (field_readers, main_expr)
 end
 
 let raw_rd_func reader_func =
@@ -1153,10 +1284,14 @@ let add_message_reader bindings msgname mexpr opts c =
 
                   let read_msg_func = ((^) "read_")
                 end) in
-  let read_expr = Mk_normal_reader.read_message msgname opts llrec in
+  let field_readers, read_expr =
+    Mk_normal_reader.read_message msgname opts llrec
+  in
     {
       c with c_reader =
          Some <:str_item<
+                $field_readers$;
+
                 value $lid:"read_" ^ msgname$ s = $read_expr$;
 
                 value $lid:"io_read_" ^ msgname$ io =
@@ -1184,10 +1319,13 @@ let add_message_io_reader bindings msgname mexpr opts c =
 
                   let read_msg_func = ((^) "io_read_")
                 end) in
-  let ioread_expr = Mk_io_reader.read_message msgname opts llrec in
+  let field_readers, ioread_expr =
+    Mk_io_reader.read_message msgname opts llrec
+  in
     {
       c with c_io_reader =
         Some <:str_item<
+                $field_readers$;
                 value $lid:"io_read_" ^ msgname$ s = $ioread_expr$;
                 value io_read = $lid:"io_read_" ^ msgname$;
              >>
