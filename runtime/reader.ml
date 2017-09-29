@@ -38,7 +38,7 @@ end
 
 type reader_func =
     [
-      `Offset | `Skip_to | `Read_prefix
+      | `Offset | `Skip_to | `Read_prefix | `Skip_value
       | `Read_vint | `Read_bool | `Read_rel_int | `Read_i8
       | `Read_i32 | `Read_i64 | `Read_float | `Read_string
       | `Read_raw_bool | `Read_raw_rel_int | `Read_raw_i8
@@ -46,8 +46,9 @@ type reader_func =
     ]
 
 let string_of_reader_func : reader_func -> string = function
-  `Offset -> "offset"
+  | `Offset -> "offset"
   | `Skip_to -> "skip_to"
+  | `Skip_value -> "skip_value"
   | `Read_prefix -> "read_prefix"
   | `Read_vint -> "read_vint"
   | `Read_bool -> "read_bool"

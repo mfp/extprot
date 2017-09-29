@@ -180,7 +180,7 @@ let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
   | `Record (r, opts) -> beta_reduce_record reduce_to_poly_texpr_core bindings r opts
   | #base_type_expr as x -> (reduce_to_poly_texpr_core bindings x :> poly_type_expr)
 
-let map_message bindings (f : base_type_expr -> _) g msgname msg =
+let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr) =
   let map_field f (fname, mutabl, ty) = (fname, mutabl, f ty) in
   let expand_record_type f name ty =
     match beta_reduce_texpr bindings ty with
@@ -191,23 +191,31 @@ let map_message bindings (f : base_type_expr -> _) g msgname msg =
              assert false
   in
   match msg with
-  | `Sum cases  ->
+  | `Message_sum cases  ->
       Message_sum
         (List.map
            (function
-                (const, `Record fields) -> (None, const, List.map (map_field f) fields)
-              | (const, (`App (name, _args, _opts) as ty)) ->
+                (const, `Message_record fields) -> (None, const, List.map (map_field f) fields)
+              | (const, (`Message_app (name, _args, _opts))) ->
                   expand_record_type
                     (fun r _opts -> (Some name, const, List.map (map_field g) r.record_fields))
-                    name ty)
+                    name (`App (name, _args, _opts)))
            cases)
-  | `Record fields -> Message_single (None, List.map (map_field f) fields)
-  | `App (name, _args, _opts) as ty ->
+  | `Message_record fields -> Message_single (None, List.map (map_field f) fields)
+  | `Message_app (name, _args, _opts) ->
       expand_record_type
         (fun r _opts ->
             Message_single (Some r.record_name, List.map (map_field g) r.record_fields))
-        name ty
+        name (`App (name, _args, _opts))
   | `Message_alias (path, name) -> Message_alias (path, name)
+  | `Message_subset (name, excluded) ->
+      match smap_find name bindings with
+        | Some (Message_decl (_, `Message_record fields, _opts)) ->
+            Message_subset (name, List.map (map_field f) fields, excluded)
+        | None | Some _ ->
+            failwithfmt
+              "wrong message subset: %s is not a simple message" name;
+            assert false
 
 let iter_message bindings f g msgname msg =
   let proc_field f const (fname, mutabl, ty) = f const fname mutabl ty in
@@ -221,15 +229,16 @@ let iter_message bindings f g msgname msg =
               assert false
   in
   match msg with
-  | `Sum cases  ->
+  | `Message_sum cases  ->
         List.iter
           (function
-               (const, `Record fields) -> List.iter (proc_field f const) fields
-             | (const, (`App (name, _args, _opts) as ty)) ->
-                 iter_expanded_type const name ty)
+               (const, `Message_record fields) -> List.iter (proc_field f const) fields
+             | (const, (`Message_app (name, _args, _opts))) ->
+                 iter_expanded_type const name (`App (name, _args, _opts)))
           cases
-  | `Record fields -> List.iter (proc_field f "") fields
-  | `App(name, _args, _opts) as ty -> iter_expanded_type "" name ty
+  | `Message_record fields -> List.iter (proc_field f "") fields
+  | `Message_app(name, _args, _opts) ->
+      iter_expanded_type "" name (`App (name, _args, _opts))
 
 let low_level_msg_def bindings msgname (msg : message_expr) =
 

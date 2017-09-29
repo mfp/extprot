@@ -245,20 +245,20 @@ let generate_container bindings =
       <:str_item< $internal$; $ext$ >> in
 
   let rec message_types ?(opts = []) msgname = function
-      `Record l ->
+    | `Message_record l ->
         let ctyp (name, mutabl, texpr) =
           let ty = ctyp_of_texpr texpr in match mutabl with
               true -> <:ctyp< $lid:name$ : mutable $ty$ >>
             | false -> <:ctyp< $lid:name$ : $ty$ >> in
         let fields =
-          foldl1 "message_types `Record" ctyp
+          foldl1 "message_types `Message_record" ctyp
             (fun ct field -> <:ctyp< $ct$; $ctyp field$ >>) l
         (* no quotations for type, wtf? *)
         (* in <:str_item< type $msgname$ = { $fields$ } >> *)
         in
           message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
 
-   | `App (name, args, opts) ->
+   | `Message_app (name, args, opts) ->
        let tyname = String.capitalize name ^ "." ^ String.uncapitalize name in
        let applied =
          ident_of_ctyp @@
@@ -272,7 +272,7 @@ let generate_container bindings =
        let uid       = String.concat "." full_path in
         message_typedefs ~opts msgname (ctyp_of_path uid)
 
-   | `Sum l ->
+   | `Message_sum l ->
        let tydef_of_msg_branch (const, mexpr) =
          <:str_item<
            module $String.capitalize const$ = struct
@@ -284,7 +284,7 @@ let generate_container bindings =
 
        let variant (const, _) =
          <:ctyp< $uid:const$ of ($uid:const$.$lid:String.lowercase const$) >> in
-       let consts = foldl1 "message_types `Sum" variant
+       let consts = foldl1 "message_types `Message_sum" variant
                       (fun vars c -> <:ctyp< $vars$ | $variant c$ >>) l
 
        in
@@ -292,6 +292,29 @@ let generate_container bindings =
            $record_types$;
            $message_typedefs ~opts msgname <:ctyp< [$consts$] >>$
          >>
+
+   | `Message_subset (name, only) ->
+
+       let l =
+         match smap_find name bindings with
+           | Some (Message_decl (_, `Message_record fields, _opts)) ->
+               fields
+           | None | Some _ ->
+               failwithfmt
+                 "wrong message subset: %s is not a simple message" name;
+               assert false in
+
+        let ctyp (name, mutabl, texpr) =
+          let ty = ctyp_of_texpr texpr in match mutabl with
+              true -> <:ctyp< $lid:name$ : mutable $ty$ >>
+            | false -> <:ctyp< $lid:name$ : $ty$ >> in
+
+        let fields =
+          foldl1 "message_types `Message_subset" ctyp
+            (fun ct ((name, _, _) as field) -> <:ctyp< $ct$; $ctyp field$ >>) @@
+          List.filter (fun (name, _, _) -> List.mem name only) l
+        in
+          message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
 
   and modules_to_include_of_texpr = function
      | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
@@ -389,12 +412,15 @@ let generate_container bindings =
             | Some { fromf; _ } ->
                 <:expr< $fromf$ $x$ >> in
 
-        let default_func = match Gencode.low_level_msg_def bindings msgname mexpr with
-            Message_single (namespace, fields) ->
+        let default_func =
+          match Gencode.low_level_msg_def bindings msgname mexpr with
+
+          | Message_single (namespace, fields) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                   ref (fun () -> $ wrap (default_record ?namespace fields) $)
               >>
+
           | Message_alias (path, name) ->
               let full_path = path @ [String.capitalize name] in
               let v = <:expr< $id:ident_with_path _loc full_path (name ^ "_default") $ >> in
@@ -402,6 +428,7 @@ let generate_container bindings =
                 <:str_item<
                   value $lid:msgname ^ "_default"$ = ref (fun () -> $wrap v$)
                 >>
+
           | Message_sum ((namespace, constr, fields) :: _) ->
               let namespace = Option.default constr namespace in
               let v =
@@ -412,7 +439,15 @@ let generate_container bindings =
                   value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                     ref (fun () -> $wrap v$)
                 >>
-          | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list" in
+          | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list"
+
+          | Message_subset (_, l, only) ->
+            let l = List.filter (fun (name, _, _) -> List.mem name only) l in
+              <:str_item<
+                value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
+                  ref (fun () -> $ wrap (default_record l) $)
+              >> in
+
         let container =
           empty_container msgname ~default_func (message_types ~opts msgname mexpr)
         in Some container
@@ -532,25 +567,21 @@ struct
   let pp_name path name = <:expr< $id:ident_with_path _loc path ("pp_" ^ name)$ >>
 
   let rec pp_message ?namespace bindings msgname = function
-      `Record l ->
-        let pp_field i (name, _, tyexpr) =
-          let selector = match namespace with
-              None -> <:expr< (fun t -> t.$lid:name$) >>
-            | Some ns -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >> in
-          let prefix = match namespace with
-              None -> String.capitalize msgname
-            | Some ns -> sprintf "%s.%s"
-                           (String.capitalize msgname) (String.capitalize ns) in
-          let label =
-            if i = 0 then prefix ^ "." ^ name
-            else name
-          in <:expr<
-               ( $str:label$,
-                 $pp_func "pp_field"$ $selector$ $pp_texpr bindings tyexpr$ )
-             >> in
-        let pp_fields = List.mapi pp_field l in
-          <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
-    | `App(name, args, _) ->
+    | `Message_record l -> pp_message_record ?namespace bindings msgname l
+
+    | `Message_subset (name, only) ->
+        let l =
+          match smap_find name bindings with
+            | Some (Message_decl (_, `Message_record l, _)) ->
+                List.filter (fun (name, _, _) -> List.mem name only) l
+            | None | Some _ ->
+                failwithfmt
+                  "wrong message subset: %s is not a simple message" name;
+                assert false
+        in
+          pp_message_record bindings msgname l
+
+    | `Message_app(name, args, _) ->
         let pp_func =
           List.fold_left
             (fun e ptexpr -> <:expr< $e$ $pp_texpr bindings ptexpr$ >>)
@@ -560,12 +591,31 @@ struct
     | `Message_alias (path, name) ->
         let full_path = path @ [String.capitalize name] in
         <:expr< $pp_name full_path name$ pp >>
-    | `Sum l ->
+    | `Message_sum l ->
         let match_case (const, mexpr) =
           <:match_case<
             $uid:const$ t ->
               $pp_message ~namespace:const bindings msgname (mexpr :> message_expr)$ t>>
         in <:expr< fun [ $Ast.mcOr_of_list (List.map match_case l)$ ] >>
+
+  and pp_message_record ?namespace bindings msgname l =
+    let pp_field i (name, _, tyexpr) =
+      let selector = match namespace with
+          None -> <:expr< (fun t -> t.$lid:name$) >>
+        | Some ns -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >> in
+      let prefix = match namespace with
+          None -> String.capitalize msgname
+        | Some ns -> sprintf "%s.%s"
+                       (String.capitalize msgname) (String.capitalize ns) in
+      let label =
+        if i = 0 then prefix ^ "." ^ name
+        else name
+      in <:expr<
+               ( $str:label$,
+                 $pp_func "pp_field"$ $selector$ $pp_texpr bindings tyexpr$ )
+             >> in
+    let pp_fields = List.mapi pp_field l in
+      <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
 
   and pp_texpr bindings texpr =
     reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
@@ -672,6 +722,7 @@ let partition_constructors l =
 
 module Make_reader
          (RD : sig
+            val name        : string
             val reader_func : Reader.reader_func -> Ast.expr
             val raw_rd_func : low_level -> (Ast.patt * Ast.expr) option
             val read_msg_func : string -> string
@@ -690,7 +741,7 @@ struct
     | None -> expr
 
   let rec read_field msgname constr_name name llty =
-    let _loc = loc "<generated code @ field_match_cases>" in
+    let _loc = loc "<generated code @ read_field>" in
 
     let rec read_elms f lltys_and_defs =
       (* TODO: handle missing elms *)
@@ -924,8 +975,8 @@ struct
           s;
         Buffer.contents b
     in
-      "__read_" ^ mangle msgname ^ "_x" ^
-      Option.map_default mangle "" constr ^ "_x" ^ mangle name
+      sprintf "__%s_read_x%s_x%s_x%s"
+        RD.name (mangle msgname) (Option.map_default mangle "" constr) (mangle name)
 
   and record_case_field_readers msgname ?constr _ fields =
     let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
@@ -1055,9 +1106,7 @@ struct
     let _loc = Loc.mk "<generated code @ record_case>" in
 
     let read_field _ (name, _, _) expr =
-
       let funcname = field_reader_funcname ~msgname ~constr ~name in
-
         <:expr<
           let $lid:name$ = $lid:funcname$ s nelms in
             $expr$
@@ -1070,6 +1119,51 @@ struct
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
         fields in
+    (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
+    let record =
+      let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
+          None -> r
+        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+    let e =
+      List.fold_right
+        (fun (i, fieldinfo) e -> read_field i fieldinfo e)
+        (List.mapi (fun i x -> (i, x)) fields)
+        record
+    in
+      <:match_case<
+        $int:string_of_int tag$ ->
+          try
+            let v = $e$ in begin
+              $RD.reader_func `Skip_to$ s eom;
+              v
+            end
+          with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
+      >>
+
+  and subset_case ~orig msgname ?namespace ?constr tag fields ~only =
+    let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
+    (* let constr_name = Option.default "<default>" constr in *)
+
+    let read_field fieldno (name, _, llty) expr =
+      if not @@ List.mem name only then
+        (* FIXME: ensure we don't go past the eom *)
+        <:expr<
+          let _ = $RD.reader_func `Skip_value$ s ($RD.reader_func `Read_prefix$ s) in
+            $expr$ >>
+      else
+      let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
+        <:expr<
+          let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms in
+            $expr$
+        >> in
+
+    let field_assigns =
+      List.map
+        (fun (name, _, _) -> match namespace with
+             None -> <:rec_binding< $lid:name$ = $lid:name$ >>
+           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>) @@
+      List.filter (fun (name, _, _) -> List.mem name only) fields in
+
     (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
     let record =
       let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
@@ -1186,7 +1280,7 @@ struct
     Ast.mcOr_of_list
 
   and read_message msgname opts = function
-        Message_single (namespace, fields) ->
+      | Message_single (namespace, fields) ->
 
           let promoted_match_cases =
             make_promoted_match_cases msgname [ namespace, None, fields ] in
@@ -1199,6 +1293,15 @@ struct
             wrap_reader opts
           in
             (field_readers, main_expr)
+
+      | Message_subset (orig, fields, only) ->
+          let match_cases = subset_case ~orig msgname 0 fields ~only in
+          let main_expr =
+            wrap_msg_reader msgname <:match_case< >> match_cases |>
+            wrap_reader opts
+          in
+            (<:str_item< >>, main_expr)
+
       | Message_alias (path, name) ->
           let full_path = path @ [String.capitalize name] in
           let _loc = Loc.mk "<generated code @ read_message>" in
@@ -1208,6 +1311,7 @@ struct
             <:expr< $id:ident_with_path _loc full_path reader_func$ s >>
           in
             (<:str_item< >>, main_expr)
+
       | Message_sum l ->
           let promoted_match_cases =
             make_promoted_match_cases msgname
@@ -1276,6 +1380,7 @@ let add_message_reader bindings msgname mexpr opts c =
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_normal_reader =
     Make_reader(struct
+                  let name = "STR"
                   let reader_func t =
                     <:expr< Extprot.Reader.String_reader.
                               $lid:Reader.string_of_reader_func t$ >>
@@ -1311,6 +1416,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_io_reader =
     Make_reader(struct
+                  let name = "IO"
                   let reader_func t =
                     <:expr< Extprot.Reader.IO_reader.
                               $lid:Reader.string_of_reader_func t$ >>
@@ -1470,22 +1576,24 @@ and dump_fields ?namespace tag fields =
          }
       >>
 
-and write_message msgname =
+and write_message msgname msg =
   ignore msgname;
-  let _loc = Loc.mk "<generated code @ write_message>" in function
-      Message_single (namespace, fields) -> dump_fields ?namespace 0 fields
-    | Message_alias (path, name) ->
-        let full_path = path @ [String.capitalize name] in
-          <:expr< $id:ident_with_path _loc full_path ("write_" ^ name)$ b msg >>
-    | Message_sum l ->
-        let match_case (tag, ns, constr, fields) =
-          <:match_case<
+  let _loc = Loc.mk "<generated code @ write_message>" in
+    match msg with
+      | Message_single (namespace, fields) -> Some (dump_fields ?namespace 0 fields)
+      | Message_alias (path, name) ->
+          let full_path = path @ [String.capitalize name] in
+            Some <:expr< $id:ident_with_path _loc full_path ("write_" ^ name)$ b msg >>
+      | Message_sum l ->
+          let match_case (tag, ns, constr, fields) =
+            <:match_case<
             $uid:constr$ msg ->
               $dump_fields ~namespace:(Option.default constr ns) tag fields$ >> in
-        let match_cases =
-          Ast.mcOr_of_list @@ List.map match_case @@
-          List.mapi (fun i (ns, c, fs) -> (i, ns, c, fs)) l
-        in <:expr< match msg with [ $match_cases$ ] >>
+          let match_cases =
+            Ast.mcOr_of_list @@ List.map match_case @@
+            List.mapi (fun i (ns, c, fs) -> (i, ns, c, fs)) l
+          in Some <:expr< match msg with [ $match_cases$ ] >>
+      | Message_subset _ -> None
 
 let wrap_writer _loc opts expr = match get_type_info opts with
     Some { tof; _ } ->
@@ -1501,12 +1609,13 @@ let wrap_writer _loc opts expr = match get_type_info opts with
 let add_message_writer bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_writer>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
-  let write_expr = write_message msgname llrec |>
-                   wrap_writer _loc opts in
-  let writer =
-    <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$;
-                value write = $lid:"write_" ^ msgname$; >>
-  in { c with c_writer = Some writer }
+    match Option.map (wrap_writer _loc opts) @@ write_message msgname llrec with
+      | None -> c
+      | Some write_expr ->
+          let writer =
+            <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$;
+                        value write = $lid:"write_" ^ msgname$; >>
+          in { c with c_writer = Some writer }
 
 let msgdecl_generators : (string * _ msgdecl_generator) list =
   [

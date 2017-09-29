@@ -18,7 +18,7 @@ let sum_of_constructor_list l =
 
 let make_complex_msg_expr n = function
     `Alias (p, name)  -> `Message_alias (n :: p, name)
-  | `Sum (x, l) -> `Sum ((n, x) :: l)
+  | `Sum (x, l) -> `Message_sum ((n, x) :: l)
 
 EXTEND Gram
   GLOBAL: entries;
@@ -110,11 +110,13 @@ EXTEND Gram
 
   record_app :
     [ [ n = a_LIDENT; "<"; targs = LIST1 [ type_expr_simple ] SEP ","; ">" ->
-        `App (n, targs, [])
-      | n = a_LIDENT -> `App (n, [], []) ] ];
+        `Message_app (n, targs, [])
+      | n = a_LIDENT -> `Message_app (n, [], [])
+      ] ];
 
   record :
-    [ [ "{"; l = field_list; "}" -> `Record l ] ];
+    [ [ "{"; l = field_list; "}" -> `Message_record l
+      ] ];
 
   record_or_app :
     [ [ r = record -> r
@@ -122,7 +124,9 @@ EXTEND Gram
 
   msg_expr :
     [ [ r = record_or_app -> (r :> message_expr)
-      | n = a_UIDENT; x = complex_msg_expr -> make_complex_msg_expr n x ] ];
+      | n = a_UIDENT; x = complex_msg_expr -> make_complex_msg_expr n x
+      | "{|"; n = a_LIDENT; "only"; l = LIST1 [ a_LIDENT ] SEP ";"; "|}" -> `Message_subset (n, l)
+      ] ];
 
   complex_msg_expr:
     [ [ "."; l = LIST0 [ n = a_UIDENT -> n ] SEP "."; name = a_LIDENT ->

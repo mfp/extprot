@@ -43,12 +43,12 @@ let free_type_variables decl : string list =
           (non_constant_constructors sum) in
 
   let rec msg_free_vars known = function
-    | `App (_, targs, _) ->
+    | `Message_app (_, targs, _) ->
         concat_map (fun ty -> type_free_vars known (ty :> type_expr)) targs
-    | `Record l ->
+    | `Message_record l ->
         concat_map (fun (_, _, e) -> type_free_vars known (e :> type_expr)) l
-    | `Message_alias _ -> []
-    | `Sum l ->
+    | `Message_subset _ | `Message_alias _ -> []
+    | `Message_sum l ->
         concat_map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l in
 
   match decl with
@@ -104,17 +104,17 @@ let check_declarations decls =
                 in List.fold_left fold_base_ty acc params in
 
           let rec fold_msg acc : message_expr -> error list = function
-              `Record l ->
+            | `Message_record l ->
                 List.fold_left (fun errs (_, _, ty) -> fold_base_ty errs ty) acc l
-            | `Message_alias _ -> acc
-            | `App (s, params, _) ->
+            | `Message_subset _ | `Message_alias _ -> acc
+            | `Message_app (s, params, _) ->
                 let expected = List.length params in
                 let acc = match smap_find s arities with
                     None -> acc
                   | Some n when n = expected -> acc
                   | Some n -> Wrong_arity (s, n, name, expected) :: acc
                 in List.fold_left fold_base_ty acc params
-            | `Sum l ->
+            | `Message_sum l ->
                 List.fold_left
                   (fun errs (_, msg) -> fold_msg errs (msg :> message_expr))
                   acc l in
