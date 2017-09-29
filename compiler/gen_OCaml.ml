@@ -926,7 +926,7 @@ struct
           let promoted_match_cases =
             make_promoted_match_cases msgname [ Some name, None, fields' ] in
           let match_cases = record_case_inlined ~namespace:name msgname 0 fields' in
-            wrap_msg_reader name promoted_match_cases match_cases
+            wrap_msg_reader name ~promoted_match_cases match_cases
 
       | Message (path, name, _) ->
           let full_path = path @ [String.capitalize name] in
@@ -1185,8 +1185,27 @@ struct
           with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
       >>
 
-  and wrap_msg_reader msgname promoted_match_cases match_cases =
-    let _loc = Loc.mk "<generated code @ wrap_msg_reader>" in
+  and wrap_msg_reader msgname ?promoted_match_cases match_cases =
+    let _loc       = Loc.mk "<generated code @ wrap_msg_reader>" in
+    let promo_expr =
+      match promoted_match_cases with
+        | Some promoted_match_cases ->
+            <:expr<
+              let raise_bad_wire_type () =
+                 Extprot.Error.bad_wire_type
+                   ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
+              in
+                match Extprot.Codec.ll_tag t with [
+                  $promoted_match_cases$
+                | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
+                ]
+            >>
+        | None ->
+            <:expr<
+              Extprot.Error.bad_wire_type
+                ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
+            >>
+    in
       <:expr<
         let t = $RD.reader_func `Read_prefix$ s in begin
           if Extprot.Codec.ll_type t = Extprot.Codec.Tuple then
@@ -1199,15 +1218,7 @@ struct
                 $match_cases$
                 | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
               ]
-          else
-           let raise_bad_wire_type () =
-              Extprot.Error.bad_wire_type
-                ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
-           in
-             match Extprot.Codec.ll_tag t with [
-               $promoted_match_cases$
-             | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
-             ]
+          else $promo_expr$
         end
       >>
 
@@ -1289,17 +1300,14 @@ struct
           let field_readers = record_case_field_readers msgname 0 fields in
 
           let main_expr =
-            wrap_msg_reader msgname promoted_match_cases match_cases |>
+            wrap_msg_reader msgname ~promoted_match_cases match_cases |>
             wrap_reader opts
           in
             (field_readers, main_expr)
 
       | Message_subset (orig, fields, only) ->
           let match_cases = subset_case ~orig msgname 0 fields ~only in
-          let main_expr =
-            wrap_msg_reader msgname <:match_case< >> match_cases |>
-            wrap_reader opts
-          in
+          let main_expr = wrap_msg_reader msgname match_cases |> wrap_reader opts in
             (<:str_item< >>, main_expr)
 
       | Message_alias (path, name) ->
@@ -1340,7 +1348,7 @@ struct
             |> Ast.mcOr_of_list in
 
           let main_expr =
-            wrap_msg_reader msgname promoted_match_cases match_cases |>
+            wrap_msg_reader msgname ~promoted_match_cases match_cases |>
             wrap_reader opts
           in
             (field_readers, main_expr)
