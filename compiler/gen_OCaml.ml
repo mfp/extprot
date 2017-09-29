@@ -927,7 +927,7 @@ struct
       "__read_" ^ mangle msgname ^ "_x" ^
       Option.map_default mangle "" constr ^ "_x" ^ mangle name
 
-  and record_case_field_readers msgname ?constr tag fields =
+  and record_case_field_readers msgname ?constr _ fields =
     let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
     let constr_name = Option.default "<default>" constr in
 
@@ -1054,7 +1054,7 @@ struct
   and record_case msgname ?namespace ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
 
-    let read_field fieldno (name, _, llty) expr =
+    let read_field _ (name, _, _) expr =
 
       let funcname = field_reader_funcname ~msgname ~constr ~name in
 
@@ -1223,7 +1223,7 @@ struct
               <:str_item< >> @@
             List.rev @@
             List.mapi
-              (fun tag (namespace, constr, fields) ->
+              (fun tag (_namespace, constr, fields) ->
                  record_case_field_readers ~constr msgname tag fields)
               l in
 
