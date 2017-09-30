@@ -293,7 +293,7 @@ let generate_container bindings =
            $message_typedefs ~opts msgname <:ctyp< [$consts$] >>$
          >>
 
-   | `Message_subset (name, only) ->
+   | `Message_subset (name, selection, sign) ->
 
        let l =
          match smap_find name bindings with
@@ -304,17 +304,17 @@ let generate_container bindings =
                  "wrong message subset: %s is not a simple message" name;
                assert false in
 
-        let ctyp (name, mutabl, texpr) =
-          let ty = ctyp_of_texpr texpr in match mutabl with
-              true -> <:ctyp< $lid:name$ : mutable $ty$ >>
-            | false -> <:ctyp< $lid:name$ : $ty$ >> in
+       let ctyp (name, mutabl, texpr) =
+         let ty = ctyp_of_texpr texpr in match mutabl with
+             true -> <:ctyp< $lid:name$ : mutable $ty$ >>
+           | false -> <:ctyp< $lid:name$ : $ty$ >> in
 
-        let fields =
-          foldl1 "message_types `Message_subset" ctyp
-            (fun ct ((name, _, _) as field) -> <:ctyp< $ct$; $ctyp field$ >>) @@
-          List.filter (fun (name, _, _) -> List.mem name only) l
-        in
-          message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
+       let fields =
+         foldl1 "message_types `Message_subset" ctyp
+           (fun ct ((name, _, _) as field) -> <:ctyp< $ct$; $ctyp field$ >>) @@
+         List.filter (must_keep_field @@ subset_of_selection selection sign) l
+       in
+         message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
 
   and modules_to_include_of_texpr = function
      | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
@@ -441,8 +441,8 @@ let generate_container bindings =
                 >>
           | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list"
 
-          | Message_subset (_, l, only) ->
-            let l = List.filter (fun (name, _, _) -> List.mem name only) l in
+          | Message_subset (_, l, subset) ->
+            let l = List.filter (must_keep_field subset) l in
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                   ref (fun () -> $ wrap (default_record l) $)
@@ -569,11 +569,11 @@ struct
   let rec pp_message ?namespace bindings msgname = function
     | `Message_record l -> pp_message_record ?namespace bindings msgname l
 
-    | `Message_subset (name, only) ->
+    | `Message_subset (name, selection, sign) ->
         let l =
           match smap_find name bindings with
             | Some (Message_decl (_, `Message_record l, _)) ->
-                List.filter (fun (name, _, _) -> List.mem name only) l
+                List.filter (must_keep_field @@ subset_of_selection selection sign) l
             | None | Some _ ->
                 failwithfmt
                   "wrong message subset: %s is not a simple message" name;
@@ -1140,12 +1140,12 @@ struct
           with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
       >>
 
-  and subset_case ~orig msgname ?namespace ?constr tag fields ~only =
+  and subset_case ~orig msgname ?namespace ?constr tag fields ~subset =
     let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
     (* let constr_name = Option.default "<default>" constr in *)
 
-    let read_field fieldno (name, _, llty) expr =
-      if not @@ List.mem name only then
+    let read_field fieldno ((name, _, llty) as field) expr =
+      if not @@ must_keep_field subset field then
         (* FIXME: ensure we don't go past the eom *)
         <:expr<
           let _ = $RD.reader_func `Skip_value$ s ($RD.reader_func `Read_prefix$ s) in
@@ -1162,7 +1162,7 @@ struct
         (fun (name, _, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>) @@
-      List.filter (fun (name, _, _) -> List.mem name only) fields in
+      List.filter (must_keep_field subset) fields in
 
     (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
     let record =
@@ -1176,7 +1176,7 @@ struct
          List.fold_right
            (fun ((name, _, _) as f) fs -> match fs with
               | _ :: _ -> f :: fs
-              | [] -> if List.mem name only then f :: fs else [])
+              | [] -> if must_keep_field subset f then f :: fs else [])
            fields [])
         record
     in
@@ -1310,8 +1310,8 @@ struct
           in
             (field_readers, main_expr)
 
-      | Message_subset (orig, fields, only) ->
-          let match_cases = subset_case ~orig msgname 0 fields ~only in
+      | Message_subset (orig, fields, subset) ->
+          let match_cases = subset_case ~orig msgname 0 fields ~subset in
           let main_expr = wrap_msg_reader msgname match_cases |> wrap_reader opts in
             (<:str_item< >>, main_expr)
 

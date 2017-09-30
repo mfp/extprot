@@ -125,7 +125,10 @@ EXTEND Gram
   msg_expr :
     [ [ r = record_or_app -> (r :> message_expr)
       | n = a_UIDENT; x = complex_msg_expr -> make_complex_msg_expr n x
-      | "{|"; n = a_LIDENT; "only"; l = LIST1 [ a_LIDENT ] SEP ";"; "|}" -> `Message_subset (n, l)
+      | "{|"; n = a_LIDENT; "with"; l = LIST1 [ a_LIDENT ] SEP ";"; "|}" ->
+        `Message_subset (n, l, `Include)
+      | "{|"; n = a_LIDENT; "not"; l = LIST1 [ a_LIDENT ] SEP ";"; "|}" ->
+        `Message_subset (n, l, `Exclude)
       ] ];
 
   complex_msg_expr:

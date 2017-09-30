@@ -14,6 +14,14 @@ let merge_options opt1 opt2 = opt2 @ opt1
 let update_bindings bindings params args =
   List.fold_right2 SMap.add params args bindings
 
+let must_keep_field subset (name, _, _) = match subset with
+  | Include_fields l -> List.mem name l
+  | Exclude_fields l -> not @@ List.mem name l
+
+let subset_of_selection selection = function
+  | `Include -> Include_fields selection
+  | `Exclude -> Exclude_fields selection
+
 let beta_reduce_base_texpr_aux f self (bindings : bindings) : base_type_expr -> 'a = function
   | #base_type_expr_simple as x -> x
   | `Tuple (l, opts) -> `Tuple (List.map (self bindings) l, opts)
@@ -208,10 +216,15 @@ let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr
             Message_single (Some r.record_name, List.map (map_field g) r.record_fields))
         name (`App (name, _args, _opts))
   | `Message_alias (path, name) -> Message_alias (path, name)
-  | `Message_subset (name, excluded) ->
+  | `Message_subset (name, l, sign) ->
       match smap_find name bindings with
         | Some (Message_decl (_, `Message_record fields, _opts)) ->
-            Message_subset (name, List.map (map_field f) fields, excluded)
+            let subset =
+              match sign with
+                | `Include -> Include_fields l
+                | `Exclude -> Exclude_fields l
+            in
+              Message_subset (name, List.map (map_field f) fields, subset)
         | None | Some _ ->
             failwithfmt
               "wrong message subset: %s is not a simple message" name;

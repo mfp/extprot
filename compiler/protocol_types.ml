@@ -100,7 +100,7 @@ type message_expr = [
   | message_expr_app
   | `Message_alias of string list * string
   | `Message_sum of (string * [base_message_expr | message_expr_app]) list
-  | `Message_subset of string * string list
+  | `Message_subset of string * string list * [`Include | `Exclude]
 ]
 
 let kind_of_message_expr = function
