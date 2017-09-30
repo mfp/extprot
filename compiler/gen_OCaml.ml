@@ -1172,7 +1172,12 @@ struct
     let e =
       List.fold_right
         (fun (i, fieldinfo) e -> read_field i fieldinfo e)
-        (List.mapi (fun i x -> (i, x)) fields)
+        (List.mapi (fun i x -> (i, x)) @@
+         List.fold_right
+           (fun ((name, _, _) as f) fs -> match fs with
+              | _ :: _ -> f :: fs
+              | [] -> if List.mem name only then f :: fs else [])
+           fields [])
         record
     in
       <:match_case<
