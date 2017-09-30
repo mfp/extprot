@@ -14,9 +14,12 @@ module SMap = Map.Make(struct type t = string let compare = String.compare end)
 let smap_find k m = try Some (SMap.find k m) with Not_found -> None
 
 type error =
-    Repeated_binding of string
+  | Repeated_binding of string
   | Unbound_type_variable of string * string
   | Wrong_arity of string * int * string * int
+  | Bad_subset of string (* subset name *) * string (* orig *) * string (* field *)
+  | Missing_subset_source of string (* subset *) * string (* orig *)
+  | Empty_subset of string
 
 let concat_map f l = List.concat (List.map f l)
 
@@ -132,17 +135,47 @@ let check_declarations decls =
           in match decl with
               Message_decl (_, msg, _) -> loop (fold_msg errs msg) arities tl
             | Type_decl (_, _, ty, _) -> loop (fold_ty errs ty) arities tl
-    in loop [] SMap.empty l
+    in loop [] SMap.empty l in
 
-  in dup_errors decls @ unbound_type_vars decls @ wrong_type_arities decls
+  let check_subsets decls =
+    let update_bindings m = function
+      | Message_decl (name, (`Message_record _ as mexpr), _) ->
+        SMap.add name mexpr m
+      | _ -> m in
+
+    let _, missing_source_errors =
+      List.fold_left
+        (fun (bindings, es) decl ->
+           let es =
+             match decl with
+               | Message_decl (name, `Message_subset (src, _, _), _) ->
+                   if SMap.mem src bindings then es
+                   else Missing_subset_source (name, src) :: es
+               | _ -> es
+           in
+             (update_bindings bindings decl, es))
+        (SMap.empty, []) decls
+    in
+      missing_source_errors
+  in
+    dup_errors decls @ unbound_type_vars decls @ wrong_type_arities decls @
+    check_subsets decls
 
 let pp_errors pp =
   let pr fmt = Format.fprintf pp fmt in
     List.iter
       (function
-           Repeated_binding s -> pr "Type binding %S is duplicated.@." s
+         | Repeated_binding s -> pr "Type binding %S is duplicated.@." s
          | Unbound_type_variable (where, which) ->
              pr "Type %S is unbound in %S.@." which where
          | Wrong_arity (which, correct, where, wrong) ->
              pr "Type %S used with wrong arity (%d instead of %d) in %S.@."
-               which wrong correct where)
+               which wrong correct where
+         | Bad_subset (name, src, field) ->
+             pr "Field %s not present in source message %s for subset %s.@."
+               field src name
+         | Empty_subset name ->
+             pr "Empty message subset %s.@." name
+         | Missing_subset_source (name, src) ->
+             pr "Missing source message %s for subset %s.@."
+               src name)

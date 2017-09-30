@@ -8,6 +8,8 @@ include Gencode_types
 let (|>) x f = f x
 
 let failwithfmt fmt = kprintf (fun s -> if true then failwith s) fmt
+let exit_with_error fmt =
+  kprintf (fun s -> print_endline "Found 1 error:"; print_endline s; exit 1) fmt
 
 let merge_options opt1 opt2 = opt2 @ opt1
 

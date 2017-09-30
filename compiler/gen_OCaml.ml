@@ -300,9 +300,29 @@ let generate_container bindings =
            | Some (Message_decl (_, `Message_record fields, _opts)) ->
                fields
            | None | Some _ ->
-               failwithfmt
-                 "wrong message subset: %s is not a simple message" name;
-               assert false in
+               exit_with_error
+                 "wrong message subset: %s is not a simple message" name in
+
+       let subset = subset_of_selection selection sign in
+
+       (* check that subset is not empty *)
+       let () =
+         match List.filter (must_keep_field subset) l with
+           | _ :: _ -> ()
+           | [] -> exit_with_error "Message subset %s is empty." msgname
+       in
+
+       (* check that all fields referenced in subset exist *)
+       let () =
+         let known = List.map (fun (name, _, _) -> name) l in
+           List.iter
+             (fun field ->
+                if not @@ List.mem field known then
+                  exit_with_error
+                    "Unknown field %s referenced in message subset %s."
+                    field msgname)
+             selection
+       in
 
        let ctyp (name, mutabl, texpr) =
          let ty = ctyp_of_texpr texpr in match mutabl with
@@ -312,7 +332,7 @@ let generate_container bindings =
        let fields =
          foldl1 "message_types `Message_subset" ctyp
            (fun ct ((name, _, _) as field) -> <:ctyp< $ct$; $ctyp field$ >>) @@
-         List.filter (must_keep_field @@ subset_of_selection selection sign) l
+         List.filter (must_keep_field subset) l
        in
          message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
 
@@ -1180,6 +1200,14 @@ struct
            fields [])
         record
     in
+
+      (* check that the subset is not empty *)
+      begin
+        match List.map (must_keep_field subset) fields with
+          | _ :: _ -> ()
+          | [] -> exit_with_error "Message subset %s is empty." msgname
+      end;
+
       <:match_case<
         $int:string_of_int tag$ ->
           try
