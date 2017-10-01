@@ -1167,7 +1167,7 @@ struct
           with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
       >>
 
-  and record_case msgname ?namespace ?constr tag fields =
+  and record_case msgname ~locs ?namespace ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
 
     let read_field _ (name, _, _) expr =
@@ -1386,7 +1386,7 @@ struct
                 (match_cases, <:str_item< >>)
             else
               let locs          = use_locs opts in
-              let match_cases   = record_case ?namespace msgname 0 fields in
+              let match_cases   = record_case ~locs:(use_locs opts) ?namespace msgname 0 fields in
               let field_readers = record_case_field_readers ~locs msgname 0 fields in
                 (match_cases, field_readers) in
 
@@ -1419,26 +1419,36 @@ struct
                     (Some (Option.default constr ns), Some constr, fields))
                  l) in
 
-          let locs = use_locs opts in
+          let locs    = use_locs opts in
+          let inlined = true in
 
           let field_readers =
-            List.fold_left
-              (fun funcs func ->
-                 <:str_item< $func$; $funcs$ >>)
-              <:str_item< >> @@
-            List.rev @@
-            List.mapi
-              (fun tag (_namespace, constr, fields) ->
-                 record_case_field_readers ~locs ~constr msgname tag fields)
-              l in
+            if inlined then
+              <:str_item< >>
+            else
+              List.fold_left
+                (fun funcs func ->
+                   <:str_item< $func$; $funcs$ >>)
+                <:str_item< >> @@
+              List.rev @@
+              List.mapi
+                (fun tag (_namespace, constr, fields) ->
+                   record_case_field_readers ~locs ~constr msgname tag fields)
+                l in
 
           let match_cases =
-            List.mapi
-              (fun tag (namespace, constr, fields) ->
-                 record_case
-                   ~namespace:(Option.default constr namespace)
-                   msgname ~constr tag fields) l
-            |> Ast.mcOr_of_list in
+            let _record_case =
+              if inlined then
+                record_case_inlined
+              else
+                record_case
+            in
+              List.mapi
+                (fun tag (namespace, constr, fields) ->
+                   _record_case
+                     ~locs ~namespace:(Option.default constr namespace)
+                     msgname ~constr tag fields) l
+              |> Ast.mcOr_of_list in
 
           let main_expr =
             wrap_msg_reader msgname ~promoted_match_cases match_cases |>
