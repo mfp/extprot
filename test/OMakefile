@@ -15,6 +15,7 @@ TEST_MODULES[] =
     unit_write
     test_conv
     test_extensions
+    test_subsets
 
 GENERATOR = $(BASE)/extprotc
 
