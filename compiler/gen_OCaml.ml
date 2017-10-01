@@ -1186,16 +1186,20 @@ struct
 
     let read_field fieldno ((name, _, llty) as field) expr =
       if not @@ must_keep_field subset field then
-        (* FIXME: ensure we don't go past the eom *)
         <:expr<
-          let _ = $RD.reader_func `Skip_value$ s ($RD.reader_func `Read_prefix$ s) in
-            $expr$ >>
-      else
-      let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
-        <:expr<
-          let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms in
+          let () =
+            if nelms >= $int:string_of_int (fieldno + 1)$ then
+              ignore ($RD.reader_func `Skip_value$ s ($RD.reader_func `Read_prefix$ s))
+            else ()
+          in
             $expr$
-        >> in
+        >>
+      else
+        let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
+          <:expr<
+            let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms in
+              $expr$
+          >> in
 
     let field_assigns =
       List.map

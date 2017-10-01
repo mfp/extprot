@@ -126,4 +126,17 @@ message subset__c_1b = {| subset__c not a; c |}
 message subset__c_2  = {| subset__c with a; c |}
 message subset__c_2b = {| subset__c not b; d |}
 
+message subset__d    = { a : int; b : bool; c : [int] }
+message subset__d_1  = { a : int }
+message subset__d_2  = {| subset__d with b; c |}
+
+message subset__e    = { a : int; b : bool; c : [int] }
+message subset__e_1  = { a : int }
+message subset__e_2  = {| subset__d with a; c |}
+
+type subset__f_0 'a 'b 'c  = { a : 'a; b : 'b; c : 'c; d : string }
+message subset__f    = subset__f_0<int, bool, bool>
+message subset__f_1  = { a : int }
+message subset__f_2  = {| subset__f with c |}
+
 (* vim:set ft=ocaml: *)

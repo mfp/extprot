@@ -83,7 +83,28 @@ let tests = "subsets" >::: [
       Subset__c_2b.pp Subset__c.write Subset__c_2b.read
       { Subset__c_0.a = 13; b = true; c = "foo"; d = 42L }
       { Subset__c_2b.a = 13; c = "foo" };
-  end
+  end;
+
+  "default values, missing wanted fields (simple)" >:: begin fun () ->
+    check_roundtrip
+      Subset__d_2.pp Subset__d_1.write Subset__d_2.read
+      { Subset__d_1.a = 13 }
+      { Subset__d_2.b = false; c = []; };
+  end;
+
+  "default values, missing skipped fields (simple)" >:: begin fun () ->
+    check_roundtrip
+      Subset__e_2.pp Subset__e_1.write Subset__e_2.read
+      { Subset__e_1.a = 13 }
+      { Subset__e_2.a = 13; c = []; };
+  end;
+
+  "default values, polymorphic record" >:: begin fun () ->
+    check_roundtrip
+      Subset__f_2.pp Subset__f_1.write Subset__f_2.read
+      { Subset__f_1.a = 13; }
+      { Subset__f_2.c = false; };
+  end;
 ]
 
 let () = Register_test.register "subsets"
