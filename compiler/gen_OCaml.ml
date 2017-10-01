@@ -770,6 +770,12 @@ module Make_reader
 struct
   let _loc = Loc.mk "<generated code at Make_reader>"
 
+  let use_locs opts =
+    match List.assoc "locs" opts with
+      | exception Not_found -> true
+      | "false" -> false
+      | _ -> true
+
   let wrap_reader opts expr = match get_type_info opts with
       Some { fromf; _ } ->
         <:expr<
@@ -960,12 +966,15 @@ struct
                 | $other_cases$
               ]
             >>
-      | Record (name, fields, _) ->
+      | Record (name, fields, opts) ->
           let fields' =
             List.map (fun f -> (f.field_name, true, f.field_type)) fields in
           let promoted_match_cases =
             make_promoted_match_cases msgname [ Some name, None, fields' ] in
-          let match_cases = record_case_inlined ~namespace:name msgname 0 fields' in
+          let match_cases =
+            record_case_inlined
+              ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
+          in
             wrap_msg_reader name ~promoted_match_cases match_cases
 
       | Message (path, name, _) ->
@@ -1018,7 +1027,7 @@ struct
       sprintf "__%s_read_x%s_x%s_x%s"
         RD.name (mangle msgname) (Option.map_default mangle "" constr) (mangle name)
 
-  and record_case_field_readers msgname ?constr _ fields =
+  and record_case_field_readers msgname ~locs ?constr _ fields =
     let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
     let constr_name = Option.default "<default>" constr in
 
@@ -1052,14 +1061,22 @@ struct
                       ()
             >> in
 
-      let funcname = field_reader_funcname ~msgname ~constr ~name in
+      let funcname  = field_reader_funcname ~msgname ~constr ~name in
 
+      let read_expr =
+        if locs then
+          <:expr<
+              try
+                $read_field msgname constr_name name llty$
+              with [$rescue_match_case$]
+          >>
+        else
+          read_field msgname constr_name name llty
+      in
         <:str_item<
           value $lid:funcname$ s nelms =
              if nelms >= $int:string_of_int (fieldno + 1)$ then
-               try
-                 $read_field msgname constr_name name llty$
-               with [$rescue_match_case$]
+               $read_expr$
              else $default$
         >>
     in
@@ -1069,7 +1086,7 @@ struct
         (List.mapi (fun i x -> (i, x)) fields)
         <:str_item< >>
 
-  and record_case_inlined msgname ?namespace ?constr tag fields =
+  and record_case_inlined msgname ~locs ?namespace ?constr tag fields =
     let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
     let constr_name = Option.default "<default>" constr in
 
@@ -1102,14 +1119,22 @@ struct
                       ~constructor:$str:constr_name$
                       ~field:$str:name$
                       ()
-            >>
+            >> in
+
+      let read_expr =
+        if locs then
+          <:expr<
+            try
+              $read_field msgname constr_name name llty$
+            with [$rescue_match_case$]
+          >>
+        else
+          read_field msgname constr_name name llty
       in
         <:expr<
            let $lid:name$ =
              if nelms >= $int:string_of_int (fieldno + 1)$ then
-               try
-                 $read_field msgname constr_name name llty$
-               with [$rescue_match_case$]
+               $read_expr$
              else
                  $default$
            in $expr$
@@ -1355,11 +1380,14 @@ struct
 
           let match_cases, field_readers =
             if inline then
-              let match_cases = record_case_inlined ?namespace msgname 0 fields in
+              let match_cases =
+                record_case_inlined ~locs:(use_locs opts) ?namespace msgname 0 fields
+              in
                 (match_cases, <:str_item< >>)
             else
+              let locs          = use_locs opts in
               let match_cases   = record_case ?namespace msgname 0 fields in
-              let field_readers = record_case_field_readers msgname 0 fields in
+              let field_readers = record_case_field_readers ~locs msgname 0 fields in
                 (match_cases, field_readers) in
 
           let main_expr =
@@ -1391,6 +1419,8 @@ struct
                     (Some (Option.default constr ns), Some constr, fields))
                  l) in
 
+          let locs = use_locs opts in
+
           let field_readers =
             List.fold_left
               (fun funcs func ->
@@ -1399,7 +1429,7 @@ struct
             List.rev @@
             List.mapi
               (fun tag (_namespace, constr, fields) ->
-                 record_case_field_readers ~constr msgname tag fields)
+                 record_case_field_readers ~locs ~constr msgname tag fields)
               l in
 
           let match_cases =

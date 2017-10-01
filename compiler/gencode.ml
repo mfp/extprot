@@ -394,7 +394,7 @@ struct
       names Gen.typedecl_generators @ names Gen.msgdecl_generators |>
         List.unique |> List.sort
 
-  let generate_code ?width ?(generators : string list option) bindings entries =
+  let generate_code ?width ?(generators : string list option) ?(global_opts = []) bindings entries =
     let use_generator name = match generators with
         None -> true
       | Some l -> List.mem name l in
@@ -410,14 +410,16 @@ struct
              | Type_decl (name, params, expr, opts) ->
                  List.fold_left
                    (fun cont (gname, f) ->
-                      if use_generator gname then f bindings name params expr opts cont
+                      if use_generator gname then
+                        f bindings name params expr (opts @ global_opts) cont
                       else cont)
                    cont
                    Gen.typedecl_generators
              | Message_decl (name, expr, opts) ->
                  List.fold_left
                    (fun cont (gname, f) ->
-                      if use_generator gname then f bindings name expr opts cont
+                      if use_generator gname then
+                        f bindings name expr (opts @ global_opts) cont
                       else cont)
                    cont
                    Gen.msgdecl_generators
