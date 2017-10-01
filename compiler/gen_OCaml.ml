@@ -247,7 +247,7 @@ let generate_container bindings =
   let rec message_types ?(opts = []) msgname = function
     | `Message_record l ->
         let ctyp (name, mutabl, texpr) =
-          let ty = ctyp_of_texpr texpr in match mutabl with
+          let ty = ctyp_of_texpr bindings texpr in match mutabl with
               true -> <:ctyp< $lid:name$ : mutable $ty$ >>
             | false -> <:ctyp< $lid:name$ : $ty$ >> in
         let fields =
@@ -264,7 +264,7 @@ let generate_container bindings =
          ident_of_ctyp @@
          List.fold_left
            (fun ty tyvar -> <:ctyp< $ty$ $tyvar$ >>)
-           (ctyp_of_path tyname) (List.map ctyp_of_texpr args)
+           (ctyp_of_path tyname) (List.map (ctyp_of_texpr bindings) args)
        in message_typedefs ~opts msgname <:ctyp< $applied$ >>
 
    | `Message_alias (path, name) ->
@@ -295,10 +295,20 @@ let generate_container bindings =
 
    | `Message_subset (name, selection, sign) ->
 
-       let l =
+       let bindings, l =
          match smap_find name bindings with
-           | Some (Message_decl (_, `Message_record fields, _opts)) ->
-               fields
+           | Some (Message_decl (_, `Message_record l, _)) ->
+               (bindings, l)
+
+           | Some (Message_decl (_, `Message_app (name, args, _), _)) -> begin
+               match beta_reduced_msg_app_fields bindings name args with
+                 | None ->
+                     exit_with_error
+                       "wrong message subset %s: %s is not a simple message" msgname name
+
+                 | Some (bindings, l) -> (bindings, l)
+             end
+
            | None | Some _ ->
                exit_with_error
                  "wrong message subset: %s is not a simple message" name in
@@ -325,7 +335,7 @@ let generate_container bindings =
        in
 
        let ctyp (name, mutabl, texpr) =
-         let ty = ctyp_of_texpr texpr in match mutabl with
+         let ty = ctyp_of_texpr bindings texpr in match mutabl with
              true -> <:ctyp< $lid:name$ : mutable $ty$ >>
            | false -> <:ctyp< $lid:name$ : $ty$ >> in
 
@@ -340,7 +350,7 @@ let generate_container bindings =
      | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
      | #type_expr -> None
 
-  and ctyp_of_texpr expr =
+  and ctyp_of_texpr bindings expr =
     reduce_to_poly_texpr_core bindings expr |> ctyp_of_poly_texpr_core
 
   and ctyp_of_poly_texpr_core = function
@@ -589,17 +599,27 @@ struct
   let rec pp_message ?namespace bindings msgname = function
     | `Message_record l -> pp_message_record ?namespace bindings msgname l
 
-    | `Message_subset (name, selection, sign) ->
-        let l =
+    | (`Message_subset (name, selection, sign) : message_expr) as _mexpr ->
+        let bindings, l =
           match smap_find name bindings with
             | Some (Message_decl (_, `Message_record l, _)) ->
-                List.filter (must_keep_field @@ subset_of_selection selection sign) l
+                  (bindings, l)
+
+            | Some (Message_decl (_, `Message_app (name, args, _), _)) -> begin
+                match beta_reduced_msg_app_fields bindings name args with
+                  | None ->
+                      exit_with_error
+                        "wrong message subset %s: %s is not a simple message" msgname name
+
+                  | Some (bindings, l) -> (bindings, l)
+              end
+
             | None | Some _ ->
-                failwithfmt
-                  "wrong message subset: %s is not a simple message" name;
-                assert false
+                exit_with_error
+                  "wrong message subset %s: %s is not a simple message" msgname name
         in
-          pp_message_record bindings msgname l
+          pp_message_record bindings msgname @@
+          List.filter (must_keep_field @@ subset_of_selection selection sign) l
 
     | `Message_app(name, args, _) ->
         let pp_func =

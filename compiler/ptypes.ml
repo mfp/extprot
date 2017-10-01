@@ -138,10 +138,11 @@ let check_declarations decls =
     in loop [] SMap.empty l in
 
   let check_subsets decls =
-    let update_bindings m = function
-      | Message_decl (name, (`Message_record _ as mexpr), _) ->
-        SMap.add name mexpr m
-      | _ -> m in
+    let update_bindings s = function
+      | Message_decl (name, (`Message_record _ | `Message_app _), _)
+      | Type_decl (name, _, `Record _, _) ->
+          SSet.add name s
+      | _ -> s in
 
     let _, missing_source_errors =
       List.fold_left
@@ -149,12 +150,12 @@ let check_declarations decls =
            let es =
              match decl with
                | Message_decl (name, `Message_subset (src, _, _), _) ->
-                   if SMap.mem src bindings then es
+                   if SSet.mem src bindings then es
                    else Missing_subset_source (name, src) :: es
                | _ -> es
            in
              (update_bindings bindings decl, es))
-        (SMap.empty, []) decls
+        (SSet.empty, []) decls
     in
       missing_source_errors
   in

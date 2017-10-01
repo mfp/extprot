@@ -219,18 +219,35 @@ let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr
         name (`App (name, _args, _opts))
   | `Message_alias (path, name) -> Message_alias (path, name)
   | `Message_subset (name, l, sign) ->
-      match smap_find name bindings with
-        | Some (Message_decl (_, `Message_record fields, _opts)) ->
-            let subset =
-              match sign with
-                | `Include -> Include_fields l
-                | `Exclude -> Exclude_fields l
-            in
-              Message_subset (name, List.map (map_field f) fields, subset)
-        | None | Some _ ->
-            failwithfmt
-              "wrong message subset: %s is not a simple message" name;
-            assert false
+      let subset =
+        match sign with
+          | `Include -> Include_fields l
+          | `Exclude -> Exclude_fields l
+      in
+        match smap_find name bindings with
+          | Some (Message_decl (_, `Message_record fields, _opts)) ->
+                Message_subset (name, List.map (map_field f) fields, subset)
+
+          | Some (Message_decl (_, `Message_app (name_, args_, opts), opts_))
+          | Some (Type_decl (name_, ([] as args_), `Record _, (opts as opts_))) -> begin
+              match
+                expand_record_type
+                  (fun r _opts ->
+                     Message_single (None, List.map (map_field g) r.record_fields))
+                  name (`App (name_, args_, merge_options opts_ opts))
+              with
+                | Message_single (_, fields) ->
+                    Message_subset (name, fields, subset)
+                | _ ->
+                    failwithfmt
+                      "wrong message subset %s: source %s is not a simple message"
+                      name name_;
+                    assert false
+            end
+          | None | Some _ ->
+              failwithfmt
+                "wrong message subset: %s is not a simple message" name;
+              assert false
 
 let iter_message bindings f g msgname msg =
   let proc_field f const (fname, mutabl, ty) = f const fname mutabl ty in
@@ -254,6 +271,25 @@ let iter_message bindings f g msgname msg =
   | `Message_record fields -> List.iter (proc_field f "") fields
   | `Message_app(name, _args, _opts) ->
       iter_expanded_type "" name (`App (name, _args, _opts))
+
+let beta_reduced_msg_app_fields bindings name args =
+  match smap_find name bindings with
+    | Some (Type_decl (_, params, `Record r, _)) -> begin
+        let bindings =
+          update_bindings bindings
+            (List.map string_of_type_param params)
+            (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty, [])) args) in
+
+        match alpha_convert bindings (`Record r) with
+          | bindings, `Record (r, _) ->
+              Some (bindings, r.record_fields)
+          | _ ->
+              failwithfmt
+                "beta_reduced_msg_app_fields: alpha conversion of record \n\
+                 did not return record";
+              assert false
+      end
+    | _ -> None
 
 let low_level_msg_def bindings msgname (msg : message_expr) =
 
