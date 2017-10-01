@@ -273,23 +273,46 @@ let iter_message bindings f g msgname msg =
       iter_expanded_type "" name (`App (name, _args, _opts))
 
 let beta_reduced_msg_app_fields bindings name args =
-  match smap_find name bindings with
-    | Some (Type_decl (_, params, `Record r, _)) -> begin
-        let bindings =
-          update_bindings bindings
-            (List.map string_of_type_param params)
-            (List.map (fun ty -> Type_decl ("<bogus>", [], type_expr ty, [])) args) in
 
-        match alpha_convert bindings (`Record r) with
-          | bindings, `Record (r, _) ->
-              Some (bindings, r.record_fields)
-          | _ ->
-              failwithfmt
-                "beta_reduced_msg_app_fields: alpha conversion of record \n\
-                 did not return record";
-              assert false
-      end
-    | _ -> None
+  let rec resolve_texpr_type_vars bindings expr =
+    let self = resolve_texpr_type_vars bindings in
+
+      match expr with
+        | `App (name, args, opts) -> `App (name, List.map self args, opts)
+
+        | `Ext_app (path, name, args, opts) ->
+            `Ext_app (path, name, List.map self args, opts)
+
+        | `Type_param param as x -> begin
+            match smap_find (string_of_type_param param) bindings with
+              | None -> x
+              | Some ty -> ty
+          end
+
+        | `Tuple (tys, opts) -> `Tuple (List.map self tys, opts)
+        | `List (ty, opts) -> `List (self ty, opts)
+        | `Array (ty, opts) -> `Array (ty, opts)
+        | #base_type_expr_simple as x -> x
+
+  in
+
+    match smap_find name bindings with
+      | Some (Type_decl (_, params, `Record (r, _), _)) -> begin
+
+          let bs =
+            List.fold_left2
+              (fun b name ty -> SMap.add (string_of_type_param name) ty b)
+              SMap.empty params args in
+
+          let record_fields =
+            List.map
+              (fun (name, mut, ty) ->
+                 (name, mut, resolve_texpr_type_vars bs ty))
+              r.record_fields
+          in
+            Some (bindings, record_fields)
+        end
+      | _ -> None
 
 let low_level_msg_def bindings msgname (msg : message_expr) =
 

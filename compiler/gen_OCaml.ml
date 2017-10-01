@@ -351,45 +351,45 @@ let generate_container bindings =
      | #type_expr -> None
 
   and ctyp_of_texpr bindings expr =
-    reduce_to_poly_texpr_core bindings expr |> ctyp_of_poly_texpr_core
+    reduce_to_poly_texpr_core bindings expr |> ctyp_of_poly_texpr_core bindings
 
-  and ctyp_of_poly_texpr_core = function
+  and ctyp_of_poly_texpr_core bindings = function
       `Bool opts -> get_type <:ctyp< bool >> opts
     | `Byte opts -> get_type <:ctyp< int >> opts
     | `Int opts -> get_type <:ctyp< int >> opts
     | `Long_int opts -> get_type <:ctyp< Int64.t >> opts
     | `Float opts -> get_type <:ctyp< float >> opts
     | `String opts -> get_type <:ctyp< string >> opts
-    | `List (ty, opts) -> get_type <:ctyp< list ($ctyp_of_poly_texpr_core ty$) >> opts
-    | `Array (ty, opts) -> get_type <:ctyp< array ($ctyp_of_poly_texpr_core ty$) >> opts
+    | `List (ty, opts) -> get_type <:ctyp< list ($ctyp_of_poly_texpr_core bindings ty$) >> opts
+    | `Array (ty, opts) -> get_type <:ctyp< array ($ctyp_of_poly_texpr_core bindings ty$) >> opts
     | `Tuple (l, opts) -> begin match l with
           [] -> failwith "ctyp_of_poly_texpr_core: empty tuple"
         | [_] -> failwith "ctyp_of_poly_texpr_core: 1-element tuple"
         | [a; b] ->
             get_type
-              <:ctyp< ( $ ctyp_of_poly_texpr_core a$ * $ctyp_of_poly_texpr_core b$ ) >>
+              <:ctyp< ( $ ctyp_of_poly_texpr_core bindings a$ * $ctyp_of_poly_texpr_core bindings b$ ) >>
               opts
         | hd::tl ->
             let tl' =
-              foldr1 "ctyp_of_poly_texpr_core `Tuple" ctyp_of_poly_texpr_core
-                (fun ptexpr tup -> <:ctyp< $ ctyp_of_poly_texpr_core ptexpr $ * $tup$ >>)
+              foldr1 "ctyp_of_poly_texpr_core `Tuple" (ctyp_of_poly_texpr_core bindings)
+                (fun ptexpr tup -> <:ctyp< $ ctyp_of_poly_texpr_core bindings ptexpr $ * $tup$ >>)
                 tl
             in get_type
-                 <:ctyp< ( $ ctyp_of_poly_texpr_core hd $ * $tl'$ ) >>
+                 <:ctyp< ( $ ctyp_of_poly_texpr_core bindings hd $ * $tl'$ ) >>
                  opts
       end
     | `Ext_type (path, name, args, opts) ->
         let full_path = path @ [String.capitalize name] in
         let id = ident_with_path _loc full_path name in
         let t = List.fold_left (* apply *)
-                  (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core ptexpr$ >>)
+                  (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core bindings ptexpr$ >>)
                   <:ctyp< $id:id$ >>
                   args
         in get_type
              (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
              opts
     | `Type (name, params, args, opts) ->
-        let args = List.map ctyp_of_poly_texpr_core args in
+        let args = List.map (ctyp_of_poly_texpr_core bindings) args in
         let t = List.fold_left (* apply *)
                   (fun ty ty_arg -> <:ctyp< $ty$ $ty_arg$ >>)
                   <:ctyp< $uid:String.capitalize name$.$lid:name$ >>
@@ -486,7 +486,7 @@ let generate_container bindings =
         let ty = match poly_beta_reduce_texpr bindings texpr with
           | `Record (r, _) -> begin
               let ctyp (name, mutabl, texpr) =
-                let ty = ctyp_of_poly_texpr_core texpr in match mutabl with
+                let ty = ctyp_of_poly_texpr_core bindings texpr in match mutabl with
                     true -> <:ctyp< $lid:name$ : mutable $ty$ >>
                   | false -> <:ctyp< $lid:name$ : $ty$ >> in
               let fields =
@@ -497,7 +497,7 @@ let generate_container bindings =
           | `Sum (s, _) -> begin
               let ty_of_const_texprs (const, ptexprs) =
                 (* eprintf "type %S, const %S, %d ptexprs\n" name const (List.length ptexprs); *)
-                let tys = List.map ctyp_of_poly_texpr_core ptexprs in
+                let tys = List.map (ctyp_of_poly_texpr_core bindings) ptexprs in
                   <:ctyp< $uid:const$ of $Ast.tyAnd_of_list tys$>>
 
               in let sum_ty =
@@ -529,7 +529,7 @@ let generate_container bindings =
               in <:ctyp< [ $sum_ty$ ] >>
             end
           | #poly_type_expr_core as ptexpr ->
-              get_type (ctyp_of_poly_texpr_core ptexpr) opts in
+              get_type (ctyp_of_poly_texpr_core bindings ptexpr) opts in
         let params =
           List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params in
         let type_rhs = maybe_type_equals opts ~params ty in
@@ -658,32 +658,32 @@ struct
       <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
 
   and pp_texpr bindings texpr =
-    reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
+    reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core bindings
 
-  and pp_poly_type path name args =
+  and pp_poly_type bindings path name args =
     let path = path @ [String.capitalize name] in
     List.fold_left
-      (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
+      (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core bindings ptexpr$ >>)
       (pp_name path name)
       args
 
-  and pp_poly_texpr_core = function
+  and pp_poly_texpr_core bindings = function
       `Bool _ -> pp_func "pp_bool"
     | `Byte _ -> pp_func "pp_int"
     | `Int _ -> pp_func "pp_int"
     | `Long_int _ -> pp_func "pp_int64"
     | `Float _ -> pp_func "pp_float"
     | `String _ -> pp_func "pp_string"
-    | `List (ty, _) -> <:expr< $pp_func "pp_list"$ $pp_poly_texpr_core ty$ >>
-    | `Array (ty, _) -> <:expr< $pp_func "pp_array"$ $pp_poly_texpr_core ty$ >>
-    | `Tuple ([ty], _) -> pp_poly_texpr_core ty
+    | `List (ty, _) -> <:expr< $pp_func "pp_list"$ $pp_poly_texpr_core bindings ty$ >>
+    | `Array (ty, _) -> <:expr< $pp_func "pp_array"$ $pp_poly_texpr_core bindings ty$ >>
+    | `Tuple ([ty], _) -> pp_poly_texpr_core bindings ty
     | `Tuple (l, _) ->
         List.fold_left
-          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
+          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core bindings ptexpr$ >>)
           (pp_func ("pp_tuple" ^ string_of_int (List.length l)))
           l
-    | `Type (name, _params, args, _) -> pp_poly_type [] name args
-    | `Ext_type (path, name, args, _) -> pp_poly_type path name args
+    | `Type (name, _params, args, _) -> pp_poly_type bindings [] name args
+    | `Ext_type (path, name, args, _) -> pp_poly_type bindings path name args
     | `Type_arg n -> <:expr< $lid:"pp_" ^ n$ >>
 
   let add_msgdecl_pretty_printer bindings msgname mexpr opts c =
@@ -712,7 +712,7 @@ struct
                 $uid:const$ $paCom_of_lidlist _loc params$ ->
                   $pp_func "fprintf"$ pp
                   $str:String.capitalize tyname ^ "." ^ const ^ " %a"$
-                  $pp_poly_texpr_core (`Tuple (ptexprs, opts))$ ($exTup_of_lidlist _loc params$)
+                  $pp_poly_texpr_core bindings (`Tuple (ptexprs, opts))$ ($exTup_of_lidlist _loc params$)
               >> in
           let constr_case constr =
             <:match_case<
@@ -735,13 +735,13 @@ struct
             in
               <:expr<
                 ( $str:field_name$,
-                  $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core tyexpr$ )
+                  $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core bindings tyexpr$ )
               >> in
           let pp_fields = List.mapi pp_field r.record_fields in
           <:expr< fun ppf -> fun x -> $pp_func "pp_struct"$ $expr_of_list pp_fields$ ppf ($wrap_value opts <:expr<x>>$) >>
         end
       | #poly_type_expr_core as ptexpr ->
-          let ppfunc_expr = pp_poly_texpr_core ptexpr in
+          let ppfunc_expr = pp_poly_texpr_core bindings ptexpr in
           <:expr< fun ppf -> fun x -> $ppfunc_expr$ ppf ($wrap_value opts <:expr<x>> $) >>
     in
       { c with c_pretty_printer =
