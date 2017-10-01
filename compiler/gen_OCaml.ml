@@ -1181,7 +1181,7 @@ struct
       >>
 
   and subset_case ~orig msgname ?namespace ?constr tag fields ~subset =
-    let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
+    let _loc        = Loc.mk "<generated code @ subset_case>" in
     (* let constr_name = Option.default "<default>" constr in *)
 
     let read_field fieldno ((name, _, llty) as field) expr =
@@ -1347,14 +1347,20 @@ struct
       field_infos |>
     Ast.mcOr_of_list
 
-  and read_message msgname opts = function
+  and read_message ?(inline = false) msgname opts = function
       | Message_single (namespace, fields) ->
 
           let promoted_match_cases =
             make_promoted_match_cases msgname [ namespace, None, fields ] in
 
-          let match_cases   = record_case ?namespace msgname 0 fields in
-          let field_readers = record_case_field_readers msgname 0 fields in
+          let match_cases, field_readers =
+            if inline then
+              let match_cases = record_case_inlined ?namespace msgname 0 fields in
+                (match_cases, <:str_item< >>)
+            else
+              let match_cases   = record_case ?namespace msgname 0 fields in
+              let field_readers = record_case_field_readers msgname 0 fields in
+                (match_cases, field_readers) in
 
           let main_expr =
             wrap_msg_reader msgname ~promoted_match_cases match_cases |>
@@ -1440,6 +1446,17 @@ let raw_rd_func reader_func =
     | None -> None
     | Some (pat, reader) -> Some (pat, wrap t reader)
 
+
+let messages_with_subsets bindings =
+  SMap.fold
+    (fun _ decl l -> match decl with
+       | Message_decl (_, `Message_subset (name, _, _), _) -> name :: l
+       | Message_decl
+           (_, (`Message_record _ | `Message_alias _ |
+                `Message_sum _ | `Message_app _), _)
+       | Type_decl _ -> l)
+    bindings []
+
 let add_message_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
@@ -1454,8 +1471,13 @@ let add_message_reader bindings msgname mexpr opts c =
 
                   let read_msg_func = ((^) "read_")
                 end) in
+
+  let with_subsets = messages_with_subsets bindings in
+
   let field_readers, read_expr =
-    Mk_normal_reader.read_message msgname opts llrec
+    Mk_normal_reader.read_message
+      ~inline:(not @@ List.mem msgname with_subsets)
+      msgname opts llrec
   in
     {
       c with c_reader =
@@ -1490,8 +1512,13 @@ let add_message_io_reader bindings msgname mexpr opts c =
 
                   let read_msg_func = ((^) "io_read_")
                 end) in
+
+  let with_subsets = messages_with_subsets bindings in
+
   let field_readers, ioread_expr =
-    Mk_io_reader.read_message msgname opts llrec
+    Mk_io_reader.read_message
+      ~inline:(not @@ List.mem msgname with_subsets)
+      msgname opts llrec
   in
     {
       c with c_io_reader =
