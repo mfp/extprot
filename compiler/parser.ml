@@ -80,29 +80,34 @@ EXTEND Gram
         ]
 
     | "simple"
-        [ "bool" -> `Bool []
-        | "bool"; "[@"; "default"; "true"; "]" -> `Bool ["default", "true"]
-        | "bool"; "[@"; "default"; "false"; "]" -> `Bool ["default", "false"]
-        | "byte" -> `Byte []
-        | "byte"; "[@"; "default"; `INT (_, s); "]" -> `Byte ["default", s]
-        | "int" -> `Int []
-        | "int"; "[@"; "default"; `INT (_, s); "]" -> `Int ["default", s]
-        | "int"; "[@"; "default"; "-"; `INT (_, s); "]" -> `Int ["default", "-" ^ s]
-        | "long" -> `Long_int []
-        | "long"; "[@"; "default"; `INT64 (_, s); "]" -> `Long_int ["default", s]
-        | "long"; "[@"; "default"; "-"; `INT64 (_, s); "]" -> `Long_int ["default", "-" ^ s]
-        | "long"; "[@"; "default"; `INT (_, s); "]" -> `Long_int ["default", s]
-        | "long"; "[@"; "default"; "-"; `INT (_, s); "]" -> `Long_int ["default", "-" ^ s]
-        | "float" -> `Float []
-        | "float"; "[@"; "default"; `FLOAT (_, s); "]" -> `Float ["default", s]
-        | "float"; "[@"; "default"; "-"; `FLOAT (_, s); "]" -> `Float ["default", "-" ^ s]
-        | "float"; "[@"; "default"; `INT (_, s); "]" -> `Float ["default", s ^ "."]
-        | "float"; "[@"; "default"; "-"; `INT (_, s); "]" -> `Float ["default", "-" ^ s ^ "."]
-        | "float"; "[@"; "default"; `INT64 (_, s); "]" -> `Float ["default", s ^ "."]
-        | "float"; "[@"; "default"; "-"; `INT64 (_, s); "]" -> `Float ["default", "-" ^ s ^ "."]
-        | "string" -> `String []
-        | "string"; "[@"; "default"; `STRING (s, _); "]" -> `String ["default", s]
+        [ "bool"; l = annotations -> `Bool l
+        | "byte"; l =  annotations -> `Byte l
+        | "int"; l = annotations -> `Int l
+        | "long"; l = annotations -> `Long_int l
+        | "float"; l = annotations -> `Float l
+        | "string"; l = annotations -> `String l
         ] ] ;
+
+  annotations :
+    [ [ l = LIST0 [ annotation ] -> l] ];
+
+  annotation :
+    [
+      [ "[@"; s = a_LIDENT; v = annotation_value; "]" -> (s, v) ]
+    ];
+
+  annotation_value:
+    [
+      [ "true" -> "true"
+      | "false" -> "false"
+      | `INT (_, s) -> s
+      | `INT64 (_, s) -> s
+      | `FLOAT (_, s) -> s
+      | "-"; `INT (_, s) -> "-" ^ s
+      | "-"; `INT64 (_, s) -> "-" ^ s
+      | "-"; `FLOAT (_, s) -> "-" ^ s
+      | `STRING (s, _) -> s
+      ] ];
 
   ident_with_path :
     [
