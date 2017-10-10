@@ -105,6 +105,24 @@ let tests = "subsets" >::: [
       { Subset__f_1.a = 13; }
       { Subset__f_2.c = false; };
   end;
+
+  "field type ascription" >:: begin fun () ->
+    check_roundtrip
+      Subset__g3.pp Subset__g2.write Subset__g3.read
+      { Subset__g2.m1 = { Subset__g.a = 13; b = false };
+        m2 = { Subset__g.a = 42; b = true }; }
+      { Subset__g3.m2 = { Subset__g1.b = true } }
+  end;
+
+  "field type ascription, polymorphic records" >:: begin fun () ->
+    check_roundtrip
+      Subset__h3.pp Subset__h2.write Subset__h3.read
+      { Subset__h0.a = { Subset__h0.a = 13; b = false; c = "foo" };
+        b = { Subset__h0.a = 42; b = true; c = "bar" };
+        c = "foobar"
+      }
+      { Subset__h3.b = { Subset__h1.c = "bar" } }
+  end;
 ]
 
 let () = Register_test.register "subsets"

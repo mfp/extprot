@@ -317,7 +317,7 @@ let generate_container bindings =
 
        (* check that subset is not empty *)
        let () =
-         match List.filter (must_keep_field subset) l with
+         match List.filter_map (must_keep_field subset) l with
            | _ :: _ -> ()
            | [] -> exit_with_error "Message subset %s is empty." msgname
        in
@@ -326,7 +326,7 @@ let generate_container bindings =
        let () =
          let known = List.map (fun (name, _, _) -> name) l in
            List.iter
-             (fun field ->
+             (fun (field, _) ->
                 if not @@ List.mem field known then
                   exit_with_error
                     "Unknown field %s referenced in message subset %s."
@@ -341,8 +341,9 @@ let generate_container bindings =
 
        let fields =
          foldl1 "message_types `Message_subset" ctyp
-           (fun ct ((name, _, _) as field) -> <:ctyp< $ct$; $ctyp field$ >>) @@
-         List.filter (must_keep_field subset) l
+           (fun ct field -> <:ctyp< $ct$; $ctyp field$ >>) @@
+         List.map subset_field @@
+         List.filter_map (must_keep_field subset) l
        in
          message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
 
@@ -472,7 +473,7 @@ let generate_container bindings =
           | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list"
 
           | Message_subset (_, l, subset) ->
-            let l = List.filter (must_keep_field subset) l in
+            let l = List.map subset_field @@ List.filter_map (must_keep_field subset) l in
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                   ref (fun () -> $ wrap (default_record l) $)
@@ -619,7 +620,8 @@ struct
                   "wrong message subset %s: %s is not a simple message" msgname name
         in
           pp_message_record bindings msgname @@
-          List.filter (must_keep_field @@ subset_of_selection selection sign) l
+          List.map subset_field @@
+          List.filter_map (must_keep_field @@ subset_of_selection selection sign) l
 
     | `Message_app(name, args, _) ->
         let pp_func =
@@ -1205,33 +1207,84 @@ struct
           with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
       >>
 
-  and subset_case ~orig msgname ?namespace ?constr tag fields ~subset =
+  and subset_case ~locs ~orig msgname ?namespace ?constr tag fields ~subset =
     let _loc        = Loc.mk "<generated code @ subset_case>" in
-    (* let constr_name = Option.default "<default>" constr in *)
+    let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno ((name, _, llty) as field) expr =
-      if not @@ must_keep_field subset field then
-        <:expr<
-          let () =
-            if nelms >= $int:string_of_int (fieldno + 1)$ then
-              ignore ($RD.reader_func `Skip_value$ s ($RD.reader_func `Read_prefix$ s))
-            else ()
-          in
-            $expr$
-        >>
-      else
-        let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
-          <:expr<
-            let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms in
-              $expr$
-          >> in
+    let read_field fieldno ((name, _, _) as field) expr =
+      match must_keep_field subset field with
+        | None ->
+            <:expr<
+              let () =
+                if nelms >= $int:string_of_int (fieldno + 1)$ then
+                  ignore ($RD.reader_func `Skip_value$ s ($RD.reader_func `Read_prefix$ s))
+                else ()
+              in
+                $expr$
+            >>
+        | Some (`Orig field) ->
+            let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
+              <:expr<
+                let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms in
+                  $expr$
+              >>
+        | Some (`Newtype (name, _, llty)) ->
+            let rescue_match_case = match default_value llty with
+                None ->
+                  <:match_case<
+                    Extprot.Error.Extprot_error (e, loc) ->
+                      Extprot.Error.failwith_location
+                        ~message:$str:msgname$
+                        ~constructor:$str:constr_name$
+                        ~field:$str:name$
+                        e loc
+                  >>
+              | Some _expr ->
+                  <:match_case<
+                      Extprot.Error.Extprot_error
+                        ((Extprot.Error.Bad_format (Extprot.Error.Bad_wire_type _) as e), loc) ->
+                          Extprot.Error.failwith_location
+                            ~message:$str:msgname$
+                            ~constructor:$str:constr_name$
+                            ~field:$str:name$
+                            e loc >> in
+            let default = match default_value llty with
+                Some expr -> expr
+              | None ->
+                  <:expr< Extprot.Error.missing_field
+                            ~message:$str:msgname$
+                            ~constructor:$str:constr_name$
+                            ~field:$str:name$
+                            ()
+                  >> in
+
+            let read_expr =
+              if locs then
+                <:expr<
+                  try
+                    $read_field msgname constr_name name llty$
+                  with [$rescue_match_case$]
+                >>
+              else
+                read_field msgname constr_name name llty
+            in
+              <:expr<
+                 let $lid:name$ =
+                   if nelms >= $int:string_of_int (fieldno + 1)$ then
+                     $read_expr$
+                   else
+                       $default$
+                 in $expr$
+              >>
+    in
 
     let field_assigns =
       List.map
         (fun (name, _, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>) @@
-      List.filter (must_keep_field subset) fields in
+      List.map subset_field @@
+      List.filter_map (must_keep_field subset) fields in
 
     (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
     let record =
@@ -1245,14 +1298,14 @@ struct
          List.fold_right
            (fun ((name, _, _) as f) fs -> match fs with
               | _ :: _ -> f :: fs
-              | [] -> if must_keep_field subset f then f :: fs else [])
+              | [] -> if Option.is_some @@ must_keep_field subset f then f :: fs else [])
            fields [])
         record
     in
 
       (* check that the subset is not empty *)
       begin
-        match List.map (must_keep_field subset) fields with
+        match List.filter_map (must_keep_field subset) fields with
           | _ :: _ -> ()
           | [] -> exit_with_error "Message subset %s is empty." msgname
       end;
@@ -1397,7 +1450,7 @@ struct
             (field_readers, main_expr)
 
       | Message_subset (orig, fields, subset) ->
-          let match_cases = subset_case ~orig msgname 0 fields ~subset in
+          let match_cases = subset_case ~locs:(use_locs opts) ~orig msgname 0 fields ~subset in
           let main_expr = wrap_msg_reader msgname match_cases |> wrap_reader opts in
             (<:str_item< >>, main_expr)
 

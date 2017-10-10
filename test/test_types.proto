@@ -139,4 +139,15 @@ message subset__f    = subset__f_0<int, bool, bool>
 message subset__f_1  = { a : int }
 message subset__f_2  = {| subset__f with c |}
 
+message subset__g    = { a : int; b : bool }
+message subset__g1   = {| subset__g with b |}
+message subset__g2   = { m1 : subset__g; m2 : subset__g }
+message subset__g3   = {| subset__g2 with m2 : subset__g1 |}
+
+type subset__h0 'a 'b 'c = { a : 'a; b : 'b; c : 'c }
+message subset__h    = subset__h0<int, bool, string>
+message subset__h1   = {| subset__h with c |}
+message subset__h2   = subset__h0<subset__h, subset__h, string>
+message subset__h3   = {| subset__h2 with b : subset__h1 |}
+
 (* vim:set ft=ocaml: *)
