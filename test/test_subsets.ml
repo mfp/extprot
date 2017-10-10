@@ -123,6 +123,20 @@ let tests = "subsets" >::: [
       }
       { Subset__h3.b = { Subset__h1.c = "bar" } }
   end;
+
+  "type promotion after field type ascription" >:: begin fun () ->
+    check_roundtrip
+      Subset__i1.pp Subset__i.write Subset__i1.read
+      { Subset__i.a = "foo"; b = 42 }
+      { Subset__i1.b = 42. }
+  end;
+
+  "type options after field type ascription" >:: begin fun () ->
+    check_roundtrip
+      Subset__j2.pp Subset__j1.write Subset__j2.read
+      { Subset__j1.a = Opt2.A 42; b = Opt2.A "foo" }
+      { Subset__j2.b = Some "foo" }
+  end;
 ]
 
 let () = Register_test.register "subsets"

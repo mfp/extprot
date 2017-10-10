@@ -150,4 +150,12 @@ message subset__h1   = {| subset__h with c |}
 message subset__h2   = subset__h0<subset__h, subset__h, string>
 message subset__h3   = {| subset__h2 with b : subset__h1 |}
 
+message subset__i    = { a : string; b : int }
+message subset__i1   = {| subset__i with b : float |}
+
+type opt 'a = None | Some 'a options "ocaml.type_equals" = "option"
+type opt2 'a = B | A 'a
+message subset__j1   = { a : opt2<int>; b : opt2<string> }
+message subset__j2   = {| subset__j1 with b : opt<string> |}
+
 (* vim:set ft=ocaml: *)
