@@ -20,6 +20,7 @@ type error =
   | Bad_subset of string (* subset name *) * string (* orig *) * string (* field *)
   | Missing_subset_source of string (* subset *) * string (* orig *)
   | Empty_subset of string
+  | Unknown_type_option of string * string * string
 
 let concat_map f l = List.concat (List.map f l)
 
@@ -58,6 +59,89 @@ let free_type_variables decl : string list =
       Message_decl (name, m, _) -> msg_free_vars [name] m
     | Type_decl (name, tvars, e, _) ->
         type_free_vars (name :: List.map string_of_type_param tvars) e
+
+let known_type_opts =
+  [
+    "default";
+    "ocaml.pp";
+    "ocaml.type";
+    "ocaml.type_equals";
+  ]
+
+let unknown_type_opts decl : error list =
+
+  let keep_unknown_type_opts decl_name l =
+    List.filter_map
+      (fun (opt, v) ->
+         if List.mem opt known_type_opts then None
+         else Some (Unknown_type_option (decl_name, opt, v)))
+      l in
+
+  let rec base_type_expr_errs decl_name : [< base_type_expr] -> error list = function
+    | `App (_, l, opts)
+    | `Ext_app (_, _, l, opts)
+    | `Tuple (l, opts) ->
+        keep_unknown_type_opts decl_name opts @
+        List.concat @@ List.map (base_type_expr_errs decl_name) l
+
+    | `Type_param _ -> []
+
+    | `List (ty, opts)
+    | `Array (ty, opts) ->
+        keep_unknown_type_opts decl_name opts @
+        base_type_expr_errs decl_name ty
+
+    | `Bool opts | `Byte opts | `Int opts | `Long_int opts
+    | `Float opts | `String opts ->
+        keep_unknown_type_opts decl_name opts
+
+  and type_expr_errs decl_name : [< type_expr] -> error list = function
+    | `Record (r, opts) ->
+        keep_unknown_type_opts decl_name opts @
+        List.concat @@
+        List.map (fun (_, _, ty) -> base_type_expr_errs decl_name ty) r.record_fields
+
+    | `Sum (s, opts) ->
+        keep_unknown_type_opts decl_name opts @
+        List.concat @@
+        List.map
+          (function
+            | `Constant _ -> []
+            | `Non_constant (_, l) ->
+                List.concat @@ List.map (base_type_expr_errs decl_name) l)
+          s.constructors
+
+    | #base_type_expr as x ->
+        base_type_expr_errs decl_name x
+  in
+
+  let rec mexpr_errs decl_name : [< message_expr] -> _ = function
+    | `Message_alias _ | `Message_subset _ -> []
+
+    | `Message_sum l ->
+        List.concat @@
+        List.map
+          (fun (constr, mexpr) ->
+             mexpr_errs (decl_name ^ "." ^ constr)
+               (mexpr :> message_expr)) l
+
+    | `Message_app (_, l, opts) ->
+        keep_unknown_type_opts decl_name opts @
+        List.concat @@ List.map (base_type_expr_errs decl_name) l
+
+    | `Message_record l ->
+        List.concat @@ List.map (base_type_expr_errs decl_name) @@
+        List.map (fun (_, _, ty) -> ty) l
+
+  in
+    match decl with
+      | Type_decl (name, _, ty, opts) ->
+          keep_unknown_type_opts name opts @
+          type_expr_errs name ty
+
+      | Message_decl (name, mexpr, opts) ->
+          keep_unknown_type_opts name opts @
+          mexpr_errs name mexpr
 
 let check_declarations decls =
 
@@ -160,23 +244,25 @@ let check_declarations decls =
       missing_source_errors
   in
     dup_errors decls @ unbound_type_vars decls @ wrong_type_arities decls @
-    check_subsets decls
+    check_subsets decls @
+    List.concat @@ List.map unknown_type_opts decls
 
 let pp_errors pp =
   let pr fmt = Format.fprintf pp fmt in
-    List.iter
-      (function
-         | Repeated_binding s -> pr "Type binding %S is duplicated.@." s
-         | Unbound_type_variable (where, which) ->
-             pr "Type %S is unbound in %S.@." which where
-         | Wrong_arity (which, correct, where, wrong) ->
-             pr "Type %S used with wrong arity (%d instead of %d) in %S.@."
-               which wrong correct where
-         | Bad_subset (name, src, field) ->
-             pr "Field %s not present in source message %s for subset %s.@."
-               field src name
-         | Empty_subset name ->
-             pr "Empty message subset %s.@." name
-         | Missing_subset_source (name, src) ->
-             pr "Missing source message %s for subset %s.@."
-               src name)
+    List.iter @@ function
+    | Repeated_binding s -> pr "Type binding %S is duplicated.@." s
+    | Unbound_type_variable (where, which) ->
+        pr "Type %S is unbound in %S.@." which where
+    | Wrong_arity (which, correct, where, wrong) ->
+        pr "Type %S used with wrong arity (%d instead of %d) in %S.@."
+          which wrong correct where
+    | Bad_subset (name, src, field) ->
+        pr "Field %s not present in source message %s for subset %s.@."
+          field src name
+    | Empty_subset name ->
+        pr "Empty message subset %s.@." name
+    | Missing_subset_source (name, src) ->
+        pr "Missing source message %s for subset %s.@."
+          src name
+    | Unknown_type_option (decl_name, opt, _) ->
+        pr "Unknown type option in %s: %s.@." decl_name opt

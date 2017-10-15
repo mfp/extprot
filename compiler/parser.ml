@@ -80,12 +80,34 @@ EXTEND Gram
         ]
 
     | "simple"
-        [ "bool" -> `Bool []
-        | "byte" -> `Byte []
-        | "int" -> `Int []
-        | "long" -> `Long_int []
-        | "float" -> `Float []
-        | "string" -> `String [] ] ] ;
+        [ "bool"; l = annotations -> `Bool l
+        | "byte"; l =  annotations -> `Byte l
+        | "int"; l = annotations -> `Int l
+        | "long"; l = annotations -> `Long_int l
+        | "float"; l = annotations -> `Float l
+        | "string"; l = annotations -> `String l
+        ] ] ;
+
+  annotations :
+    [ [ l = LIST0 [ annotation ] -> l] ];
+
+  annotation :
+    [
+      [ "[@"; s = a_LIDENT; v = annotation_value; "]" -> (s, v) ]
+    ];
+
+  annotation_value:
+    [
+      [ "true" -> "true"
+      | "false" -> "false"
+      | `INT (_, s) -> s
+      | `INT64 (_, s) -> s
+      | `FLOAT (_, s) -> s
+      | "-"; `INT (_, s) -> "-" ^ s
+      | "-"; `INT64 (_, s) -> "-" ^ s
+      | "-"; `FLOAT (_, s) -> "-" ^ s
+      | `STRING (s, _) -> s
+      ] ];
 
   ident_with_path :
     [
