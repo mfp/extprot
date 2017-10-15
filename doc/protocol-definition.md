@@ -185,3 +185,18 @@ or as the application of a record type, e.g.:
 The custom deserializers can skip directly over unwanted fields, which can
 save a lot of work when these correspond to complex or large values.
 
+#### Type ascription
+
+The type for individual fields in a subset can be specified. This is useful
+for example when the field itself is to become a subset of the original message:
+
+       type r 'a 'b 'c = { a : 'a; b : 'b; c : 'c }
+
+       message t  = r<int, int, int>
+       message m  = r<int, t, int>
+
+       message t_sub = {| t | b; c |}
+         (*  { b : int; c : int } *)
+
+       message m_sub = {| m | a; b : t_sub; |}
+          (*  { a : int; b : { b : int; c : int } } *)
