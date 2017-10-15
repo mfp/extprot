@@ -44,7 +44,8 @@ type reader_func =
     | `Read_rel_int
     | `Read_string
     | `Read_vint
-    | `Skip_to ]
+    | `Skip_to
+    | `Skip_value ]
 
 val string_of_reader_func : reader_func -> string
 

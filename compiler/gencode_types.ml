@@ -25,11 +25,20 @@ and field = {
 }
 
 and 'a message =
-  | Message_single of string option * (string * bool * 'a) list
-    (* namespace (for poly record types) * list of  constructor * mutable * type *)
-  | Message_sum of (string option * string * (string * bool * 'a) list) list
-    (* list of  namespace * constructor * list of fields as above *)
+  | Message_single of namespace option * (field_name * field_mutable * 'a) list
+  | Message_sum of (namespace option * constructor_name * (field_name * field_mutable * 'a) list) list
   | Message_alias of string list * string (* path * name *)
+  | Message_subset of msg_name * (field_name * field_mutable * 'a) list * 'a field_subset
+
+and namespace        = string
+and constructor_name = string
+and msg_name         = string
+and field_name       = string
+and field_mutable    = bool
+
+and 'a field_subset =
+  | Include_fields of (string * 'a option) list
+  | Exclude_fields of string list
 
 and vint_meaning =
     Bool

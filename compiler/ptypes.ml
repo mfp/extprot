@@ -14,9 +14,12 @@ module SMap = Map.Make(struct type t = string let compare = String.compare end)
 let smap_find k m = try Some (SMap.find k m) with Not_found -> None
 
 type error =
-    Repeated_binding of string
+  | Repeated_binding of string
   | Unbound_type_variable of string * string
   | Wrong_arity of string * int * string * int
+  | Bad_subset of string (* subset name *) * string (* orig *) * string (* field *)
+  | Missing_subset_source of string (* subset *) * string (* orig *)
+  | Empty_subset of string
 
 let concat_map f l = List.concat (List.map f l)
 
@@ -43,12 +46,12 @@ let free_type_variables decl : string list =
           (non_constant_constructors sum) in
 
   let rec msg_free_vars known = function
-    | `App (_, targs, _) ->
+    | `Message_app (_, targs, _) ->
         concat_map (fun ty -> type_free_vars known (ty :> type_expr)) targs
-    | `Record l ->
+    | `Message_record l ->
         concat_map (fun (_, _, e) -> type_free_vars known (e :> type_expr)) l
-    | `Message_alias _ -> []
-    | `Sum l ->
+    | `Message_subset _ | `Message_alias _ -> []
+    | `Message_sum l ->
         concat_map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l in
 
   match decl with
@@ -104,17 +107,17 @@ let check_declarations decls =
                 in List.fold_left fold_base_ty acc params in
 
           let rec fold_msg acc : message_expr -> error list = function
-              `Record l ->
+            | `Message_record l ->
                 List.fold_left (fun errs (_, _, ty) -> fold_base_ty errs ty) acc l
-            | `Message_alias _ -> acc
-            | `App (s, params, _) ->
+            | `Message_subset _ | `Message_alias _ -> acc
+            | `Message_app (s, params, _) ->
                 let expected = List.length params in
                 let acc = match smap_find s arities with
                     None -> acc
                   | Some n when n = expected -> acc
                   | Some n -> Wrong_arity (s, n, name, expected) :: acc
                 in List.fold_left fold_base_ty acc params
-            | `Sum l ->
+            | `Message_sum l ->
                 List.fold_left
                   (fun errs (_, msg) -> fold_msg errs (msg :> message_expr))
                   acc l in
@@ -132,17 +135,48 @@ let check_declarations decls =
           in match decl with
               Message_decl (_, msg, _) -> loop (fold_msg errs msg) arities tl
             | Type_decl (_, _, ty, _) -> loop (fold_ty errs ty) arities tl
-    in loop [] SMap.empty l
+    in loop [] SMap.empty l in
 
-  in dup_errors decls @ unbound_type_vars decls @ wrong_type_arities decls
+  let check_subsets decls =
+    let update_bindings s = function
+      | Message_decl (name, (`Message_record _ | `Message_app _), _)
+      | Type_decl (name, _, `Record _, _) ->
+          SSet.add name s
+      | _ -> s in
+
+    let _, missing_source_errors =
+      List.fold_left
+        (fun (bindings, es) decl ->
+           let es =
+             match decl with
+               | Message_decl (name, `Message_subset (src, _, _), _) ->
+                   if SSet.mem src bindings then es
+                   else Missing_subset_source (name, src) :: es
+               | _ -> es
+           in
+             (update_bindings bindings decl, es))
+        (SSet.empty, []) decls
+    in
+      missing_source_errors
+  in
+    dup_errors decls @ unbound_type_vars decls @ wrong_type_arities decls @
+    check_subsets decls
 
 let pp_errors pp =
   let pr fmt = Format.fprintf pp fmt in
     List.iter
       (function
-           Repeated_binding s -> pr "Type binding %S is duplicated.@." s
+         | Repeated_binding s -> pr "Type binding %S is duplicated.@." s
          | Unbound_type_variable (where, which) ->
              pr "Type %S is unbound in %S.@." which where
          | Wrong_arity (which, correct, where, wrong) ->
              pr "Type %S used with wrong arity (%d instead of %d) in %S.@."
-               which wrong correct where)
+               which wrong correct where
+         | Bad_subset (name, src, field) ->
+             pr "Field %s not present in source message %s for subset %s.@."
+               field src name
+         | Empty_subset name ->
+             pr "Empty message subset %s.@." name
+         | Missing_subset_source (name, src) ->
+             pr "Missing source message %s for subset %s.@."
+               src name)

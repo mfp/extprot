@@ -91,22 +91,24 @@ let kind_of_type_expr = function
 | `Record -> "record"
 | `Sum -> "union"
 
-type base_message_expr = [ `Record of (string * bool * base_type_expr) list ]
+type base_message_expr = [ `Message_record of (string * bool * base_type_expr) list ]
 
-type message_expr_app = [ `App of string * base_type_expr list * type_options ]
+type message_expr_app = [ `Message_app of string * base_type_expr list * type_options ]
 
 type message_expr = [
     base_message_expr
   | message_expr_app
   | `Message_alias of string list * string
-  | `Sum of (string * [base_message_expr | message_expr_app]) list
+  | `Message_sum of (string * [base_message_expr | message_expr_app]) list
+  | `Message_subset of string * (string * base_type_expr option) list * [`Include | `Exclude]
 ]
 
 let kind_of_message_expr = function
-| `Record _ -> "record"
-| `App _ -> "application"
+| `Message_record _ -> "record"
+| `Message_app _ -> "application"
 | `Message_alias -> "message alias"
-| `Sum -> "union"
+| `Message_sum -> "union"
+| `Message_subset -> "subset"
 
 type declaration =
     Message_decl of string * message_expr * type_options

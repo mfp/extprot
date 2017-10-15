@@ -154,3 +154,34 @@ also be done in a roundabout way with
 
 Messages don't differ much from non-constant constructors.
 
+### Message subsets
+
+When only a subset of the fields of a message is needed, it is possible to use
+customized deserialization for the specific subset instead of full
+deserialization followed by projection. This can be expressed with the
+following syntaxes:
+
+     message foo     = { a : int; b : bool; c : string }
+     message subset1 = {| foo with b; c |}
+     message subset2 = {| foo not b |}
+
+Message subsets can be defined either by enumerating the fields of interest
+(`with` syntax) or by listing those to be excluded (`not` syntax).
+
+In this example, the deserialization functions generated for `subset1` will
+deserialize only fields `b` and `c` in `foo` messages, and `subset2` would
+contain `a` and `c`.
+
+Message subsets are only defined for simple messages defined either directly
+or as the application of a record type, e.g.:
+
+   type rec1      = { a : int; b : bool; c : int }
+   type rec2 'a   = { a : int; b : 'a; c : 'a }
+   message m1     = rec1
+   message m2     = rec2<string>
+   message m1_c   = {| rec1 with c |}
+   message m2_a_c = {| rec2 not b |}
+
+The custom deserializers can skip directly over unwanted fields, which can
+save a lot of work when these correspond to complex or large values.
+

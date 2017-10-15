@@ -8,11 +8,31 @@ include Gencode_types
 let (|>) x f = f x
 
 let failwithfmt fmt = kprintf (fun s -> if true then failwith s) fmt
+let exit_with_error fmt =
+  kprintf (fun s -> print_endline "Found 1 error:"; print_endline s; exit 1) fmt
 
 let merge_options opt1 opt2 = opt2 @ opt1
 
 let update_bindings bindings params args =
   List.fold_right2 SMap.add params args bindings
+
+let must_keep_field subset ((name, mut, _) as field) = match subset with
+  | Exclude_fields l ->
+      if not @@ List.mem name l then Some (`Orig field) else None
+  | Include_fields l ->
+      try
+        match List.assoc name l with
+          | None -> Some (`Orig field)
+          | Some ty -> Some (`Newtype (name, mut, ty))
+      with Not_found -> None
+
+let subset_field = function
+  | `Orig (name, mut, ty)
+  | `Newtype (name, mut, ty) -> (name, mut, ty)
+
+let subset_of_selection selection = function
+  | `Include -> Include_fields selection
+  | `Exclude -> Exclude_fields (List.map fst selection)
 
 let beta_reduce_base_texpr_aux f self (bindings : bindings) : base_type_expr -> 'a = function
   | #base_type_expr_simple as x -> x
@@ -180,7 +200,7 @@ let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
   | `Record (r, opts) -> beta_reduce_record reduce_to_poly_texpr_core bindings r opts
   | #base_type_expr as x -> (reduce_to_poly_texpr_core bindings x :> poly_type_expr)
 
-let map_message bindings (f : base_type_expr -> _) g msgname msg =
+let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr) =
   let map_field f (fname, mutabl, ty) = (fname, mutabl, f ty) in
   let expand_record_type f name ty =
     match beta_reduce_texpr bindings ty with
@@ -191,23 +211,53 @@ let map_message bindings (f : base_type_expr -> _) g msgname msg =
              assert false
   in
   match msg with
-  | `Sum cases  ->
+  | `Message_sum cases  ->
       Message_sum
         (List.map
            (function
-                (const, `Record fields) -> (None, const, List.map (map_field f) fields)
-              | (const, (`App (name, _args, _opts) as ty)) ->
+                (const, `Message_record fields) -> (None, const, List.map (map_field f) fields)
+              | (const, (`Message_app (name, _args, _opts))) ->
                   expand_record_type
                     (fun r _opts -> (Some name, const, List.map (map_field g) r.record_fields))
-                    name ty)
+                    name (`App (name, _args, _opts)))
            cases)
-  | `Record fields -> Message_single (None, List.map (map_field f) fields)
-  | `App (name, _args, _opts) as ty ->
+  | `Message_record fields -> Message_single (None, List.map (map_field f) fields)
+  | `Message_app (name, _args, _opts) ->
       expand_record_type
         (fun r _opts ->
             Message_single (Some r.record_name, List.map (map_field g) r.record_fields))
-        name ty
+        name (`App (name, _args, _opts))
   | `Message_alias (path, name) -> Message_alias (path, name)
+  | `Message_subset (name, l, sign) ->
+      let subset =
+        match sign with
+          | `Include -> Include_fields (List.map (fun (n, ty) -> (n, Option.map f ty)) l)
+          | `Exclude -> Exclude_fields (List.map fst l)
+      in
+        match smap_find name bindings with
+          | Some (Message_decl (_, `Message_record fields, _opts)) ->
+                Message_subset (name, List.map (map_field f) fields, subset)
+
+          | Some (Message_decl (_, `Message_app (name_, args_, opts), opts_))
+          | Some (Type_decl (name_, ([] as args_), `Record _, (opts as opts_))) -> begin
+              match
+                expand_record_type
+                  (fun r _opts ->
+                     Message_single (None, List.map (map_field g) r.record_fields))
+                  name (`App (name_, args_, merge_options opts_ opts))
+              with
+                | Message_single (_, fields) ->
+                    Message_subset (name, fields, subset)
+                | _ ->
+                    failwithfmt
+                      "wrong message subset %s: source %s is not a simple message"
+                      name name_;
+                    assert false
+            end
+          | None | Some _ ->
+              failwithfmt
+                "wrong message subset: %s is not a simple message" name;
+              assert false
 
 let iter_message bindings f g msgname msg =
   let proc_field f const (fname, mutabl, ty) = f const fname mutabl ty in
@@ -221,15 +271,58 @@ let iter_message bindings f g msgname msg =
               assert false
   in
   match msg with
-  | `Sum cases  ->
+  | `Message_sum cases  ->
         List.iter
           (function
-               (const, `Record fields) -> List.iter (proc_field f const) fields
-             | (const, (`App (name, _args, _opts) as ty)) ->
-                 iter_expanded_type const name ty)
+               (const, `Message_record fields) -> List.iter (proc_field f const) fields
+             | (const, (`Message_app (name, _args, _opts))) ->
+                 iter_expanded_type const name (`App (name, _args, _opts)))
           cases
-  | `Record fields -> List.iter (proc_field f "") fields
-  | `App(name, _args, _opts) as ty -> iter_expanded_type "" name ty
+  | `Message_record fields -> List.iter (proc_field f "") fields
+  | `Message_app(name, _args, _opts) ->
+      iter_expanded_type "" name (`App (name, _args, _opts))
+
+let beta_reduced_msg_app_fields bindings name args =
+
+  let rec resolve_texpr_type_vars bindings expr =
+    let self = resolve_texpr_type_vars bindings in
+
+      match expr with
+        | `App (name, args, opts) -> `App (name, List.map self args, opts)
+
+        | `Ext_app (path, name, args, opts) ->
+            `Ext_app (path, name, List.map self args, opts)
+
+        | `Type_param param as x -> begin
+            match smap_find (string_of_type_param param) bindings with
+              | None -> x
+              | Some ty -> ty
+          end
+
+        | `Tuple (tys, opts) -> `Tuple (List.map self tys, opts)
+        | `List (ty, opts) -> `List (self ty, opts)
+        | `Array (ty, opts) -> `Array (ty, opts)
+        | #base_type_expr_simple as x -> x
+
+  in
+
+    match smap_find name bindings with
+      | Some (Type_decl (_, params, `Record (r, _), _)) -> begin
+
+          let bs =
+            List.fold_left2
+              (fun b name ty -> SMap.add (string_of_type_param name) ty b)
+              SMap.empty params args in
+
+          let record_fields =
+            List.map
+              (fun (name, mut, ty) ->
+                 (name, mut, resolve_texpr_type_vars bs ty))
+              r.record_fields
+          in
+            Some (bindings, record_fields)
+        end
+      | _ -> None
 
 let low_level_msg_def bindings msgname (msg : message_expr) =
 
@@ -311,7 +404,7 @@ struct
       names Gen.typedecl_generators @ names Gen.msgdecl_generators |>
         List.unique |> List.sort
 
-  let generate_code ?width ?(generators : string list option) bindings entries =
+  let generate_code ?width ?(generators : string list option) ?(global_opts = []) bindings entries =
     let use_generator name = match generators with
         None -> true
       | Some l -> List.mem name l in
@@ -327,14 +420,16 @@ struct
              | Type_decl (name, params, expr, opts) ->
                  List.fold_left
                    (fun cont (gname, f) ->
-                      if use_generator gname then f bindings name params expr opts cont
+                      if use_generator gname then
+                        f bindings name params expr (opts @ global_opts) cont
                       else cont)
                    cont
                    Gen.typedecl_generators
              | Message_decl (name, expr, opts) ->
                  List.fold_left
                    (fun cont (gname, f) ->
-                      if use_generator gname then f bindings name expr opts cont
+                      if use_generator gname then
+                        f bindings name expr (opts @ global_opts) cont
                       else cont)
                    cont
                    Gen.msgdecl_generators

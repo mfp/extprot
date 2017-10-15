@@ -245,26 +245,26 @@ let generate_container bindings =
       <:str_item< $internal$; $ext$ >> in
 
   let rec message_types ?(opts = []) msgname = function
-      `Record l ->
+    | `Message_record l ->
         let ctyp (name, mutabl, texpr) =
-          let ty = ctyp_of_texpr texpr in match mutabl with
+          let ty = ctyp_of_texpr bindings texpr in match mutabl with
               true -> <:ctyp< $lid:name$ : mutable $ty$ >>
             | false -> <:ctyp< $lid:name$ : $ty$ >> in
         let fields =
-          foldl1 "message_types `Record" ctyp
+          foldl1 "message_types `Message_record" ctyp
             (fun ct field -> <:ctyp< $ct$; $ctyp field$ >>) l
         (* no quotations for type, wtf? *)
         (* in <:str_item< type $msgname$ = { $fields$ } >> *)
         in
           message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
 
-   | `App (name, args, opts) ->
+   | `Message_app (name, args, opts) ->
        let tyname = String.capitalize name ^ "." ^ String.uncapitalize name in
        let applied =
          ident_of_ctyp @@
          List.fold_left
            (fun ty tyvar -> <:ctyp< $ty$ $tyvar$ >>)
-           (ctyp_of_path tyname) (List.map ctyp_of_texpr args)
+           (ctyp_of_path tyname) (List.map (ctyp_of_texpr bindings) args)
        in message_typedefs ~opts msgname <:ctyp< $applied$ >>
 
    | `Message_alias (path, name) ->
@@ -272,7 +272,7 @@ let generate_container bindings =
        let uid       = String.concat "." full_path in
         message_typedefs ~opts msgname (ctyp_of_path uid)
 
-   | `Sum l ->
+   | `Message_sum l ->
        let tydef_of_msg_branch (const, mexpr) =
          <:str_item<
            module $String.capitalize const$ = struct
@@ -284,7 +284,7 @@ let generate_container bindings =
 
        let variant (const, _) =
          <:ctyp< $uid:const$ of ($uid:const$.$lid:String.lowercase const$) >> in
-       let consts = foldl1 "message_types `Sum" variant
+       let consts = foldl1 "message_types `Message_sum" variant
                       (fun vars c -> <:ctyp< $vars$ | $variant c$ >>) l
 
        in
@@ -293,50 +293,104 @@ let generate_container bindings =
            $message_typedefs ~opts msgname <:ctyp< [$consts$] >>$
          >>
 
+   | `Message_subset (name, selection, sign) ->
+
+       let bindings, l =
+         match smap_find name bindings with
+           | Some (Message_decl (_, `Message_record l, _)) ->
+               (bindings, l)
+
+           | Some (Message_decl (_, `Message_app (name, args, _), _)) -> begin
+               match beta_reduced_msg_app_fields bindings name args with
+                 | None ->
+                     exit_with_error
+                       "wrong message subset %s: %s is not a simple message" msgname name
+
+                 | Some (bindings, l) -> (bindings, l)
+             end
+
+           | None | Some _ ->
+               exit_with_error
+                 "wrong message subset: %s is not a simple message" name in
+
+       let subset = subset_of_selection selection sign in
+
+       (* check that subset is not empty *)
+       let () =
+         match List.filter_map (must_keep_field subset) l with
+           | _ :: _ -> ()
+           | [] -> exit_with_error "Message subset %s is empty." msgname
+       in
+
+       (* check that all fields referenced in subset exist *)
+       let () =
+         let known = List.map (fun (name, _, _) -> name) l in
+           List.iter
+             (fun (field, _) ->
+                if not @@ List.mem field known then
+                  exit_with_error
+                    "Unknown field %s referenced in message subset %s."
+                    field msgname)
+             selection
+       in
+
+       let ctyp (name, mutabl, texpr) =
+         let ty = ctyp_of_texpr bindings texpr in match mutabl with
+             true -> <:ctyp< $lid:name$ : mutable $ty$ >>
+           | false -> <:ctyp< $lid:name$ : $ty$ >> in
+
+       let fields =
+         foldl1 "message_types `Message_subset" ctyp
+           (fun ct field -> <:ctyp< $ct$; $ctyp field$ >>) @@
+         List.map subset_field @@
+         List.filter_map (must_keep_field subset) l
+       in
+         message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
+
   and modules_to_include_of_texpr = function
      | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
      | #type_expr -> None
 
-  and ctyp_of_texpr expr =
-    reduce_to_poly_texpr_core bindings expr |> ctyp_of_poly_texpr_core
+  and ctyp_of_texpr bindings expr =
+    reduce_to_poly_texpr_core bindings expr |> ctyp_of_poly_texpr_core bindings
 
-  and ctyp_of_poly_texpr_core = function
+  and ctyp_of_poly_texpr_core bindings = function
       `Bool opts -> get_type <:ctyp< bool >> opts
     | `Byte opts -> get_type <:ctyp< int >> opts
     | `Int opts -> get_type <:ctyp< int >> opts
     | `Long_int opts -> get_type <:ctyp< Int64.t >> opts
     | `Float opts -> get_type <:ctyp< float >> opts
     | `String opts -> get_type <:ctyp< string >> opts
-    | `List (ty, opts) -> get_type <:ctyp< list ($ctyp_of_poly_texpr_core ty$) >> opts
-    | `Array (ty, opts) -> get_type <:ctyp< array ($ctyp_of_poly_texpr_core ty$) >> opts
+    | `List (ty, opts) -> get_type <:ctyp< list ($ctyp_of_poly_texpr_core bindings ty$) >> opts
+    | `Array (ty, opts) -> get_type <:ctyp< array ($ctyp_of_poly_texpr_core bindings ty$) >> opts
     | `Tuple (l, opts) -> begin match l with
           [] -> failwith "ctyp_of_poly_texpr_core: empty tuple"
         | [_] -> failwith "ctyp_of_poly_texpr_core: 1-element tuple"
         | [a; b] ->
             get_type
-              <:ctyp< ( $ ctyp_of_poly_texpr_core a$ * $ctyp_of_poly_texpr_core b$ ) >>
+              <:ctyp< ( $ ctyp_of_poly_texpr_core bindings a$ * $ctyp_of_poly_texpr_core bindings b$ ) >>
               opts
         | hd::tl ->
             let tl' =
-              foldr1 "ctyp_of_poly_texpr_core `Tuple" ctyp_of_poly_texpr_core
-                (fun ptexpr tup -> <:ctyp< $ ctyp_of_poly_texpr_core ptexpr $ * $tup$ >>)
+              foldr1 "ctyp_of_poly_texpr_core `Tuple" (ctyp_of_poly_texpr_core bindings)
+                (fun ptexpr tup -> <:ctyp< $ ctyp_of_poly_texpr_core bindings ptexpr $ * $tup$ >>)
                 tl
             in get_type
-                 <:ctyp< ( $ ctyp_of_poly_texpr_core hd $ * $tl'$ ) >>
+                 <:ctyp< ( $ ctyp_of_poly_texpr_core bindings hd $ * $tl'$ ) >>
                  opts
       end
     | `Ext_type (path, name, args, opts) ->
         let full_path = path @ [String.capitalize name] in
         let id = ident_with_path _loc full_path name in
         let t = List.fold_left (* apply *)
-                  (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core ptexpr$ >>)
+                  (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core bindings ptexpr$ >>)
                   <:ctyp< $id:id$ >>
                   args
         in get_type
              (try <:ctyp< $id:Ast.ident_of_ctyp t$ >> with Invalid_argument _ -> t)
              opts
     | `Type (name, params, args, opts) ->
-        let args = List.map ctyp_of_poly_texpr_core args in
+        let args = List.map (ctyp_of_poly_texpr_core bindings) args in
         let t = List.fold_left (* apply *)
                   (fun ty ty_arg -> <:ctyp< $ty$ $ty_arg$ >>)
                   <:ctyp< $uid:String.capitalize name$.$lid:name$ >>
@@ -389,12 +443,15 @@ let generate_container bindings =
             | Some { fromf; _ } ->
                 <:expr< $fromf$ $x$ >> in
 
-        let default_func = match Gencode.low_level_msg_def bindings msgname mexpr with
-            Message_single (namespace, fields) ->
+        let default_func =
+          match Gencode.low_level_msg_def bindings msgname mexpr with
+
+          | Message_single (namespace, fields) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                   ref (fun () -> $ wrap (default_record ?namespace fields) $)
               >>
+
           | Message_alias (path, name) ->
               let full_path = path @ [String.capitalize name] in
               let v = <:expr< $id:ident_with_path _loc full_path (name ^ "_default") $ >> in
@@ -402,6 +459,7 @@ let generate_container bindings =
                 <:str_item<
                   value $lid:msgname ^ "_default"$ = ref (fun () -> $wrap v$)
                 >>
+
           | Message_sum ((namespace, constr, fields) :: _) ->
               let namespace = Option.default constr namespace in
               let v =
@@ -412,7 +470,15 @@ let generate_container bindings =
                   value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
                     ref (fun () -> $wrap v$)
                 >>
-          | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list" in
+          | Message_sum [] -> failwith "bug in generate_container: empty Message_sum list"
+
+          | Message_subset (_, l, subset) ->
+            let l = List.map subset_field @@ List.filter_map (must_keep_field subset) l in
+              <:str_item<
+                value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
+                  ref (fun () -> $ wrap (default_record l) $)
+              >> in
+
         let container =
           empty_container msgname ~default_func (message_types ~opts msgname mexpr)
         in Some container
@@ -421,7 +487,7 @@ let generate_container bindings =
         let ty = match poly_beta_reduce_texpr bindings texpr with
           | `Record (r, _) -> begin
               let ctyp (name, mutabl, texpr) =
-                let ty = ctyp_of_poly_texpr_core texpr in match mutabl with
+                let ty = ctyp_of_poly_texpr_core bindings texpr in match mutabl with
                     true -> <:ctyp< $lid:name$ : mutable $ty$ >>
                   | false -> <:ctyp< $lid:name$ : $ty$ >> in
               let fields =
@@ -432,7 +498,7 @@ let generate_container bindings =
           | `Sum (s, _) -> begin
               let ty_of_const_texprs (const, ptexprs) =
                 (* eprintf "type %S, const %S, %d ptexprs\n" name const (List.length ptexprs); *)
-                let tys = List.map ctyp_of_poly_texpr_core ptexprs in
+                let tys = List.map (ctyp_of_poly_texpr_core bindings) ptexprs in
                   <:ctyp< $uid:const$ of $Ast.tyAnd_of_list tys$>>
 
               in let sum_ty =
@@ -464,7 +530,7 @@ let generate_container bindings =
               in <:ctyp< [ $sum_ty$ ] >>
             end
           | #poly_type_expr_core as ptexpr ->
-              get_type (ctyp_of_poly_texpr_core ptexpr) opts in
+              get_type (ctyp_of_poly_texpr_core bindings ptexpr) opts in
         let params =
           List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params in
         let type_rhs = maybe_type_equals opts ~params ty in
@@ -532,25 +598,32 @@ struct
   let pp_name path name = <:expr< $id:ident_with_path _loc path ("pp_" ^ name)$ >>
 
   let rec pp_message ?namespace bindings msgname = function
-      `Record l ->
-        let pp_field i (name, _, tyexpr) =
-          let selector = match namespace with
-              None -> <:expr< (fun t -> t.$lid:name$) >>
-            | Some ns -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >> in
-          let prefix = match namespace with
-              None -> String.capitalize msgname
-            | Some ns -> sprintf "%s.%s"
-                           (String.capitalize msgname) (String.capitalize ns) in
-          let label =
-            if i = 0 then prefix ^ "." ^ name
-            else name
-          in <:expr<
-               ( $str:label$,
-                 $pp_func "pp_field"$ $selector$ $pp_texpr bindings tyexpr$ )
-             >> in
-        let pp_fields = List.mapi pp_field l in
-          <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
-    | `App(name, args, _) ->
+    | `Message_record l -> pp_message_record ?namespace bindings msgname l
+
+    | (`Message_subset (name, selection, sign) : message_expr) as _mexpr ->
+        let bindings, l =
+          match smap_find name bindings with
+            | Some (Message_decl (_, `Message_record l, _)) ->
+                  (bindings, l)
+
+            | Some (Message_decl (_, `Message_app (name, args, _), _)) -> begin
+                match beta_reduced_msg_app_fields bindings name args with
+                  | None ->
+                      exit_with_error
+                        "wrong message subset %s: %s is not a simple message" msgname name
+
+                  | Some (bindings, l) -> (bindings, l)
+              end
+
+            | None | Some _ ->
+                exit_with_error
+                  "wrong message subset %s: %s is not a simple message" msgname name
+        in
+          pp_message_record bindings msgname @@
+          List.map subset_field @@
+          List.filter_map (must_keep_field @@ subset_of_selection selection sign) l
+
+    | `Message_app(name, args, _) ->
         let pp_func =
           List.fold_left
             (fun e ptexpr -> <:expr< $e$ $pp_texpr bindings ptexpr$ >>)
@@ -560,40 +633,59 @@ struct
     | `Message_alias (path, name) ->
         let full_path = path @ [String.capitalize name] in
         <:expr< $pp_name full_path name$ pp >>
-    | `Sum l ->
+    | `Message_sum l ->
         let match_case (const, mexpr) =
           <:match_case<
             $uid:const$ t ->
               $pp_message ~namespace:const bindings msgname (mexpr :> message_expr)$ t>>
         in <:expr< fun [ $Ast.mcOr_of_list (List.map match_case l)$ ] >>
 
-  and pp_texpr bindings texpr =
-    reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core
+  and pp_message_record ?namespace bindings msgname l =
+    let pp_field i (name, _, tyexpr) =
+      let selector = match namespace with
+          None -> <:expr< (fun t -> t.$lid:name$) >>
+        | Some ns -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >> in
+      let prefix = match namespace with
+          None -> String.capitalize msgname
+        | Some ns -> sprintf "%s.%s"
+                       (String.capitalize msgname) (String.capitalize ns) in
+      let label =
+        if i = 0 then prefix ^ "." ^ name
+        else name
+      in <:expr<
+               ( $str:label$,
+                 $pp_func "pp_field"$ $selector$ $pp_texpr bindings tyexpr$ )
+             >> in
+    let pp_fields = List.mapi pp_field l in
+      <:expr< $pp_func "pp_struct"$ $expr_of_list pp_fields$ pp >>
 
-  and pp_poly_type path name args =
+  and pp_texpr bindings texpr =
+    reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core bindings
+
+  and pp_poly_type bindings path name args =
     let path = path @ [String.capitalize name] in
     List.fold_left
-      (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
+      (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core bindings ptexpr$ >>)
       (pp_name path name)
       args
 
-  and pp_poly_texpr_core = function
+  and pp_poly_texpr_core bindings = function
       `Bool _ -> pp_func "pp_bool"
     | `Byte _ -> pp_func "pp_int"
     | `Int _ -> pp_func "pp_int"
     | `Long_int _ -> pp_func "pp_int64"
     | `Float _ -> pp_func "pp_float"
     | `String _ -> pp_func "pp_string"
-    | `List (ty, _) -> <:expr< $pp_func "pp_list"$ $pp_poly_texpr_core ty$ >>
-    | `Array (ty, _) -> <:expr< $pp_func "pp_array"$ $pp_poly_texpr_core ty$ >>
-    | `Tuple ([ty], _) -> pp_poly_texpr_core ty
+    | `List (ty, _) -> <:expr< $pp_func "pp_list"$ $pp_poly_texpr_core bindings ty$ >>
+    | `Array (ty, _) -> <:expr< $pp_func "pp_array"$ $pp_poly_texpr_core bindings ty$ >>
+    | `Tuple ([ty], _) -> pp_poly_texpr_core bindings ty
     | `Tuple (l, _) ->
         List.fold_left
-          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core ptexpr$ >>)
+          (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core bindings ptexpr$ >>)
           (pp_func ("pp_tuple" ^ string_of_int (List.length l)))
           l
-    | `Type (name, _params, args, _) -> pp_poly_type [] name args
-    | `Ext_type (path, name, args, _) -> pp_poly_type path name args
+    | `Type (name, _params, args, _) -> pp_poly_type bindings [] name args
+    | `Ext_type (path, name, args, _) -> pp_poly_type bindings path name args
     | `Type_arg n -> <:expr< $lid:"pp_" ^ n$ >>
 
   let add_msgdecl_pretty_printer bindings msgname mexpr opts c =
@@ -622,7 +714,7 @@ struct
                 $uid:const$ $paCom_of_lidlist _loc params$ ->
                   $pp_func "fprintf"$ pp
                   $str:String.capitalize tyname ^ "." ^ const ^ " %a"$
-                  $pp_poly_texpr_core (`Tuple (ptexprs, opts))$ ($exTup_of_lidlist _loc params$)
+                  $pp_poly_texpr_core bindings (`Tuple (ptexprs, opts))$ ($exTup_of_lidlist _loc params$)
               >> in
           let constr_case constr =
             <:match_case<
@@ -645,13 +737,13 @@ struct
             in
               <:expr<
                 ( $str:field_name$,
-                  $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core tyexpr$ )
+                  $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core bindings tyexpr$ )
               >> in
           let pp_fields = List.mapi pp_field r.record_fields in
           <:expr< fun ppf -> fun x -> $pp_func "pp_struct"$ $expr_of_list pp_fields$ ppf ($wrap_value opts <:expr<x>>$) >>
         end
       | #poly_type_expr_core as ptexpr ->
-          let ppfunc_expr = pp_poly_texpr_core ptexpr in
+          let ppfunc_expr = pp_poly_texpr_core bindings ptexpr in
           <:expr< fun ppf -> fun x -> $ppfunc_expr$ ppf ($wrap_value opts <:expr<x>> $) >>
     in
       { c with c_pretty_printer =
@@ -672,12 +764,19 @@ let partition_constructors l =
 
 module Make_reader
          (RD : sig
+            val name        : string
             val reader_func : Reader.reader_func -> Ast.expr
             val raw_rd_func : low_level -> (Ast.patt * Ast.expr) option
             val read_msg_func : string -> string
           end) =
 struct
   let _loc = Loc.mk "<generated code at Make_reader>"
+
+  let use_locs opts =
+    match List.assoc "locs" opts with
+      | exception Not_found -> true
+      | "false" -> false
+      | _ -> true
 
   let wrap_reader opts expr = match get_type_info opts with
       Some { fromf; _ } ->
@@ -690,7 +789,7 @@ struct
     | None -> expr
 
   let rec read_field msgname constr_name name llty =
-    let _loc = loc "<generated code @ field_match_cases>" in
+    let _loc = loc "<generated code @ read_field>" in
 
     let rec read_elms f lltys_and_defs =
       (* TODO: handle missing elms *)
@@ -869,13 +968,16 @@ struct
                 | $other_cases$
               ]
             >>
-      | Record (name, fields, _) ->
+      | Record (name, fields, opts) ->
           let fields' =
             List.map (fun f -> (f.field_name, true, f.field_type)) fields in
           let promoted_match_cases =
             make_promoted_match_cases msgname [ Some name, None, fields' ] in
-          let match_cases = record_case ~namespace:name msgname 0 fields' in
-            wrap_msg_reader name promoted_match_cases match_cases
+          let match_cases =
+            record_case_inlined
+              ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
+          in
+            wrap_msg_reader name ~promoted_match_cases match_cases
 
       | Message (path, name, _) ->
           let full_path = path @ [String.capitalize name] in
@@ -914,11 +1016,24 @@ struct
     in
     read llty
 
-  and record_case msgname ?namespace ?constr tag fields =
-    let _loc = Loc.mk "<generated code @ record_case>" in
+  and field_reader_funcname ~msgname ~constr ~name =
+    let mangle s =
+      let b = Buffer.create 13 in
+        String.iter
+          (function
+            | '_' -> Buffer.add_string b "__"
+            | c -> Buffer.add_char b c)
+          s;
+        Buffer.contents b
+    in
+      sprintf "__%s_read_x%s_x%s_x%s"
+        RD.name (mangle msgname) (Option.map_default mangle "" constr) (mangle name)
+
+  and record_case_field_readers msgname ~locs ?constr _ fields =
+    let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
     let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno (name, _, llty) expr =
+    let read_field fieldno (name, _, llty) =
       let rescue_match_case = match default_value llty with
           None ->
             <:match_case<
@@ -946,14 +1061,82 @@ struct
                       ~constructor:$str:constr_name$
                       ~field:$str:name$
                       ()
+            >> in
+
+      let funcname  = field_reader_funcname ~msgname ~constr ~name in
+
+      let read_expr =
+        if locs then
+          <:expr<
+              try
+                $read_field msgname constr_name name llty$
+              with [$rescue_match_case$]
+          >>
+        else
+          read_field msgname constr_name name llty
+      in
+        <:str_item<
+          value $lid:funcname$ s nelms =
+             if nelms >= $int:string_of_int (fieldno + 1)$ then
+               $read_expr$
+             else $default$
+        >>
+    in
+      List.fold_right
+        (fun (i, fieldinfo) functions ->
+           <:str_item< $read_field i fieldinfo$; $functions$ >>)
+        (List.mapi (fun i x -> (i, x)) fields)
+        <:str_item< >>
+
+  and record_case_inlined msgname ~locs ?namespace ?constr tag fields =
+    let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
+    let constr_name = Option.default "<default>" constr in
+
+    let read_field fieldno (name, _, llty) expr =
+
+      let rescue_match_case = match default_value llty with
+          None ->
+            <:match_case<
+              Extprot.Error.Extprot_error (e, loc) ->
+                Extprot.Error.failwith_location
+                  ~message:$str:msgname$
+                  ~constructor:$str:constr_name$
+                  ~field:$str:name$
+                  e loc
             >>
+        | Some _expr ->
+            <:match_case<
+                Extprot.Error.Extprot_error
+                  ((Extprot.Error.Bad_format (Extprot.Error.Bad_wire_type _) as e), loc) ->
+                    Extprot.Error.failwith_location
+                      ~message:$str:msgname$
+                      ~constructor:$str:constr_name$
+                      ~field:$str:name$
+                      e loc >> in
+      let default = match default_value llty with
+          Some expr -> expr
+        | None ->
+            <:expr< Extprot.Error.missing_field
+                      ~message:$str:msgname$
+                      ~constructor:$str:constr_name$
+                      ~field:$str:name$
+                      ()
+            >> in
+
+      let read_expr =
+        if locs then
+          <:expr<
+            try
+              $read_field msgname constr_name name llty$
+            with [$rescue_match_case$]
+          >>
+        else
+          read_field msgname constr_name name llty
       in
         <:expr<
            let $lid:name$ =
              if nelms >= $int:string_of_int (fieldno + 1)$ then
-               try
-                 $read_field msgname constr_name name llty$
-               with [$rescue_match_case$]
+               $read_expr$
              else
                  $default$
            in $expr$
@@ -986,8 +1169,178 @@ struct
           with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
       >>
 
-  and wrap_msg_reader msgname promoted_match_cases match_cases =
-    let _loc = Loc.mk "<generated code @ wrap_msg_reader>" in
+  and record_case msgname ~locs ?namespace ?constr tag fields =
+    let _loc = Loc.mk "<generated code @ record_case>" in
+
+    let read_field _ (name, _, _) expr =
+      let funcname = field_reader_funcname ~msgname ~constr ~name in
+        <:expr<
+          let $lid:name$ = $lid:funcname$ s nelms in
+            $expr$
+        >>
+    in
+
+    let field_assigns =
+      List.map
+        (fun (name, _, _) -> match namespace with
+             None -> <:rec_binding< $lid:name$ = $lid:name$ >>
+           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
+        fields in
+    (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
+    let record =
+      let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
+          None -> r
+        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+    let e =
+      List.fold_right
+        (fun (i, fieldinfo) e -> read_field i fieldinfo e)
+        (List.mapi (fun i x -> (i, x)) fields)
+        record
+    in
+      <:match_case<
+        $int:string_of_int tag$ ->
+          try
+            let v = $e$ in begin
+              $RD.reader_func `Skip_to$ s eom;
+              v
+            end
+          with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
+      >>
+
+  and subset_case ~locs ~orig msgname ?namespace ?constr tag fields ~subset =
+    let _loc        = Loc.mk "<generated code @ subset_case>" in
+    let constr_name = Option.default "<default>" constr in
+
+    let read_field fieldno ((name, _, _) as field) expr =
+      match must_keep_field subset field with
+        | None ->
+            <:expr<
+              let () =
+                if nelms >= $int:string_of_int (fieldno + 1)$ then
+                  ignore ($RD.reader_func `Skip_value$ s ($RD.reader_func `Read_prefix$ s))
+                else ()
+              in
+                $expr$
+            >>
+        | Some (`Orig field) ->
+            let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
+              <:expr<
+                let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms in
+                  $expr$
+              >>
+        | Some (`Newtype (name, _, llty)) ->
+            let rescue_match_case = match default_value llty with
+                None ->
+                  <:match_case<
+                    Extprot.Error.Extprot_error (e, loc) ->
+                      Extprot.Error.failwith_location
+                        ~message:$str:msgname$
+                        ~constructor:$str:constr_name$
+                        ~field:$str:name$
+                        e loc
+                  >>
+              | Some _expr ->
+                  <:match_case<
+                      Extprot.Error.Extprot_error
+                        ((Extprot.Error.Bad_format (Extprot.Error.Bad_wire_type _) as e), loc) ->
+                          Extprot.Error.failwith_location
+                            ~message:$str:msgname$
+                            ~constructor:$str:constr_name$
+                            ~field:$str:name$
+                            e loc >> in
+            let default = match default_value llty with
+                Some expr -> expr
+              | None ->
+                  <:expr< Extprot.Error.missing_field
+                            ~message:$str:msgname$
+                            ~constructor:$str:constr_name$
+                            ~field:$str:name$
+                            ()
+                  >> in
+
+            let read_expr =
+              if locs then
+                <:expr<
+                  try
+                    $read_field msgname constr_name name llty$
+                  with [$rescue_match_case$]
+                >>
+              else
+                read_field msgname constr_name name llty
+            in
+              <:expr<
+                 let $lid:name$ =
+                   if nelms >= $int:string_of_int (fieldno + 1)$ then
+                     $read_expr$
+                   else
+                       $default$
+                 in $expr$
+              >>
+    in
+
+    let field_assigns =
+      List.map
+        (fun (name, _, _) -> match namespace with
+             None -> <:rec_binding< $lid:name$ = $lid:name$ >>
+           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>) @@
+      List.map subset_field @@
+      List.filter_map (must_keep_field subset) fields in
+
+    (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
+    let record =
+      let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
+          None -> r
+        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+    let e =
+      List.fold_right
+        (fun (i, fieldinfo) e -> read_field i fieldinfo e)
+        (List.mapi (fun i x -> (i, x)) @@
+         List.fold_right
+           (fun ((name, _, _) as f) fs -> match fs with
+              | _ :: _ -> f :: fs
+              | [] -> if Option.is_some @@ must_keep_field subset f then f :: fs else [])
+           fields [])
+        record
+    in
+
+      (* check that the subset is not empty *)
+      begin
+        match List.filter_map (must_keep_field subset) fields with
+          | _ :: _ -> ()
+          | [] -> exit_with_error "Message subset %s is empty." msgname
+      end;
+
+      <:match_case<
+        $int:string_of_int tag$ ->
+          try
+            let v = $e$ in begin
+              $RD.reader_func `Skip_to$ s eom;
+              v
+            end
+          with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
+      >>
+
+  and wrap_msg_reader msgname ?promoted_match_cases match_cases =
+    let _loc       = Loc.mk "<generated code @ wrap_msg_reader>" in
+    let promo_expr =
+      match promoted_match_cases with
+        | Some promoted_match_cases ->
+            <:expr<
+              let raise_bad_wire_type () =
+                 Extprot.Error.bad_wire_type
+                   ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
+              in
+                match Extprot.Codec.ll_tag t with [
+                  $promoted_match_cases$
+                | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
+                ]
+            >>
+        | None ->
+            <:expr<
+              Extprot.Error.bad_wire_type
+                ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
+            >>
+    in
       <:expr<
         let t = $RD.reader_func `Read_prefix$ s in begin
           if Extprot.Codec.ll_type t = Extprot.Codec.Tuple then
@@ -1000,15 +1353,7 @@ struct
                 $match_cases$
                 | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
               ]
-          else
-           let raise_bad_wire_type () =
-              Extprot.Error.bad_wire_type
-                ~message:$str:msgname$ ~ll_type:(Extprot.Codec.ll_type t) ()
-           in
-             match Extprot.Codec.ll_tag t with [
-               $promoted_match_cases$
-             | tag -> Extprot.Error.unknown_tag ~message:$str:msgname$ tag
-             ]
+          else $promo_expr$
         end
       >>
 
@@ -1080,19 +1425,45 @@ struct
       field_infos |>
     Ast.mcOr_of_list
 
-  and read_message msgname opts = function
-        Message_single (namespace, fields) ->
+  and read_message ?(inline = false) msgname opts = function
+      | Message_single (namespace, fields) ->
+
           let promoted_match_cases =
             make_promoted_match_cases msgname [ namespace, None, fields ] in
-          let match_cases = record_case ?namespace msgname 0 fields in
-            wrap_msg_reader msgname promoted_match_cases match_cases |>
+
+          let match_cases, field_readers =
+            if inline then
+              let match_cases =
+                record_case_inlined ~locs:(use_locs opts) ?namespace msgname 0 fields
+              in
+                (match_cases, <:str_item< >>)
+            else
+              let locs          = use_locs opts in
+              let match_cases   = record_case ~locs:(use_locs opts) ?namespace msgname 0 fields in
+              let field_readers = record_case_field_readers ~locs msgname 0 fields in
+                (match_cases, field_readers) in
+
+          let main_expr =
+            wrap_msg_reader msgname ~promoted_match_cases match_cases |>
             wrap_reader opts
+          in
+            (field_readers, main_expr)
+
+      | Message_subset (orig, fields, subset) ->
+          let match_cases = subset_case ~locs:(use_locs opts) ~orig msgname 0 fields ~subset in
+          let main_expr = wrap_msg_reader msgname match_cases |> wrap_reader opts in
+            (<:str_item< >>, main_expr)
+
       | Message_alias (path, name) ->
           let full_path = path @ [String.capitalize name] in
           let _loc = Loc.mk "<generated code @ read_message>" in
           let reader_func = RD.read_msg_func name in
+          let main_expr =
             wrap_reader opts
             <:expr< $id:ident_with_path _loc full_path reader_func$ s >>
+          in
+            (<:str_item< >>, main_expr)
+
       | Message_sum l ->
           let promoted_match_cases =
             make_promoted_match_cases msgname
@@ -1100,15 +1471,43 @@ struct
                  (fun (ns, constr, fields) ->
                     (Some (Option.default constr ns), Some constr, fields))
                  l) in
+
+          let locs    = use_locs opts in
+          let inlined = true in
+
+          let field_readers =
+            if inlined then
+              <:str_item< >>
+            else
+              List.fold_left
+                (fun funcs func ->
+                   <:str_item< $func$; $funcs$ >>)
+                <:str_item< >> @@
+              List.rev @@
+              List.mapi
+                (fun tag (_namespace, constr, fields) ->
+                   record_case_field_readers ~locs ~constr msgname tag fields)
+                l in
+
           let match_cases =
-            List.mapi
-              (fun tag (namespace, constr, fields) ->
-                 record_case
-                   ~namespace:(Option.default constr namespace)
-                   msgname ~constr tag fields) l
-            |> Ast.mcOr_of_list
-          in wrap_msg_reader msgname promoted_match_cases match_cases |>
-             wrap_reader opts
+            let _record_case =
+              if inlined then
+                record_case_inlined
+              else
+                record_case
+            in
+              List.mapi
+                (fun tag (namespace, constr, fields) ->
+                   _record_case
+                     ~locs ~namespace:(Option.default constr namespace)
+                     msgname ~constr tag fields) l
+              |> Ast.mcOr_of_list in
+
+          let main_expr =
+            wrap_msg_reader msgname ~promoted_match_cases match_cases |>
+            wrap_reader opts
+          in
+            (field_readers, main_expr)
 end
 
 let raw_rd_func reader_func =
@@ -1140,11 +1539,23 @@ let raw_rd_func reader_func =
     | None -> None
     | Some (pat, reader) -> Some (pat, wrap t reader)
 
+
+let messages_with_subsets bindings =
+  SMap.fold
+    (fun _ decl l -> match decl with
+       | Message_decl (_, `Message_subset (name, _, _), _) -> name :: l
+       | Message_decl
+           (_, (`Message_record _ | `Message_alias _ |
+                `Message_sum _ | `Message_app _), _)
+       | Type_decl _ -> l)
+    bindings []
+
 let add_message_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_normal_reader =
     Make_reader(struct
+                  let name = "STR"
                   let reader_func t =
                     <:expr< Extprot.Reader.String_reader.
                               $lid:Reader.string_of_reader_func t$ >>
@@ -1153,10 +1564,19 @@ let add_message_reader bindings msgname mexpr opts c =
 
                   let read_msg_func = ((^) "read_")
                 end) in
-  let read_expr = Mk_normal_reader.read_message msgname opts llrec in
+
+  let with_subsets = messages_with_subsets bindings in
+
+  let field_readers, read_expr =
+    Mk_normal_reader.read_message
+      ~inline:(not @@ List.mem msgname with_subsets)
+      msgname opts llrec
+  in
     {
       c with c_reader =
          Some <:str_item<
+                $field_readers$;
+
                 value $lid:"read_" ^ msgname$ s = $read_expr$;
 
                 value $lid:"io_read_" ^ msgname$ io =
@@ -1176,6 +1596,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_io_reader =
     Make_reader(struct
+                  let name = "IO"
                   let reader_func t =
                     <:expr< Extprot.Reader.IO_reader.
                               $lid:Reader.string_of_reader_func t$ >>
@@ -1184,10 +1605,18 @@ let add_message_io_reader bindings msgname mexpr opts c =
 
                   let read_msg_func = ((^) "io_read_")
                 end) in
-  let ioread_expr = Mk_io_reader.read_message msgname opts llrec in
+
+  let with_subsets = messages_with_subsets bindings in
+
+  let field_readers, ioread_expr =
+    Mk_io_reader.read_message
+      ~inline:(not @@ List.mem msgname with_subsets)
+      msgname opts llrec
+  in
     {
       c with c_io_reader =
         Some <:str_item<
+                $field_readers$;
                 value $lid:"io_read_" ^ msgname$ s = $ioread_expr$;
                 value io_read = $lid:"io_read_" ^ msgname$;
              >>
@@ -1332,22 +1761,24 @@ and dump_fields ?namespace tag fields =
          }
       >>
 
-and write_message msgname =
+and write_message msgname msg =
   ignore msgname;
-  let _loc = Loc.mk "<generated code @ write_message>" in function
-      Message_single (namespace, fields) -> dump_fields ?namespace 0 fields
-    | Message_alias (path, name) ->
-        let full_path = path @ [String.capitalize name] in
-          <:expr< $id:ident_with_path _loc full_path ("write_" ^ name)$ b msg >>
-    | Message_sum l ->
-        let match_case (tag, ns, constr, fields) =
-          <:match_case<
+  let _loc = Loc.mk "<generated code @ write_message>" in
+    match msg with
+      | Message_single (namespace, fields) -> Some (dump_fields ?namespace 0 fields)
+      | Message_alias (path, name) ->
+          let full_path = path @ [String.capitalize name] in
+            Some <:expr< $id:ident_with_path _loc full_path ("write_" ^ name)$ b msg >>
+      | Message_sum l ->
+          let match_case (tag, ns, constr, fields) =
+            <:match_case<
             $uid:constr$ msg ->
               $dump_fields ~namespace:(Option.default constr ns) tag fields$ >> in
-        let match_cases =
-          Ast.mcOr_of_list @@ List.map match_case @@
-          List.mapi (fun i (ns, c, fs) -> (i, ns, c, fs)) l
-        in <:expr< match msg with [ $match_cases$ ] >>
+          let match_cases =
+            Ast.mcOr_of_list @@ List.map match_case @@
+            List.mapi (fun i (ns, c, fs) -> (i, ns, c, fs)) l
+          in Some <:expr< match msg with [ $match_cases$ ] >>
+      | Message_subset _ -> None
 
 let wrap_writer _loc opts expr = match get_type_info opts with
     Some { tof; _ } ->
@@ -1363,12 +1794,13 @@ let wrap_writer _loc opts expr = match get_type_info opts with
 let add_message_writer bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_writer>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
-  let write_expr = write_message msgname llrec |>
-                   wrap_writer _loc opts in
-  let writer =
-    <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$;
-                value write = $lid:"write_" ^ msgname$; >>
-  in { c with c_writer = Some writer }
+    match Option.map (wrap_writer _loc opts) @@ write_message msgname llrec with
+      | None -> c
+      | Some write_expr ->
+          let writer =
+            <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$;
+                        value write = $lid:"write_" ^ msgname$; >>
+          in { c with c_writer = Some writer }
 
 let msgdecl_generators : (string * _ msgdecl_generator) list =
   [
