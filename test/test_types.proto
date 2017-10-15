@@ -107,56 +107,56 @@ message se_1 = { x : sum_ext1; y : string; z : sum_ext1; }
 message se_2 = { x : sum_ext2; y : string; z : sum_ext2; }
 
 message subset__a    = { a : int; b : bool; c : string; d : long }
-message subset__a_1  = {| subset__a with b; d |}
-message subset__a_1b = {| subset__a not a; c |}
-message subset__a_2  = {| subset__a with a; c |}
-message subset__a_2b = {| subset__a not b; d |}
+message subset__a_1  = {| subset__a | b; d |}
+message subset__a_1b = {| subset__a | not a; c |}
+message subset__a_2  = {| subset__a | a; c |}
+message subset__a_2b = {| subset__a | not b; d |}
 
 type subset__b_0     = { a : int; b : bool; c : string; d : long }
 message subset__b    = subset__b_0
-message subset__b_1  = {| subset__b with b; d |}
-message subset__b_1b = {| subset__b not a; c |}
-message subset__b_2  = {| subset__b with a; c |}
-message subset__b_2b = {| subset__b not b; d |}
+message subset__b_1  = {| subset__b | b; d |}
+message subset__b_1b = {| subset__b | not a; c |}
+message subset__b_2  = {| subset__b | a; c |}
+message subset__b_2b = {| subset__b | not b; d |}
 
 type subset__c_0 'a 'b 'c  = { a : 'a; b : 'b; c : 'c; d : long }
 message subset__c    = subset__c_0<int, bool, string>
-message subset__c_1  = {| subset__c with b; d |}
-message subset__c_1b = {| subset__c not a; c |}
-message subset__c_2  = {| subset__c with a; c |}
-message subset__c_2b = {| subset__c not b; d |}
+message subset__c_1  = {| subset__c | b; d |}
+message subset__c_1b = {| subset__c | not a; c |}
+message subset__c_2  = {| subset__c | a; c |}
+message subset__c_2b = {| subset__c | not b; d |}
 
 message subset__d    = { a : int; b : bool; c : [int] }
 message subset__d_1  = { a : int }
-message subset__d_2  = {| subset__d with b; c |}
+message subset__d_2  = {| subset__d | b; c |}
 
 message subset__e    = { a : int; b : bool; c : [int] }
 message subset__e_1  = { a : int }
-message subset__e_2  = {| subset__d with a; c |}
+message subset__e_2  = {| subset__d | a; c |}
 
 type subset__f_0 'a 'b 'c  = { a : 'a; b : 'b; c : 'c; d : string }
 message subset__f    = subset__f_0<int, bool, bool>
 message subset__f_1  = { a : int }
-message subset__f_2  = {| subset__f with c |}
+message subset__f_2  = {| subset__f | c |}
 
 message subset__g    = { a : int; b : bool }
-message subset__g1   = {| subset__g with b |}
+message subset__g1   = {| subset__g | b |}
 message subset__g2   = { m1 : subset__g; m2 : subset__g }
-message subset__g3   = {| subset__g2 with m2 : subset__g1 |}
+message subset__g3   = {| subset__g2 | m2 : subset__g1 |}
 
 type subset__h0 'a 'b 'c = { a : 'a; b : 'b; c : 'c }
 message subset__h    = subset__h0<int, bool, string>
-message subset__h1   = {| subset__h with c |}
+message subset__h1   = {| subset__h | c |}
 message subset__h2   = subset__h0<subset__h, subset__h, string>
-message subset__h3   = {| subset__h2 with b : subset__h1 |}
+message subset__h3   = {| subset__h2 | b : subset__h1 |}
 
 message subset__i    = { a : string; b : int }
-message subset__i1   = {| subset__i with b : float |}
+message subset__i1   = {| subset__i | b : float |}
 
 type opt 'a = None | Some 'a options "ocaml.type_equals" = "option"
 type opt2 'a = B | A 'a
 message subset__j1   = { a : opt2<int>; b : opt2<string> }
-message subset__j2   = {| subset__j1 with b : opt<string> |}
+message subset__j2   = {| subset__j1 | b : opt<string> |}
 
 type bool_true = bool options "default" = "true"
 type int_42    = int options "default" = "42"

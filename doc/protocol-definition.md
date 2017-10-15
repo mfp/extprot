@@ -162,11 +162,11 @@ deserialization followed by projection. This can be expressed with the
 following syntaxes:
 
      message foo     = { a : int; b : bool; c : string }
-     message subset1 = {| foo with b; c |}
-     message subset2 = {| foo not b |}
+     message subset1 = {| foo | b; c |}
+     message subset2 = {| foo | not b |}
 
 Message subsets can be defined either by enumerating the fields of interest
-(`with` syntax) or by listing those to be excluded (`not` syntax).
+(`|` syntax) or by listing those to be excluded (`| not` syntax).
 
 In this example, the deserialization functions generated for `subset1` will
 deserialize only fields `b` and `c` in `foo` messages, and `subset2` would
@@ -179,8 +179,8 @@ or as the application of a record type, e.g.:
    type rec2 'a   = { a : int; b : 'a; c : 'a }
    message m1     = rec1
    message m2     = rec2<string>
-   message m1_c   = {| rec1 with c |}
-   message m2_a_c = {| rec2 not b |}
+   message m1_c   = {| rec1 | c |}
+   message m2_a_c = {| rec2 | not b |}
 
 The custom deserializers can skip directly over unwanted fields, which can
 save a lot of work when these correspond to complex or large values.
