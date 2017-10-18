@@ -179,8 +179,8 @@ or as the application of a record type, e.g.:
    type rec2 'a   = { a : int; b : 'a; c : 'a }
    message m1     = rec1
    message m2     = rec2<string>
-   message m1_c   = {| rec1 | c |}
-   message m2_a_c = {| rec2 | not b |}
+   message m1_c   = {| m1 | c |}
+   message m2_a_c = {| m2 | not b |}
 
 The custom deserializers can skip directly over unwanted fields, which can
 save a lot of work when these correspond to complex or large values.
