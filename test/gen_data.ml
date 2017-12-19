@@ -86,7 +86,8 @@ module Xml = struct
 
   let int_to_xml x = tag "int" (fun b -> add b "%d" x)
   let bool_to_xml x = tag "bool" (fun b -> add b "%s" (string_of_bool x))
-  let string_to_xml x = tag "string" (fun b -> B.add_string b (Base64.str_encode x))
+  let string_to_xml x =
+    tag "string" (fun b -> B.add_string b @@ Bytes.unsafe_to_string @@ Base64.str_encode x)
   let long_to_xml x = tag "long" (fun b -> add b "%s" (Int64.to_string x))
 
   open Complex_rtt

@@ -123,11 +123,12 @@ let benchmarks =
              B.contents b)
         (fun s -> s)
         (fun s ->
-           let max = String.length s in
+           let s   = Bytes.unsafe_of_string s in
+           let max = Bytes.length s in
            let rec loop n =
              if n < max then begin
                let len = Marshal.total_size s n in
-                 ignore (Marshal.from_string s n);
+                 ignore (Marshal.from_bytes s n);
                  loop (n + len)
              end
            in loop 0)
@@ -187,7 +188,7 @@ let main () =
     Option.may
       (fun f ->
          let io = IO.output_channel (open_out f) in
-           IO.nwrite io (M.contents (encode_to_msg_buf ~report:true a));
+           IO.nwrite io @@ Bytes.unsafe_of_string @@ M.contents @@ encode_to_msg_buf ~report:true a;
            IO.close_out io)
       !out_file;
 

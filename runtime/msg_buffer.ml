@@ -21,7 +21,7 @@
 (* Extensible buffers *)
 
 type t =
- {mutable buffer : string;
+ {mutable buffer : Bytes.t;
   mutable position : int;
   mutable length : int;
   mutable release : unit -> unit;
@@ -54,21 +54,21 @@ let make n =
 
 let create () = make 32
 
-let contents b = String.sub b.buffer 0 b.position
+let contents b = Bytes.sub_string b.buffer 0 b.position
 
 let sub b ofs len =
   if ofs < 0 || len < 0 || ofs > b.position - len
   then invalid_arg "Buffer.sub"
   else begin
     let r = Bytes.create len in
-    String.blit b.buffer ofs r 0 len;
-    r
+    Bytes.blit b.buffer ofs r 0 len;
+    Bytes.unsafe_to_string r
   end
 
 let nth b ofs =
   if ofs < 0 || ofs >= b.position then
    invalid_arg "Buffer.nth"
-  else String.get b.buffer ofs
+  else Bytes.get b.buffer ofs
 
 let length b = b.position
 
@@ -99,7 +99,7 @@ let resize b more =
     else
       failwith "Msg_buffer.resize: cannot grow buffer"
   in
-    String.blit b.buffer 0 new_buffer 0 b.position;
+    Bytes.blit b.buffer 0 new_buffer 0 b.position;
     b.release ();
     b.buffer <- new_buffer;
     b.length <- Bytes.length new_buffer;
@@ -127,7 +127,7 @@ let add_string b s =
   b.position <- new_position
 
 let add_buffer b bs =
-  add_substring b bs.buffer 0 bs.position
+  add_substring b (Bytes.unsafe_to_string bs.buffer) 0 bs.position
 
 let add_channel b ic len =
   if b.position + len > b.length then resize b len;

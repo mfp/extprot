@@ -91,7 +91,7 @@ DEFINE Read_msg(t) =
           let s = Bytes.create (prefix_len + len) in
             String.blit prefix_s 0 s 0 prefix_len;
             read_bytes t s prefix_len len;
-            s
+            Bytes.unsafe_to_string s
       | Vint | Bits8 | Bits32 | Bits64_long | Bits64_float | Enum | Bytes
       | Htuple | Assoc | Invalid_ll_type as ll_type -> Error.bad_wire_type ~ll_type ()
 
@@ -143,7 +143,7 @@ struct
       b
 
   let read_bytes t buf off len =
-    if off < 0 || len < 0 || off + len > String.length buf then
+    if off < 0 || len < 0 || off + len > Bytes.length buf then
       invalid_arg "Reader.IO_reader.read_bytes";
     let n = IO.really_input t.io buf off len in
       t.pos <- t.pos + n;
@@ -155,7 +155,7 @@ struct
 
   let rec skip_n t = function
       0 -> ()
-    | n -> let len = min n (String.length skip_buf) in
+    | n -> let len = min n (Bytes.length skip_buf) in
         read_bytes t skip_buf 0 len;
         skip_n t (n - len)
 
@@ -218,7 +218,7 @@ struct
         let off = Msg_buffer.length m in
         let buf = Msg_buffer.unsafe_contents m in
           IO_reader.read_bytes ch buf off len;
-          (make buf 0 (String.length buf), buf)
+          (make (Bytes.unsafe_to_string buf) 0 (Bytes.length buf), Bytes.unsafe_to_string buf)
 
   let from_io_reader ch = fst (from_io_reader' ch)
 
@@ -238,10 +238,10 @@ struct
       end else raise End_of_file
 
   let read_bytes t buf off len =
-    if off < 0 || len < 0 || off + len > String.length buf then
+    if off < 0 || len < 0 || off + len > Bytes.length buf then
       invalid_arg "Reader.String_reader.read_bytes";
     if len > t.last - t.pos then raise End_of_file;
-    String.blit t.buf t.pos buf off len;
+    Bytes.blit_string t.buf t.pos buf off len;
     t.pos <- t.pos + len
 
   let read_vint t = Read_vint(t)

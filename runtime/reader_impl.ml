@@ -103,7 +103,7 @@ let read_i32_fallback t p = function
 
 let read_i32 t = Read_prim_type(t, Bits32, read_raw_i32, read_i32_fallback)
 
-let i64_buf = "12345678"
+let i64_buf = Bytes.create 8
 
 let load_i64_buf =
   (* if read_bytes is atomic, we can use a shared buffer as long as we are
@@ -112,13 +112,20 @@ let load_i64_buf =
   if read_bytes_is_atomic then
     (fun t ->
       read_bytes t i64_buf 0 8;
-      i64_buf)
+      (* OK as per the second use case listed in the documentation for
+       * Bytes.unsafe_to_string:
+       *
+       * "Temporarily  giving  ownership  of  a  byte sequence to a function
+       * that expects a uniquely owned string and returns ownership back,
+       * so that we can mutate the sequence again after the call ended."
+       * *)
+      Bytes.unsafe_to_string i64_buf)
   else
     (* otherwise, allocate a new buf *)
     (fun t ->
        let buf = Bytes.create 8 in
          read_bytes t buf 0 8;
-         buf)
+         Bytes.unsafe_to_string buf)
 
 let i64_byte_n buf n = Char.code (String.unsafe_get buf n)
 
@@ -182,6 +189,6 @@ let read_raw_string t =
   let () = Limits.check_string_length len in
   let s = Bytes.create len in
     read_bytes t s 0 len;
-    s
+    Bytes.unsafe_to_string s
 
 let read_string t = Read_prim_type(t, Bytes, read_raw_string, nil_fallback)

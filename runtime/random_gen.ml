@@ -65,7 +65,7 @@ struct
     len >>= fun n ->
       let s = Bytes.create n in
       let rec loop = function
-          n when n < 0 -> return s
+          n when n < 0 -> return @@ Bytes.unsafe_to_string s
         | n -> rand_integer 255 >>= fun c -> s.[n] <- Char.chr c; loop (n - 1)
       in loop (n - 1)
 

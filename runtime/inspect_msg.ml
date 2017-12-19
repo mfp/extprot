@@ -75,7 +75,7 @@ let rec inspect ?(verbose=true) pp io prefix =
       if verbose then PP.fprintf pp "Enum_%d" tag else PP.fprintf pp "T%d" tag
   | Bytes ->
       let len = read_vint io in
-      let s = IO.nread io len in
+      let s = Bytes.to_string @@ IO.nread io len in
         pp_verbose "B_%d@[<1>@ %a@]" "%a" PP.pp_string ~verbose ~tag pp s
   | Invalid_ll_type -> Error.bad_wire_type ()
 

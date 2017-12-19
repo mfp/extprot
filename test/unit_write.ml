@@ -535,11 +535,11 @@ let () =
             Simple_string.write_simple_string { Simple_string.v = s } ()
         in
           for len = 0 to 124 do
-            let s = Bytes.create len in
+            let s = Bytes.to_string @@ Bytes.create len in
               check_string s
                 (sprintf "\001%c\001\003%c%s" (Char.chr (len + 3)) (Char.chr len) s)
           done;
-          let s = Bytes.create 128 in
+          let s = Bytes.to_string @@ Bytes.create 128 in
             check_string s (sprintf "\001\132\001\001\003\128\001%s" s)
       end;
 
