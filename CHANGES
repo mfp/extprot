@@ -1,4 +1,4 @@
-1.6.0 (unreleased)
+1.6.0 (2018-10-16)
 ==================
 * compatibility with safe-string (and thus default 4.06 OCaml)
 
