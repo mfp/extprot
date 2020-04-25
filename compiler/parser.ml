@@ -127,8 +127,8 @@ EXTEND Gram
       | t1 = field -> [t1] ] ];
 
   field :
-    [ [ n = a_LIDENT; ":"; ty = type_expr_simple -> (n, false, ty)
-      | "mutable"; n = a_LIDENT; ":"; ty = type_expr_simple -> (n, true, ty) ] ];
+    [ [ n = a_LIDENT; ":"; ty = type_expr_simple -> (n, false, `Eager, ty)
+      | "mutable"; n = a_LIDENT; ":"; ty = type_expr_simple -> (n, true, `Eager, ty) ] ];
 
   record_app :
     [ [ n = a_LIDENT; "<"; targs = LIST1 [ type_expr_simple ] SEP ","; ">" ->

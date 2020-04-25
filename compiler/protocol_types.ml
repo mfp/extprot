@@ -78,7 +78,7 @@ type type_expr = [
 
 and 'a record_data_type = {
   record_name : string;
-  record_fields : (string * bool * 'a) list
+  record_fields : (string * bool * [`Lazy | `Eager] * 'a) list
 }
 
 and 'a sum_data_type = {
@@ -91,7 +91,8 @@ let kind_of_type_expr = function
 | `Record -> "record"
 | `Sum -> "union"
 
-type base_message_expr = [ `Message_record of (string * bool * base_type_expr) list ]
+type base_message_expr = [ `Message_record of (string * bool * eval_regime * base_type_expr) list ]
+and eval_regime = [`Eager | `Lazy]
 
 type message_expr_app = [ `Message_app of string * base_type_expr list * type_options ]
 

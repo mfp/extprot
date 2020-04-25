@@ -16,19 +16,19 @@ let merge_options opt1 opt2 = opt2 @ opt1
 let update_bindings bindings params args =
   List.fold_right2 SMap.add params args bindings
 
-let must_keep_field subset ((name, mut, _) as field) = match subset with
+let must_keep_field subset ((name, mut, ev_regime, _) as field) = match subset with
   | Exclude_fields l ->
       if not @@ List.mem name l then Some (`Orig field) else None
   | Include_fields l ->
       try
         match List.assoc name l with
           | None -> Some (`Orig field)
-          | Some ty -> Some (`Newtype (name, mut, ty))
+          | Some ty -> Some (`Newtype (name, mut, ev_regime, ty))
       with Not_found -> None
 
 let subset_field = function
-  | `Orig (name, mut, ty)
-  | `Newtype (name, mut, ty) -> (name, mut, ty)
+  | `Orig (name, mut, ev_regime, ty)
+  | `Newtype (name, mut, ev_regime, ty) -> (name, mut, ev_regime, ty)
 
 let subset_of_selection selection = function
   | `Include -> Include_fields selection
@@ -54,7 +54,7 @@ let beta_reduce_sum self bindings s opts =
 let beta_reduce_record self bindings r opts =
   let fields' =
     List.map
-      (fun (name, ismutable, ty) -> (name, ismutable, self bindings ty))
+      (fun (name, ismutable, ev_regime, ty) -> (name, ismutable, ev_regime, self bindings ty))
       r.record_fields
   in
   `Record ({r with record_fields = fields'}, opts)
@@ -153,8 +153,8 @@ and alpha_convert =
       | `Record (r, opts) ->
           let bs, fields =
             List.fold_right
-              (fun (name, mut, ty) (bs, l) ->
-                 let bs, ty = do_convert bs ty in (bs, (name, mut, ty) :: l))
+              (fun (name, mut, ev_regime, ty) (bs, l) ->
+                 let bs, ty = do_convert bs ty in (bs, (name, mut, ev_regime, ty) :: l))
               r.record_fields
               (bindings, [])
           in (bs, `Record ({ r with record_fields = fields }, opts))
@@ -201,7 +201,8 @@ let poly_beta_reduce_texpr bindings : type_expr -> poly_type_expr = function
   | #base_type_expr as x -> (reduce_to_poly_texpr_core bindings x :> poly_type_expr)
 
 let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr) =
-  let map_field f (fname, mutabl, ty) = (fname, mutabl, f ty) in
+  let map_field f (fname, mutabl, ev_regime, ty) = (fname, mutabl, ev_regime, f ty) in
+
   let expand_record_type f name ty =
     match beta_reduce_texpr bindings ty with
       | `Record (r, opts) -> f r opts
@@ -260,7 +261,8 @@ let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr
               assert false
 
 let iter_message bindings f g msgname msg =
-  let proc_field f const (fname, mutabl, ty) = f const fname mutabl ty in
+  let proc_field f const (fname, mutabl, ev_regime, ty) = f const fname mutabl ty in
+
   let iter_expanded_type const name ty =
     match beta_reduce_texpr bindings ty with
           | `Record (r, _opts) -> List.iter (proc_field g const) r.record_fields
@@ -316,8 +318,8 @@ let beta_reduced_msg_app_fields bindings name args =
 
           let record_fields =
             List.map
-              (fun (name, mut, ty) ->
-                 (name, mut, resolve_texpr_type_vars bs ty))
+              (fun (name, mut, ev_regime, ty) ->
+                 (name, mut, ev_regime, resolve_texpr_type_vars bs ty))
               r.record_fields
           in
             Some (bindings, record_fields)
@@ -341,8 +343,9 @@ let low_level_msg_def bindings msgname (msg : message_expr) =
     | `Record (r, opts) ->
         let fields =
           List.map
-            (fun (name, _ismutable, ty) ->
-               { field_name = name; field_type = low_level_of_rtexp ty; })
+            (fun (name, _ismutable, ev_regime, ty) ->
+               { field_name = name; field_type = low_level_of_rtexp ty;
+                 field_lazy = (match ev_regime with `Eager -> false | `Lazy -> true) })
             r.record_fields
         in Record (r.record_name, fields, opts)
     | `Sum (sum, opts) ->
@@ -484,8 +487,13 @@ struct
                        pp_non_constant non_const
       end
     | `Record (r, _) ->
-        let pp_field ppf (name, ismutable, expr) =
+        let pp_field ppf (name, ismutable, ev_regime, expr) =
           if ismutable then pp ppf "mutable ";
+          begin
+            match ev_regime with
+              | `Eager -> ()
+              | `Lazy -> pp ppf "lazy "
+          end;
           pp ppf "@[<1>%s :@ %a@]" name pp_reduced_type_expr expr
         in pp ppf "@[<1>%a@]" (list pp_field ";@ ") r.record_fields
     | `Message (s, _) -> pp ppf "msg:%S" s
@@ -512,10 +520,15 @@ struct
       (list (pp' "%S") ",@ ") (Protocol_types.constant_constructors s)
       (pp_non_constant f) (Protocol_types.non_constant_constructors s)
 
+  let string_of_eval_regime = function
+    | `Eager -> "eager"
+    | `Lazy -> "lazy"
+
   let pp_fields f ppf l =
     list
-      (fun ppf (name, mut, ty) ->
-         pp ppf "@[%S,@ %s,@ %a@]" name (string_of_bool mut) f ty)
+      (fun ppf (name, mut, ev_regime, ty) ->
+         pp ppf "@[%S,@ %s,@ %s,@ %a@]" name
+           (string_of_bool mut) (string_of_eval_regime ev_regime) f ty)
       ",@ " ppf l
 
   let inspect_record_dtype f ppf r =

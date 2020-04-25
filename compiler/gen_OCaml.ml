@@ -283,7 +283,7 @@ let generate_container bindings =
 
   let rec message_types ?(opts = []) msgname = function
     | `Message_record l ->
-        let ctyp (name, mutabl, texpr) =
+        let ctyp (name, mutabl, ev_regime, texpr) =
           let ty = ctyp_of_texpr bindings texpr in match mutabl with
               true -> <:ctyp< $lid:name$ : mutable $ty$ >>
             | false -> <:ctyp< $lid:name$ : $ty$ >> in
@@ -361,7 +361,7 @@ let generate_container bindings =
 
        (* check that all fields referenced in subset exist *)
        let () =
-         let known = List.map (fun (name, _, _) -> name) l in
+         let known = List.map (fun (name, _, _, _) -> name) l in
            List.iter
              (fun (field, _) ->
                 if not @@ List.mem field known then
@@ -371,7 +371,7 @@ let generate_container bindings =
              selection
        in
 
-       let ctyp (name, mutabl, texpr) =
+       let ctyp (name, mutabl, ev_regime, texpr) =
          let ty = ctyp_of_texpr bindings texpr in match mutabl with
              true -> <:ctyp< $lid:name$ : mutable $ty$ >>
            | false -> <:ctyp< $lid:name$ : $ty$ >> in
@@ -459,7 +459,7 @@ let generate_container bindings =
         let default_record ?namespace fields =
           let default_values =
             maybe_all
-              (fun (name, _, llty) ->
+              (fun (name, _, ev_regime, llty) ->
                  Option.map (fun v -> (name, v)) (default_value llty))
               fields
           in match default_values with
@@ -523,7 +523,7 @@ let generate_container bindings =
     | Type_decl (name, params, texpr, opts) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
           | `Record (r, _) -> begin
-              let ctyp (name, mutabl, texpr) =
+              let ctyp (name, mutabl, ev_regime, texpr) =
                 let ty = ctyp_of_poly_texpr_core bindings texpr in match mutabl with
                     true -> <:ctyp< $lid:name$ : mutable $ty$ >>
                   | false -> <:ctyp< $lid:name$ : $ty$ >> in
@@ -678,7 +678,7 @@ struct
         in <:expr< fun [ $Ast.mcOr_of_list (List.map match_case l)$ ] >>
 
   and pp_message_record ?namespace bindings msgname l =
-    let pp_field i (name, _, tyexpr) =
+    let pp_field i (name, _, ev_regime, tyexpr) =
       let selector = match namespace with
           None -> <:expr< (fun t -> t.$lid:name$) >>
         | Some ns -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >> in
@@ -767,7 +767,7 @@ struct
           <:expr< fun pp -> fun x -> match ($wrap_value opts <:expr<x>>$) with [ $Ast.mcOr_of_list cases$ ] >>
         end
       | `Record (r, opts) -> begin
-          let pp_field i (name, _, tyexpr) =
+          let pp_field i (name, _, ev_regime, tyexpr) =
             let field_name =
               if i = 0 then String.capitalize r.record_name ^ "." ^ name
               else name
@@ -1007,7 +1007,12 @@ struct
             >>
       | Record (name, fields, opts) ->
           let fields' =
-            List.map (fun f -> (f.field_name, true, f.field_type)) fields in
+            List.map
+              (fun f ->
+                 (f.field_name, true,
+                  (if f.field_lazy then `Lazy else `Eager),
+                  f.field_type))
+              fields in
           let promoted_match_cases =
             make_promoted_match_cases msgname [ Some name, None, fields' ] in
           let match_cases =
@@ -1070,7 +1075,7 @@ struct
     let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
     let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno (name, _, llty) =
+    let read_field fieldno (name, _, ev_regime, llty) =
       let rescue_match_case = match default_value llty with
           None ->
             <:match_case<
@@ -1129,7 +1134,7 @@ struct
     let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
     let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno (name, _, llty) expr =
+    let read_field fieldno (name, _, ev_regime, llty) expr =
 
       let rescue_match_case = match default_value llty with
           None ->
@@ -1181,7 +1186,7 @@ struct
 
     let field_assigns =
       List.map
-        (fun (name, _, _) -> match namespace with
+        (fun (name, _, ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
         fields in
@@ -1209,7 +1214,7 @@ struct
   and record_case msgname ~locs ?namespace ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
 
-    let read_field _ (name, _, _) expr =
+    let read_field _ (name, _, ev_regime, _) expr =
       let funcname = field_reader_funcname ~msgname ~constr ~name in
         <:expr<
           let $lid:name$ = $lid:funcname$ s nelms in
@@ -1219,7 +1224,7 @@ struct
 
     let field_assigns =
       List.map
-        (fun (name, _, _) -> match namespace with
+        (fun (name, _, ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
         fields in
@@ -1248,7 +1253,7 @@ struct
     let _loc        = Loc.mk "<generated code @ subset_case>" in
     let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno ((name, _, _) as field) expr =
+    let read_field fieldno ((name, _, _, _) as field) expr =
       match must_keep_field subset field with
         | None ->
             <:expr<
@@ -1265,7 +1270,7 @@ struct
                 let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms in
                   $expr$
               >>
-        | Some (`Newtype (name, _, llty)) ->
+        | Some (`Newtype (name, _, ev_regime, llty)) ->
             let rescue_match_case = match default_value llty with
                 None ->
                   <:match_case<
@@ -1317,7 +1322,7 @@ struct
 
     let field_assigns =
       List.map
-        (fun (name, _, _) -> match namespace with
+        (fun (name, _, ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>) @@
       List.map subset_field @@
@@ -1333,7 +1338,7 @@ struct
         (fun (i, fieldinfo) e -> read_field i fieldinfo e)
         (List.mapi (fun i x -> (i, x)) @@
          List.fold_right
-           (fun ((name, _, _) as f) fs -> match fs with
+           (fun ((name, _, _, _) as f) fs -> match fs with
               | _ :: _ -> f :: fs
               | [] -> if Option.is_some @@ must_keep_field subset f then f :: fs else [])
            fields [])
@@ -1400,7 +1405,7 @@ struct
     let first_field_expr =
       match fields with
           [] -> failwith (sprintf "no fields in msg %s" msgname)
-        | (_field_name, _, field_type) :: _ ->
+        | (_field_name, _, ev_regime, field_type) :: _ ->
             match RD.raw_rd_func field_type with
                 None -> <:expr< raise_bad_wire_type () >>
               | Some (mc, reader_expr) ->
@@ -1416,7 +1421,7 @@ struct
           [] | [_] -> []
         | _ :: others ->
             List.map
-              (fun (name, _, llty) ->
+              (fun (name, _, ev_regime, llty) ->
                  match default_value llty with
                      Some expr -> expr
                    | None ->
@@ -1430,7 +1435,7 @@ struct
 
     let field_assigns =
       List.mapi
-        (fun i (name, _, _) -> match namespace with
+        (fun i (name, _, ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:sprintf "v%d" i$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ =
                                           $lid:sprintf "v%d" i$ >>)
@@ -1765,7 +1770,11 @@ let rec write_field ?namespace fname =
 
     | Record (name, fields, opts) ->
         let fields' =
-          List.map (fun f -> (f.field_name, true, f.field_type)) fields in
+          List.map
+            (fun f ->
+               (f.field_name, true,
+                (if f.field_lazy then `Lazy else `Eager), f.field_type))
+            fields in
         let v = match get_type_info opts with
             None -> v
           | Some { tof; _ } -> <:expr< $tof$ $v$ >>
@@ -1779,7 +1788,7 @@ let rec write_field ?namespace fname =
     | Some ns -> write <:expr< msg.$uid:String.capitalize ns$.$lid:fname$ >>
 
 and write_fields ?namespace fs =
-  Ast.exSem_of_list @@ List.map (fun (name, _, llty) -> write_field ?namespace name llty) fs
+  Ast.exSem_of_list @@ List.map (fun (name, _, ev_regime, llty) -> write_field ?namespace name llty) fs
 
 and dump_fields ?namespace tag fields =
   let _loc = Loc.mk "<generated code @ dump_fields>" in
