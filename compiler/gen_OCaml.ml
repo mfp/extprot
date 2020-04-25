@@ -284,9 +284,14 @@ let generate_container bindings =
   let rec message_types ?(opts = []) msgname = function
     | `Message_record l ->
         let ctyp (name, mutabl, ev_regime, texpr) =
-          let ty = ctyp_of_texpr bindings texpr in match mutabl with
-              true -> <:ctyp< $lid:name$ : mutable $ty$ >>
-            | false -> <:ctyp< $lid:name$ : $ty$ >> in
+          let ty = ctyp_of_texpr bindings texpr in
+          let ty = match ev_regime with
+            | `Eager -> ty
+            | `Lazy -> <:ctyp< $ty$ XXXLazy.t >>
+          in
+            match mutabl with
+                true -> <:ctyp< $lid:name$ : mutable $ty$ >>
+              | false -> <:ctyp< $lid:name$ : $ty$ >> in
         let fields =
           foldl1 "message_types `Message_record" ctyp
             (fun ct field -> <:ctyp< $ct$; $ctyp field$ >>) l
@@ -372,7 +377,12 @@ let generate_container bindings =
        in
 
        let ctyp (name, mutabl, ev_regime, texpr) =
-         let ty = ctyp_of_texpr bindings texpr in match mutabl with
+         let ty = ctyp_of_texpr bindings texpr in
+         let ty = match ev_regime with
+           | `Eager -> ty
+           | `Lazy -> <:ctyp< $ty$ XXXLazy.t >>
+         in
+           match mutabl with
              true -> <:ctyp< $lid:name$ : mutable $ty$ >>
            | false -> <:ctyp< $lid:name$ : $ty$ >> in
 
@@ -460,7 +470,11 @@ let generate_container bindings =
           let default_values =
             maybe_all
               (fun (name, _, ev_regime, llty) ->
-                 Option.map (fun v -> (name, v)) (default_value llty))
+                 let wrap_lazy v = match ev_regime with
+                   | `Eager -> v
+                   | `Lazy -> <:expr< XXXLazy.from_val $v$ >>
+                 in
+                   Option.map (fun v -> (name, wrap_lazy v)) (default_value llty))
               fields
           in match default_values with
               None -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
@@ -524,7 +538,12 @@ let generate_container bindings =
         let ty = match poly_beta_reduce_texpr bindings texpr with
           | `Record (r, _) -> begin
               let ctyp (name, mutabl, ev_regime, texpr) =
-                let ty = ctyp_of_poly_texpr_core bindings texpr in match mutabl with
+                let ty = ctyp_of_poly_texpr_core bindings texpr in
+                let ty = match ev_regime with
+                  | `Eager -> ty
+                  | `Lazy -> <:ctyp< $ty$ XXXLazy.t >>
+                in
+                  match mutabl with
                     true -> <:ctyp< $lid:name$ : mutable $ty$ >>
                   | false -> <:ctyp< $lid:name$ : $ty$ >> in
               let fields =
@@ -679,9 +698,12 @@ struct
 
   and pp_message_record ?namespace bindings msgname l =
     let pp_field i (name, _, ev_regime, tyexpr) =
-      let selector = match namespace with
-          None -> <:expr< (fun t -> t.$lid:name$) >>
-        | Some ns -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >> in
+      let selector = match namespace, ev_regime with
+        | None, `Eager -> <:expr< (fun t -> t.$lid:name$) >>
+        | Some ns, `Eager -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >>
+        | None, `Lazy -> <:expr< (fun t -> XXXLazy.force t.$lid:name$) >>
+        | Some ns, `Lazy -> <:expr< (fun t -> XXXLazy.force t.$uid:String.capitalize ns$.$lid:name$) >>
+      in
       let prefix = match namespace with
           None -> String.capitalize msgname
         | Some ns -> sprintf "%s.%s"
@@ -770,11 +792,15 @@ struct
           let pp_field i (name, _, ev_regime, tyexpr) =
             let field_name =
               if i = 0 then String.capitalize r.record_name ^ "." ^ name
-              else name
+              else name in
+
+            let selector = match ev_regime with
+              | `Eager -> <:expr< (fun t -> t.$lid:name$) >>
+              | `Lazy ->  <:expr< (fun t -> XXXLazy.force t.$lid:name$) >>
             in
               <:expr<
                 ( $str:field_name$,
-                  $pp_func "pp_field"$ (fun t -> t.$lid:name$) $pp_poly_texpr_core bindings tyexpr$ )
+                  $pp_func "pp_field"$ $selector$ $pp_poly_texpr_core bindings tyexpr$ )
               >> in
           let pp_fields = List.mapi pp_field r.record_fields in
           <:expr< fun ppf -> fun x -> $pp_func "pp_struct"$ $expr_of_list pp_fields$ ppf ($wrap_value opts <:expr<x>>$) >>
