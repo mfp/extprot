@@ -1101,7 +1101,7 @@ struct
     let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
     let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno (name, _, ev_regime, llty) =
+    let read_field_with_locs fieldno (name, _, ev_regime, llty) =
       let rescue_match_case = match default_value llty with
           None ->
             <:match_case<
@@ -1152,7 +1152,7 @@ struct
     in
       List.fold_right
         (fun (i, fieldinfo) functions ->
-           <:str_item< $read_field i fieldinfo$; $functions$ >>)
+           <:str_item< $read_field_with_locs i fieldinfo$; $functions$ >>)
         (List.mapi (fun i x -> (i, x)) fields)
         <:str_item< >>
 
@@ -1160,7 +1160,7 @@ struct
     let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
     let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno (name, _, ev_regime, llty) expr =
+    let read_field_with_locs fieldno (name, _, ev_regime, llty) expr =
 
       let rescue_match_case = match default_value llty with
           None ->
@@ -1223,7 +1223,7 @@ struct
         | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
     let e =
       List.fold_right
-        (fun (i, fieldinfo) e -> read_field i fieldinfo e)
+        (fun (i, fieldinfo) e -> read_field_with_locs i fieldinfo e)
         (List.mapi (fun i x -> (i, x)) fields)
         record
     in
@@ -1240,7 +1240,7 @@ struct
   and record_case msgname ~locs ?namespace ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
 
-    let read_field _ (name, _, ev_regime, _) expr =
+    let read_field_using_func _ (name, _, ev_regime, _) expr =
       let funcname = field_reader_funcname ~msgname ~constr ~name in
         <:expr<
           let $lid:name$ = $lid:funcname$ s nelms in
@@ -1261,7 +1261,7 @@ struct
         | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
     let e =
       List.fold_right
-        (fun (i, fieldinfo) e -> read_field i fieldinfo e)
+        (fun (i, fieldinfo) e -> read_field_using_func i fieldinfo e)
         (List.mapi (fun i x -> (i, x)) fields)
         record
     in
@@ -1279,7 +1279,7 @@ struct
     let _loc        = Loc.mk "<generated code @ subset_case>" in
     let constr_name = Option.default "<default>" constr in
 
-    let read_field fieldno ((name, _, _, _) as field) expr =
+    let read_field_with_locs_if_kept fieldno ((name, _, _, _) as field) expr =
       match must_keep_field subset field with
         | None ->
             <:expr<
@@ -1361,7 +1361,7 @@ struct
         | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
     let e =
       List.fold_right
-        (fun (i, fieldinfo) e -> read_field i fieldinfo e)
+        (fun (i, fieldinfo) e -> read_field_with_locs_if_kept i fieldinfo e)
         (List.mapi (fun i x -> (i, x)) @@
          List.fold_right
            (fun ((name, _, _, _) as f) fs -> match fs with
