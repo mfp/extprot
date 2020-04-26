@@ -473,11 +473,7 @@ let generate_container bindings =
           let default_values =
             maybe_all
               (fun (name, _, ev_regime, llty) ->
-                 let wrap_lazy v = match ev_regime with
-                   | `Eager -> v
-                   | `Lazy -> <:expr< XXXLazy.from_val $v$ >>
-                 in
-                   Option.map (fun v -> (name, wrap_lazy v)) (default_value ev_regime llty))
+                 Option.map (fun v -> (name, v)) (default_value ev_regime llty))
               fields
           in match default_values with
               None -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
