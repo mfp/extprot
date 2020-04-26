@@ -287,7 +287,7 @@ let generate_container bindings =
           let ty = ctyp_of_texpr bindings texpr in
           let ty = match ev_regime with
             | `Eager -> ty
-            | `Lazy -> <:ctyp< $ty$ XXXLazy.t >>
+            | `Lazy -> <:ctyp< XXXLazy.t $ty$ >>
           in
             match mutabl with
                 true -> <:ctyp< $lid:name$ : mutable $ty$ >>
@@ -380,7 +380,7 @@ let generate_container bindings =
          let ty = ctyp_of_texpr bindings texpr in
          let ty = match ev_regime with
            | `Eager -> ty
-           | `Lazy -> <:ctyp< $ty$ XXXLazy.t >>
+           | `Lazy -> <:ctyp< XXXLazy.t $ty$ >>
          in
            match mutabl with
              true -> <:ctyp< $lid:name$ : mutable $ty$ >>
@@ -541,7 +541,7 @@ let generate_container bindings =
                 let ty = ctyp_of_poly_texpr_core bindings texpr in
                 let ty = match ev_regime with
                   | `Eager -> ty
-                  | `Lazy -> <:ctyp< $ty$ XXXLazy.t >>
+                  | `Lazy -> <:ctyp< XXXLazy.t $ty$ >>
                 in
                   match mutabl with
                     true -> <:ctyp< $lid:name$ : mutable $ty$ >>
