@@ -38,9 +38,9 @@ end
 
 type reader_func =
     [
-      | `Offset | `Skip_to | `Read_prefix | `Skip_value
+      | `Get_value_reader | `Offset | `Skip_to | `Read_prefix | `Skip_value
       | `Read_vint | `Read_bool | `Read_rel_int | `Read_i8
-      | `Read_i32 | `Read_i64 | `Read_float | `Read_string
+      | `Read_i32 | `Read_i64 | `Read_float | `Read_string | `Read_message
       | `Read_raw_bool | `Read_raw_rel_int | `Read_raw_i8
       | `Read_raw_i32 | `Read_raw_i64 | `Read_raw_float | `Read_raw_string
     ]
@@ -58,6 +58,7 @@ let string_of_reader_func : reader_func -> string = function
   | `Read_i64 -> "read_i64"
   | `Read_float -> "read_float"
   | `Read_string -> "read_string"
+  | `Read_message -> "read_message"
   | `Read_raw_bool -> "read_raw_bool"
   | `Read_raw_rel_int -> "read_raw_rel_int"
   | `Read_raw_i8 -> "read_raw_i8"
@@ -65,6 +66,7 @@ let string_of_reader_func : reader_func -> string = function
   | `Read_raw_i64 -> "read_raw_i64"
   | `Read_raw_float -> "read_raw_float"
   | `Read_raw_string -> "read_raw_string"
+  | `Get_value_reader -> "get_value_reader"
 
 DEFINE Read_vint(t) =
   let b = ref (read_byte t) in if !b < 128 then !b else
@@ -116,6 +118,11 @@ let input_string funcname offset s =
                     pos := !pos + n;
                     n)
         ~close:(fun () -> ())
+
+module TY =
+struct
+  type string_reader = { mutable buf : string; mutable last : int; mutable pos : int }
+end
 
 module IO_reader =
 struct
@@ -184,11 +191,46 @@ struct
   let read_string t = EOF_wrap(read_string, t)
 
   let read_message t = Read_msg(t)
+
+  let get_value_reader t =
+    let b = Msg_buffer.create () in
+    let p = read_prefix t in
+      Msg_buffer.add_vint b p;
+      let buf =
+        match ll_type p with
+          | Vint ->
+              let n = read_vint t in
+                Msg_buffer.add_vint b n;
+                Msg_buffer.contents b
+          | Bits8 ->
+              let n = read_byte t in
+                Msg_buffer.add_byte b n;
+                Msg_buffer.contents b
+          | Bits32 ->
+              let s = Bytes.create 4 in
+                read_bytes t s 0 4;
+                Msg_buffer.add_string b s;
+                Msg_buffer.contents b
+          | Bits64_float | Bits64_long ->
+              let s = Bytes.create 8 in
+                read_bytes t s 0 8;
+                Msg_buffer.add_string b s;
+                Msg_buffer.contents b
+          | Enum -> Msg_buffer.contents b
+          | Tuple | Htuple | Bytes | Assoc ->
+              let siz = read_vint t in
+                Msg_buffer.resize b (siz + 1);
+                read_bytes t (Msg_buffer.unsafe_contents b) 1 siz;
+                Msg_buffer.unsafe_contents b
+          | Invalid_ll_type -> Error.bad_wire_type ()
+
+      in
+        { TY.buf; last = String.length buf; pos = 0 }
 end
 
 module String_reader =
 struct
-  type t = { mutable buf : string; mutable last : int; mutable pos : int }
+  type t = TY.string_reader = { mutable buf : string; mutable last : int; mutable pos : int }
   type position = int
 
   let read_bytes_is_atomic = true
@@ -267,6 +309,13 @@ struct
     if pos > t.pos then t.pos <- pos
 
   INCLUDE "reader_impl.ml"
+
+  let get_value_reader t =
+    let pos = t.pos in
+    let p   = read_prefix t in
+      skip_value t p;
+      let last = t.pos in
+        { t with last; pos }
 
   let read_message t = Read_msg(t)
 end

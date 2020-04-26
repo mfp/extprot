@@ -27,7 +27,8 @@ sig
 end
 
 type reader_func =
-    [ `Offset
+    [ `Get_value_reader
+    | `Offset
     | `Read_bool
     | `Read_float
     | `Read_i32
@@ -43,6 +44,7 @@ type reader_func =
     | `Read_raw_string
     | `Read_rel_int
     | `Read_string
+    | `Read_message
     | `Read_vint
     | `Skip_to
     | `Skip_value ]

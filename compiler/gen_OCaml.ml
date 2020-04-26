@@ -174,7 +174,7 @@ let default_value_or f default opts =
 let bad_default_value ty s =
   failwith @@ sprintf "invalid %s default value: %S" ty s
 
-let rec default_value t =
+let rec default_value ev_regime t =
   let _loc = Loc.ghost in
   let default_value =
     match t with
@@ -227,17 +227,20 @@ let rec default_value t =
         let id = ident_with_path _loc full_path (name ^ "_default") in
         let e1 = <:expr< ! $id:id$ >> in
           Some <:expr< $e1$ () >>
-    | Tuple (tys, _) -> match maybe_all default_value tys with
+    | Tuple (tys, _) -> match maybe_all (default_value `Eager) tys with
           None -> None
         | Some [] -> failwith "default_value: empty tuple"
         | Some [_] -> failwith "default_value: tuple with only 1 element"
         | Some (hd::tl) -> Some <:expr< ($hd$, $Ast.exCom_of_list tl$) >>
   in
-  match get_type_info @@ type_opts t, default_value with
-  | Some { default=None; ty; _ }, Some _ -> failwith @@ sprintf "no default value specified for external type %s" ty
-  | Some { default=None; _ }, None -> None
-  | Some { default=Some override; _ }, _ -> Some override
-  | None, v -> v
+  match ev_regime, get_type_info @@ type_opts t, default_value with
+  | _, Some { default=None; ty; _ }, Some _ -> failwith @@ sprintf "no default value specified for external type %s" ty
+  | _, Some { default=None; _ }, None -> None
+  | `Eager, Some { default=Some override; _ }, _ -> Some override
+  | `Lazy, Some { default=Some override; _ }, _ -> Some <:expr< XXXLazy.from_val $override$ >>
+  | _, None, None -> None
+  | `Eager, None, Some v -> Some v
+  | `Lazy, None, Some v -> Some <:expr< XXXLazy.from_val $v$ >>
 
 let ident_of_ctyp ty =
   let _loc = Loc.ghost in
@@ -474,7 +477,7 @@ let generate_container bindings =
                    | `Eager -> v
                    | `Lazy -> <:expr< XXXLazy.from_val $v$ >>
                  in
-                   Option.map (fun v -> (name, wrap_lazy v)) (default_value llty))
+                   Option.map (fun v -> (name, wrap_lazy v)) (default_value ev_regime llty))
               fields
           in match default_values with
               None -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
@@ -829,6 +832,7 @@ module Make_reader
          (RD : sig
             val name        : string
             val reader_func : Reader.reader_func -> Ast.expr
+            val make_subreader_and_skip : Ast.expr
             val raw_rd_func : low_level -> (Ast.patt * Ast.expr) option
             val read_msg_func : string -> string
           end) =
@@ -851,7 +855,7 @@ struct
         >>
     | None -> expr
 
-  let rec read_field msgname constr_name name llty =
+  let rec read_field msgname constr_name name ~ev_regime llty =
     let _loc = loc "<generated code @ read_field>" in
 
     let rec read_elms f lltys_and_defs =
@@ -902,15 +906,24 @@ struct
       in read_elms mk_expr lltys
 
     and read t =
-      let expr = match t with
-      | Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
-      | Vint (Int, _) -> <:expr< $RD.reader_func `Read_rel_int$ s >>
-      | Vint (Int8, _) -> <:expr< $RD.reader_func `Read_i8$ s >>
-      | Bitstring32 _ -> <:expr< $RD.reader_func `Read_i32$ s >>
-      | Bitstring64 (Long, _) -> <:expr< $RD.reader_func `Read_i64$ s >>
-      | Bitstring64 (Float, _) -> <:expr< $RD.reader_func `Read_float$ s >>
-      | Bytes _ -> <:expr< $RD.reader_func `Read_string$ s >>
-      | Tuple (lltys, _) ->
+      let expr = match ev_regime, t with
+      | `Eager, Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
+      | `Eager, Vint (Int, _) -> <:expr< $RD.reader_func `Read_rel_int$ s >>
+      | `Eager, Vint (Int8, _) -> <:expr< $RD.reader_func `Read_i8$ s >>
+      | `Eager, Bitstring32 _ -> <:expr< $RD.reader_func `Read_i32$ s >>
+      | `Eager, Bitstring64 (Long, _) -> <:expr< $RD.reader_func `Read_i64$ s >>
+      | `Eager, Bitstring64 (Float, _) -> <:expr< $RD.reader_func `Read_float$ s >>
+      | `Eager, Bytes _ -> <:expr< $RD.reader_func `Read_string$ s >>
+
+      | `Lazy, Vint (Bool, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_bool$ s) >>
+      | `Lazy, Vint (Int, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_rel_int$ s) >>
+      | `Lazy, Vint (Int8, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_i8$ s) >>
+      | `Lazy, Bitstring32 _ -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_i32$ s) >>
+      | `Lazy, Bitstring64 (Long, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_i64$ s) >>
+      | `Lazy, Bitstring64 (Float, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_float$ s) >>
+      | `Lazy, Bytes _ -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_string$ s) >>
+
+      | ev_regime, Tuple (lltys, _) -> begin
           let bad_type_case =
             <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
           let other_cases = match lltys with
@@ -922,7 +935,7 @@ struct
             (* handle missing elements when expanding the primitive type to
              * a Tuple; needs default values *)
             | ty :: tys -> begin match RD.raw_rd_func ty with
-                | Some (mc, reader_expr) -> begin match maybe_all default_value tys with
+                | Some (mc, reader_expr) -> begin match maybe_all (default_value `Eager) tys with
                       None -> bad_type_case
                     | Some defs ->
                         <:match_case<
@@ -934,22 +947,45 @@ struct
               end
             | _ -> (* can't happen *) bad_type_case in
           let tys_with_defvalues =
-            List.map (fun llty -> (llty, default_value llty)) lltys
-          in <:expr<
-               let t = $RD.reader_func `Read_prefix$ s in
-                 match Extprot.Codec.ll_type t with [
-                     Extprot.Codec.Tuple ->
-                       let len = $RD.reader_func `Read_vint$ s in
-                       let eot = $RD.reader_func `Offset$ s len in
-                       let nelms = $RD.reader_func `Read_vint$ s in
-                       let v = $read_tuple_elms tys_with_defvalues$ in begin
-                         $RD.reader_func `Skip_to$ s eot;
-                         v
-                       end
-                   | $other_cases$
-                 ]
-             >>
-      | Sum (constructors, _) ->
+            List.map (fun llty -> (llty, default_value `Eager llty)) lltys
+          in
+            match ev_regime with
+              | `Eager ->
+                  <:expr<
+                     let t = $RD.reader_func `Read_prefix$ s in
+                       match Extprot.Codec.ll_type t with [
+                           Extprot.Codec.Tuple ->
+                             let len = $RD.reader_func `Read_vint$ s in
+                             let eot = $RD.reader_func `Offset$ s len in
+                             let nelms = $RD.reader_func `Read_vint$ s in
+                             let v = $read_tuple_elms tys_with_defvalues$ in begin
+                               $RD.reader_func `Skip_to$ s eot;
+                               v
+                             end
+                         | $other_cases$
+                       ]
+                   >>
+              | `Lazy ->
+                  <:expr<
+                     let s = $RD.reader_func `Get_value_reader$ s in
+                       XXXLazy.from_fun begin fun () ->
+                         let t = $RD.reader_func `Read_prefix$ s in
+                           match Extprot.Codec.ll_type t with [
+                               Extprot.Codec.Tuple ->
+                                 let len = $RD.reader_func `Read_vint$ s in
+                                 let eot = $RD.reader_func `Offset$ s len in
+                                 let nelms = $RD.reader_func `Read_vint$ s in
+                                 let v = $read_tuple_elms tys_with_defvalues$ in begin
+                                   $RD.reader_func `Skip_to$ s eot;
+                                   v
+                                 end
+                             | $other_cases$
+                           ]
+                      end
+                    >>
+        end
+
+      | ev_regime, Sum (constructors, _) -> begin
           let constant, non_constant = partition_constructors constructors in
           let constant_match_cases =
             List.map
@@ -966,7 +1002,7 @@ struct
             let mc (c, lltys) =
               <:match_case<
                  $int:string_of_int c.const_tag$ ->
-                      $read_sum_elms c (List.map (fun llty -> (llty, default_value llty)) lltys)$
+                      $read_sum_elms c (List.map (fun llty -> (llty, default_value `Eager llty)) lltys)$
               >>
             in List.map mc non_constant @
                [ <:match_case<
@@ -1011,7 +1047,7 @@ struct
                 | None -> bad_type_case
               end
             | (c, ty :: tys) :: _ -> begin match RD.raw_rd_func ty with
-                  Some (mc, reader_expr) -> begin match maybe_all default_value tys with
+                  Some (mc, reader_expr) -> begin match maybe_all (default_value `Eager) tys with
                       None -> bad_type_case
                     | Some defs ->
                         <:match_case<
@@ -1023,15 +1059,26 @@ struct
                   end
                 | None -> bad_type_case
               end
-            | _ -> bad_type_case
-          in
+            | _ -> bad_type_case in
+
+          let expr =
             <:expr< let t = $RD.reader_func `Read_prefix$ s in
               match Extprot.Codec.ll_type t with [
                 $Ast.mcOr_of_list match_cases$
                 | $other_cases$
               ]
             >>
-      | Record (name, fields, opts) ->
+          in
+            match ev_regime with
+              | `Eager -> expr
+              | `Lazy ->
+                  <:expr<
+                    let s = $RD.reader_func `Get_value_reader$ s in
+                      XXXLazy.from_fun (fun () -> $expr$)
+                  >>
+        end
+
+      | `Eager, Record (name, fields, opts) ->
           let fields' =
             List.map
               (fun f ->
@@ -1047,11 +1094,40 @@ struct
           in
             wrap_msg_reader name ~promoted_match_cases match_cases
 
-      | Message (path, name, _) ->
+      | `Lazy, Record (name, fields, opts) ->
+          let fields' =
+            List.map
+              (fun f ->
+                 (f.field_name, true,
+                  (if f.field_lazy then `Lazy else `Eager),
+                  f.field_type))
+              fields in
+          let promoted_match_cases =
+            make_promoted_match_cases msgname [ Some name, None, fields' ] in
+          let match_cases =
+            record_case_inlined
+              ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
+          in
+            <:expr<
+              let s = $RD.reader_func `Get_value_reader$ in
+                XXXLazy.from_fun
+                  (fun () -> $wrap_msg_reader name ~promoted_match_cases match_cases$)
+              >>
+
+      | `Eager, Message (path, name, _) ->
           let full_path = path @ [String.capitalize name] in
           let id = ident_with_path _loc full_path (RD.read_msg_func name) in
           <:expr< $id:id$ s >>
-      | Htuple (kind, llty, _) ->
+
+      | `Lazy, Message (path, name, _) ->
+          let full_path = path @ [String.capitalize name] in
+          let id = ident_with_path _loc full_path ("read_" ^ name) in
+            <:expr<
+              let s = $RD.reader_func `Get_value_reader$ s in
+                XXXLazy.from_fun (fun () -> $id:id$ s)
+            >>
+
+      | ev_regime, Htuple (kind, llty, _) -> begin
           let e = match kind with
               List ->
                 let loop = new_lid "loop" in
@@ -1062,23 +1138,49 @@ struct
                     ] in $lid:loop$ [] nelms
                   >>
               | Array ->
-                  <:expr< Array.init nelms (fun _ -> $read llty$) >>
-          in <:expr<
-                let t = $RD.reader_func `Read_prefix$ s in
-                  match Extprot.Codec.ll_type t with [
-                      Extprot.Codec.Htuple ->
-                        let len = $RD.reader_func `Read_vint$ s in
-                        let eoht = $RD.reader_func `Offset$ s len in
-                        let nelms = $RD.reader_func `Read_vint$ s in
-                        let () = Extprot.Limits.check_message_length len in
-                        let () = Extprot.Limits.check_num_elements nelms in
-                        let v = $e$ in begin
-                          $RD.reader_func `Skip_to$ s eoht;
-                          v
-                        end
-                    | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
-                  ]
-              >>
+                  <:expr< Array.init nelms (fun _ -> $read llty$) >> in
+
+          let empty_htuple = match kind with
+            | List -> <:expr< [] >>
+            | Array -> <:expr< [| |] >>
+          in
+            match ev_regime with
+              | `Eager ->
+                  <:expr<
+                      let t = $RD.reader_func `Read_prefix$ s in
+                        match Extprot.Codec.ll_type t with [
+                            Extprot.Codec.Htuple ->
+                              let len = $RD.reader_func `Read_vint$ s in
+                              let eoht = $RD.reader_func `Offset$ s len in
+                              let nelms = $RD.reader_func `Read_vint$ s in
+                              let () = Extprot.Limits.check_message_length len in
+                              let () = Extprot.Limits.check_num_elements nelms in
+                              let v = $e$ in begin
+                                $RD.reader_func `Skip_to$ s eoht;
+                                v
+                              end
+                          | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
+                        ]
+                    >>
+              | `Lazy ->
+                  <:expr<
+                      let t = $RD.reader_func `Read_prefix$ s in
+                        match Extprot.Codec.ll_type t with [
+                            Extprot.Codec.Htuple ->
+                              let len = $RD.reader_func `Read_vint$ s in
+                              let eoht = $RD.reader_func `Offset$ s len in
+                              let nelms = $RD.reader_func `Read_vint$ s in
+                              let () = Extprot.Limits.check_message_length len in
+                              let () = Extprot.Limits.check_num_elements nelms in
+                                if nelms = 0 then
+                                  XXXLazy.from_val $empty_htuple$
+                                else
+                                  let s = $RD.make_subreader_and_skip$ s t in
+                                    XXXLazy.from_fun (fun () -> $e$)
+                          | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
+                        ]
+                    >>
+        end
     in
     wrap_reader (type_opts t) expr
     in
@@ -1102,7 +1204,7 @@ struct
     let constr_name = Option.default "<default>" constr in
 
     let read_field_with_locs fieldno (name, _, ev_regime, llty) =
-      let rescue_match_case = match default_value llty with
+      let rescue_match_case = match default_value ev_regime llty with
           None ->
             <:match_case<
               Extprot.Error.Extprot_error (e, loc) ->
@@ -1121,9 +1223,10 @@ struct
                       ~constructor:$str:constr_name$
                       ~field:$str:name$
                       e loc >> in
-      let default = match default_value llty with
-          Some expr -> expr
-        | None ->
+      let default = match ev_regime, default_value ev_regime llty with
+        | `Eager, Some expr -> expr
+        | `Lazy, Some expr -> <:expr< XXXLazy.from_val $expr$ >>
+        | _, None ->
             <:expr< Extprot.Error.missing_field
                       ~message:$str:msgname$
                       ~constructor:$str:constr_name$
@@ -1137,11 +1240,11 @@ struct
         if locs then
           <:expr<
               try
-                $read_field msgname constr_name name llty$
+                $read_field msgname constr_name name ~ev_regime llty$
               with [$rescue_match_case$]
           >>
         else
-          read_field msgname constr_name name llty
+          read_field msgname constr_name name ~ev_regime llty
       in
         <:str_item<
           value $lid:funcname$ s nelms =
@@ -1162,7 +1265,7 @@ struct
 
     let read_field_with_locs fieldno (name, _, ev_regime, llty) expr =
 
-      let rescue_match_case = match default_value llty with
+      let rescue_match_case = match default_value ev_regime llty with
           None ->
             <:match_case<
               Extprot.Error.Extprot_error (e, loc) ->
@@ -1181,7 +1284,7 @@ struct
                       ~constructor:$str:constr_name$
                       ~field:$str:name$
                       e loc >> in
-      let default = match default_value llty with
+      let default = match default_value ev_regime llty with
           Some expr -> expr
         | None ->
             <:expr< Extprot.Error.missing_field
@@ -1195,11 +1298,11 @@ struct
         if locs then
           <:expr<
             try
-              $read_field msgname constr_name name llty$
+              $read_field msgname constr_name name ~ev_regime llty$
             with [$rescue_match_case$]
           >>
         else
-          read_field msgname constr_name name llty
+          read_field msgname constr_name name ~ev_regime llty
       in
         <:expr<
            let $lid:name$ =
@@ -1297,7 +1400,7 @@ struct
                   $expr$
               >>
         | Some (`Newtype (name, _, ev_regime, llty)) ->
-            let rescue_match_case = match default_value llty with
+            let rescue_match_case = match default_value ev_regime llty with
                 None ->
                   <:match_case<
                     Extprot.Error.Extprot_error (e, loc) ->
@@ -1316,7 +1419,7 @@ struct
                             ~constructor:$str:constr_name$
                             ~field:$str:name$
                             e loc >> in
-            let default = match default_value llty with
+            let default = match default_value ev_regime llty with
                 Some expr -> expr
               | None ->
                   <:expr< Extprot.Error.missing_field
@@ -1330,11 +1433,11 @@ struct
               if locs then
                 <:expr<
                   try
-                    $read_field msgname constr_name name llty$
+                    $read_field msgname constr_name name ~ev_regime llty$
                   with [$rescue_match_case$]
                 >>
               else
-                read_field msgname constr_name name llty
+                read_field msgname constr_name name ~ev_regime llty
             in
               <:expr<
                  let $lid:name$ =
@@ -1432,15 +1535,23 @@ struct
       match fields with
           [] -> failwith (sprintf "no fields in msg %s" msgname)
         | (_field_name, _, ev_regime, field_type) :: _ ->
-            match RD.raw_rd_func field_type with
-                None -> <:expr< raise_bad_wire_type () >>
-              | Some (mc, reader_expr) ->
+            match ev_regime, RD.raw_rd_func field_type with
+              | _, None -> <:expr< raise_bad_wire_type () >>
+              | `Eager, Some (mc, reader_expr) ->
                 <:expr<
                   match Extprot.Codec.ll_type t with [
                       $mc$ -> $reader_expr$ s
                     | _ -> raise_bad_wire_type ()
                   ]
-                >> in
+                >>
+              | `Lazy, Some (mc, reader_expr) ->
+                <:expr<
+                  match Extprot.Codec.ll_type t with [
+                      $mc$ -> XXXLazy.from_val ($reader_expr$ s)
+                    | _ -> raise_bad_wire_type ()
+                  ]
+                >>
+    in
 
     let other_field_readers =
       match fields with
@@ -1448,8 +1559,8 @@ struct
         | _ :: others ->
             List.map
               (fun (name, _, ev_regime, llty) ->
-                 match default_value llty with
-                     Some expr -> expr
+                 match default_value ev_regime llty with
+                   | Some expr -> expr
                    | None ->
                        <:expr< Extprot.Error.missing_field
                                  ~message:$str:msgname$
@@ -1630,6 +1741,9 @@ let add_message_reader bindings msgname mexpr opts c =
 
                   let raw_rd_func = raw_rd_func reader_func
 
+                  let make_subreader_and_skip =
+                    <:expr< Extprot.Reader.String_reader.make_sub_and_skip >>
+
                   let read_msg_func = ((^) "read_")
                 end) in
 
@@ -1668,6 +1782,9 @@ let add_message_io_reader bindings msgname mexpr opts c =
                   let reader_func t =
                     <:expr< Extprot.Reader.IO_reader.
                               $lid:Reader.string_of_reader_func t$ >>
+
+                  let make_subreader_and_skip =
+                    <:expr< Extprot.Reader.IO_reader.make_sub_and_skip >>
 
                   let raw_rd_func = raw_rd_func reader_func
 
