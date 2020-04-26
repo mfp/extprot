@@ -880,7 +880,7 @@ struct
                      <:expr<
                        let $lid:varname$ =
                          if nelms >= $int:string_of_int (n+1)$ then
-                           $read llty$
+                           $read ~ev_regime:`Eager llty$
                          else $expr$
                        in $e$
                      >>)
@@ -901,7 +901,7 @@ struct
           vars
       in read_elms mk_expr lltys
 
-    and read t =
+    and read ?(ev_regime = ev_regime) t =
       let expr = match ev_regime, t with
       | `Eager, Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
       | `Eager, Vint (Int, _) -> <:expr< $RD.reader_func `Read_rel_int$ s >>
