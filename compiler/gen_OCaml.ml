@@ -237,10 +237,10 @@ let rec default_value ev_regime t =
   | _, Some { default=None; ty; _ }, Some _ -> failwith @@ sprintf "no default value specified for external type %s" ty
   | _, Some { default=None; _ }, None -> None
   | `Eager, Some { default=Some override; _ }, _ -> Some override
-  | `Lazy, Some { default=Some override; _ }, _ -> Some <:expr< XXXLazy.from_val $override$ >>
+  | `Lazy, Some { default=Some override; _ }, _ -> Some <:expr< Extprot.Field.from_val $override$ >>
   | _, None, None -> None
   | `Eager, None, Some v -> Some v
-  | `Lazy, None, Some v -> Some <:expr< XXXLazy.from_val $v$ >>
+  | `Lazy, None, Some v -> Some <:expr< Extprot.Field.from_val $v$ >>
 
 let ident_of_ctyp ty =
   let _loc = Loc.ghost in
@@ -290,7 +290,7 @@ let generate_container bindings =
           let ty = ctyp_of_texpr bindings texpr in
           let ty = match ev_regime with
             | `Eager -> ty
-            | `Lazy -> <:ctyp< XXXLazy.t $ty$ >>
+            | `Lazy -> <:ctyp< Extprot.Field.t $ty$ >>
           in
             match mutabl with
                 true -> <:ctyp< $lid:name$ : mutable $ty$ >>
@@ -383,7 +383,7 @@ let generate_container bindings =
          let ty = ctyp_of_texpr bindings texpr in
          let ty = match ev_regime with
            | `Eager -> ty
-           | `Lazy -> <:ctyp< XXXLazy.t $ty$ >>
+           | `Lazy -> <:ctyp< Extprot.Field.t $ty$ >>
          in
            match mutabl with
              true -> <:ctyp< $lid:name$ : mutable $ty$ >>
@@ -540,7 +540,7 @@ let generate_container bindings =
                 let ty = ctyp_of_poly_texpr_core bindings texpr in
                 let ty = match ev_regime with
                   | `Eager -> ty
-                  | `Lazy -> <:ctyp< XXXLazy.t $ty$ >>
+                  | `Lazy -> <:ctyp< Extprot.Field.t $ty$ >>
                 in
                   match mutabl with
                     true -> <:ctyp< $lid:name$ : mutable $ty$ >>
@@ -700,8 +700,8 @@ struct
       let selector = match namespace, ev_regime with
         | None, `Eager -> <:expr< (fun t -> t.$lid:name$) >>
         | Some ns, `Eager -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >>
-        | None, `Lazy -> <:expr< (fun t -> XXXLazy.force t.$lid:name$) >>
-        | Some ns, `Lazy -> <:expr< (fun t -> XXXLazy.force t.$uid:String.capitalize ns$.$lid:name$) >>
+        | None, `Lazy -> <:expr< (fun t -> Extprot.Field.force t.$lid:name$) >>
+        | Some ns, `Lazy -> <:expr< (fun t -> Extprot.Field.force t.$uid:String.capitalize ns$.$lid:name$) >>
       in
       let prefix = match namespace with
           None -> String.capitalize msgname
@@ -795,7 +795,7 @@ struct
 
             let selector = match ev_regime with
               | `Eager -> <:expr< (fun t -> t.$lid:name$) >>
-              | `Lazy ->  <:expr< (fun t -> XXXLazy.force t.$lid:name$) >>
+              | `Lazy ->  <:expr< (fun t -> Extprot.Field.force t.$lid:name$) >>
             in
               <:expr<
                 ( $str:field_name$,
@@ -911,13 +911,13 @@ struct
       | `Eager, Bitstring64 (Float, _) -> <:expr< $RD.reader_func `Read_float$ s >>
       | `Eager, Bytes _ -> <:expr< $RD.reader_func `Read_string$ s >>
 
-      | `Lazy, Vint (Bool, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_bool$ s) >>
-      | `Lazy, Vint (Int, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_rel_int$ s) >>
-      | `Lazy, Vint (Int8, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_i8$ s) >>
-      | `Lazy, Bitstring32 _ -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_i32$ s) >>
-      | `Lazy, Bitstring64 (Long, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_i64$ s) >>
-      | `Lazy, Bitstring64 (Float, _) -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_float$ s) >>
-      | `Lazy, Bytes _ -> <:expr< XXXLazy.from_val ($RD.reader_func `Read_string$ s) >>
+      | `Lazy, Vint (Bool, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_bool$ s) >>
+      | `Lazy, Vint (Int, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_rel_int$ s) >>
+      | `Lazy, Vint (Int8, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_i8$ s) >>
+      | `Lazy, Bitstring32 _ -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_i32$ s) >>
+      | `Lazy, Bitstring64 (Long, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_i64$ s) >>
+      | `Lazy, Bitstring64 (Float, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_float$ s) >>
+      | `Lazy, Bytes _ -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_string$ s) >>
 
       | ev_regime, Tuple (lltys, _) -> begin
           let bad_type_case =
@@ -964,7 +964,7 @@ struct
               | `Lazy ->
                   <:expr<
                      let s = $RD.reader_func `Get_value_reader$ s in
-                       XXXLazy.from_fun begin fun () ->
+                       Extprot.Field.from_fun begin fun () ->
                          let t = $RD.reader_func `Read_prefix$ s in
                            match Extprot.Codec.ll_type t with [
                                Extprot.Codec.Tuple ->
@@ -1070,7 +1070,7 @@ struct
               | `Lazy ->
                   <:expr<
                     let s = $RD.reader_func `Get_value_reader$ s in
-                      XXXLazy.from_fun (fun () -> $expr$)
+                      Extprot.Field.from_fun (fun () -> $expr$)
                   >>
         end
 
@@ -1106,7 +1106,7 @@ struct
           in
             <:expr<
               let s = $RD.reader_func `Get_value_reader$ in
-                XXXLazy.from_fun
+                Extprot.Field.from_fun
                   (fun () -> $wrap_msg_reader name ~promoted_match_cases match_cases$)
               >>
 
@@ -1120,7 +1120,7 @@ struct
           let id = ident_with_path _loc full_path ("read_" ^ name) in
             <:expr<
               let s = $RD.reader_func `Get_value_reader$ s in
-                XXXLazy.from_fun (fun () -> $id:id$ s)
+                Extprot.Field.from_fun (fun () -> $id:id$ s)
             >>
 
       | ev_regime, Htuple (kind, llty, _) -> begin
@@ -1169,10 +1169,10 @@ struct
                               let () = Extprot.Limits.check_message_length len in
                               let () = Extprot.Limits.check_num_elements nelms in
                                 if nelms = 0 then
-                                  XXXLazy.from_val $empty_htuple$
+                                  Extprot.Field.from_val $empty_htuple$
                                 else
                                   let s = $RD.make_subreader_and_skip$ s t in
-                                    XXXLazy.from_fun (fun () -> $e$)
+                                    Extprot.Field.from_fun (fun () -> $e$)
                           | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
                         ]
                     >>
@@ -1221,7 +1221,7 @@ struct
                       e loc >> in
       let default = match ev_regime, default_value ev_regime llty with
         | `Eager, Some expr -> expr
-        | `Lazy, Some expr -> <:expr< XXXLazy.from_val $expr$ >>
+        | `Lazy, Some expr -> <:expr< Extprot.Field.from_val $expr$ >>
         | _, None ->
             <:expr< Extprot.Error.missing_field
                       ~message:$str:msgname$
@@ -1543,7 +1543,7 @@ struct
               | `Lazy, Some (mc, reader_expr) ->
                 <:expr<
                   match Extprot.Codec.ll_type t with [
-                      $mc$ -> XXXLazy.from_val ($reader_expr$ s)
+                      $mc$ -> Extprot.Field.from_val ($reader_expr$ s)
                     | _ -> raise_bad_wire_type ()
                   ]
                 >>
@@ -1929,9 +1929,9 @@ let rec write_field ~ev_regime ?namespace fname llty =
     match ev_regime with
       | `Eager -> write v llty
       | `Lazy ->
-          let force_and_write = write <:expr< XXXLazy.force $v$ >> llty in
+          let force_and_write = write <:expr< Extprot.Field.force $v$ >> llty in
             <:expr<
-              match XXXLazy.get_reader $v$ with [
+              match Extprot.Field.get_reader $v$ with [
                   None -> $force_and_write$
                 | Some r -> Extprot.Reader.append_to_buffer r aux
               ]
