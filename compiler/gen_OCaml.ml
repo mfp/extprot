@@ -828,7 +828,7 @@ module Make_reader
          (RD : sig
             val name        : string
             val reader_func : Reader.reader_func -> Ast.expr
-            val make_subreader_and_skip : Ast.expr
+            val get_string_subreader : Ast.expr option
             val raw_rd_func : low_level -> (Ast.patt * Ast.expr) option
             val read_msg_func : string -> string
           end) =
@@ -964,7 +964,7 @@ struct
               | `Lazy ->
                   <:expr<
                      let s = $RD.reader_func `Get_value_reader$ s in
-                       Extprot.Field.from_fun begin fun () ->
+                       Extprot.Field.from_fun s begin fun s ->
                          let t = $RD.reader_func `Read_prefix$ s in
                            match Extprot.Codec.ll_type t with [
                                Extprot.Codec.Tuple ->
@@ -1070,7 +1070,7 @@ struct
               | `Lazy ->
                   <:expr<
                     let s = $RD.reader_func `Get_value_reader$ s in
-                      Extprot.Field.from_fun (fun () -> $expr$)
+                      Extprot.Field.from_fun s (fun s -> $expr$)
                   >>
         end
 
@@ -1106,8 +1106,8 @@ struct
           in
             <:expr<
               let s = $RD.reader_func `Get_value_reader$ in
-                Extprot.Field.from_fun
-                  (fun () -> $wrap_msg_reader name ~promoted_match_cases match_cases$)
+                Extprot.Field.from_fun s
+                  (fun s -> $wrap_msg_reader name ~promoted_match_cases match_cases$)
               >>
 
       | `Eager, Message (path, name, _) ->
@@ -1120,7 +1120,7 @@ struct
           let id = ident_with_path _loc full_path ("read_" ^ name) in
             <:expr<
               let s = $RD.reader_func `Get_value_reader$ s in
-                Extprot.Field.from_fun (fun () -> $id:id$ s)
+                Extprot.Field.from_fun s (fun s -> $id:id$ s)
             >>
 
       | ev_regime, Htuple (kind, llty, _) -> begin
@@ -1159,23 +1159,60 @@ struct
                         ]
                     >>
               | `Lazy ->
-                  <:expr<
-                      let t = $RD.reader_func `Read_prefix$ s in
-                        match Extprot.Codec.ll_type t with [
-                            Extprot.Codec.Htuple ->
-                              let len = $RD.reader_func `Read_vint$ s in
-                              let eoht = $RD.reader_func `Offset$ s len in
-                              let nelms = $RD.reader_func `Read_vint$ s in
-                              let () = Extprot.Limits.check_message_length len in
-                              let () = Extprot.Limits.check_num_elements nelms in
-                                if nelms = 0 then
-                                  Extprot.Field.from_val $empty_htuple$
-                                else
-                                  let s = $RD.make_subreader_and_skip$ s t in
-                                    Extprot.Field.from_fun (fun () -> $e$)
-                          | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
-                        ]
-                    >>
+
+                  let from_fun_expr =
+                    match RD.get_string_subreader with
+                      | None ->
+                          <:expr<
+                            let dat = $RD.reader_func `Read_raw_string$ len in
+                            let ()  = $RD.reader_func `Skip_to$ s eoht in
+                            let b   =
+                              Msg_buffer.make
+                                (if nelms < 128 && len < 128 then 3 + len
+                                 else 8 + len)
+                            in
+                              do {
+                                Msg_buffer.add_vint b t;
+                                Msg_buffer.add_vint b len;
+                                Msg_buffer.add_vint b nelms;
+                                Msg_buffer.add_string b dat;
+                                Extprot.Field.from_fun
+                                  (Extprot.String_reader.from_msgbuffer b)
+                                  (fun s -> $e$)
+                              }
+                            >>
+                      | Some f ->
+                          <:expr<
+                            do {
+                              $RD.reader_func `Skip_to$ s eoht;
+                              Extprot.Field.from_fun
+                                (try ($f$ s ~off:boht ~len:(eoht - boht))
+                                 with _ ->
+                                   Extprot.Error.limit_exceeded
+                                     ~message:$str:msgname$
+                                     ~constructor:$str:constr_name$
+                                     ~field:$str:name$ (Extprot.Error.Message_length (eoht - boht)))
+                                (fun s -> $e$)
+                            }
+                            >>
+                  in
+                    <:expr<
+                        let boht = $RD.reader_func `Offset$ s len in
+                        let t    = $RD.reader_func `Read_prefix$ s in
+                          match Extprot.Codec.ll_type t with [
+                              Extprot.Codec.Htuple ->
+                                let len = $RD.reader_func `Read_vint$ s in
+                                let eoht = $RD.reader_func `Offset$ s len in
+                                let nelms = $RD.reader_func `Read_vint$ s in
+                                let () = Extprot.Limits.check_message_length len in
+                                let () = Extprot.Limits.check_num_elements nelms in
+                                  if nelms = 0 then do {
+                                    $RD.reader_func `Skip_to$ s eoht;
+                                    Extprot.Field.from_val $empty_htuple$
+                                  } else $from_fun_expr$
+                            | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
+                          ]
+                      >>
         end
     in
     wrap_reader (type_opts t) expr
@@ -1737,8 +1774,8 @@ let add_message_reader bindings msgname mexpr opts c =
 
                   let raw_rd_func = raw_rd_func reader_func
 
-                  let make_subreader_and_skip =
-                    <:expr< Extprot.Reader.String_reader.make_sub_and_skip >>
+                  let get_string_subreader =
+                    Some <:expr< Extprot.Reader.String_reader.make_sub >>
 
                   let read_msg_func = ((^) "read_")
                 end) in
@@ -1779,8 +1816,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
                     <:expr< Extprot.Reader.IO_reader.
                               $lid:Reader.string_of_reader_func t$ >>
 
-                  let make_subreader_and_skip =
-                    <:expr< Extprot.Reader.IO_reader.make_sub_and_skip >>
+                  let get_string_subreader = None
 
                   let raw_rd_func = raw_rd_func reader_func
 

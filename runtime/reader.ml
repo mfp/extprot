@@ -240,7 +240,15 @@ struct
       invalid_arg "Reader.String_reader.make";
     { buf = s; pos = off; last = off + len }
 
+  let make_sub t ~off ~len =
+    if off < 0 || len < 0 || off + len > t.last then
+      invalid_arg "Reader.String_reader.make_sub";
+    { buf = t.buf; pos = off; last = off + len }
+
   let from_string s = make s 0 (String.length s)
+
+  let from_msgbuffer b =
+    { buf = Msg_buffer.unsafe_contents b; pos = 0; last = Msg_buffer.length b }
 
   let from_io_reader' ch =
     let hd = IO_reader.read_prefix ch in

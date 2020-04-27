@@ -61,6 +61,10 @@ end
 module String_reader : sig
   include S
   val make : string -> int -> int -> t
+
+  val make_sub : t -> off:int -> len:int -> t
+
+  val from_msgbuffer : Msg_buffer.t -> t
   val from_string : string -> t
   val from_io_reader : IO_reader.t -> t
   (** @return the reader and the message string *)
