@@ -1311,7 +1311,7 @@ struct
 
     let field_assigns =
       List.map
-        (fun (name, _, ev_regime, _) -> match namespace with
+        (fun (name, _, _ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
         fields in
@@ -1336,10 +1336,10 @@ struct
           with [ e -> begin $RD.reader_func `Skip_to$ s eom; raise e end ]
       >>
 
-  and record_case msgname ~locs ?namespace ?constr tag fields =
+  and record_case msgname ~locs:_ ?namespace ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
 
-    let read_field_using_func _ (name, _, ev_regime, _) expr =
+    let read_field_using_func _ (name, _, _ev_regime, _) expr =
       let funcname = field_reader_funcname ~msgname ~constr ~name in
         <:expr<
           let $lid:name$ = $lid:funcname$ s nelms in
@@ -1349,7 +1349,7 @@ struct
 
     let field_assigns =
       List.map
-        (fun (name, _, ev_regime, _) -> match namespace with
+        (fun (name, _, _ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
         fields in
@@ -1389,7 +1389,7 @@ struct
               in
                 $expr$
             >>
-        | Some (`Orig field) ->
+        | Some (`Orig _field) ->
             let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
               <:expr<
                 let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms in
@@ -1447,7 +1447,7 @@ struct
 
     let field_assigns =
       List.map
-        (fun (name, _, ev_regime, _) -> match namespace with
+        (fun (name, _, _ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>) @@
       List.map subset_field @@
@@ -1463,7 +1463,7 @@ struct
         (fun (i, fieldinfo) e -> read_field_with_locs_if_kept i fieldinfo e)
         (List.mapi (fun i x -> (i, x)) @@
          List.fold_right
-           (fun ((name, _, _, _) as f) fs -> match fs with
+           (fun ((_name, _, _, _) as f) fs -> match fs with
               | _ :: _ -> f :: fs
               | [] -> if Option.is_some @@ must_keep_field subset f then f :: fs else [])
            fields [])
@@ -1568,7 +1568,7 @@ struct
 
     let field_assigns =
       List.mapi
-        (fun i (name, _, ev_regime, _) -> match namespace with
+        (fun i (name, _, _ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:sprintf "v%d" i$ >>
            | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ =
                                           $lid:sprintf "v%d" i$ >>)
