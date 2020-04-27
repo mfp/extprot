@@ -67,4 +67,6 @@ module String_reader : sig
   val from_io_reader' : IO_reader.t -> t * string
   val from_io : IO.input -> t
   val close : t -> unit
+
+  val append_to_buffer : t -> Msg_buffer.t -> unit
 end

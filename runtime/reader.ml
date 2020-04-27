@@ -318,4 +318,7 @@ struct
         { t with last; pos }
 
   let read_message t = Read_msg(t)
+
+  let append_to_buffer t b =
+    Msg_buffer.add_substring b t.buf t.pos (t.last - t.pos)
 end

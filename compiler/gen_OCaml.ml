@@ -1803,7 +1803,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
              >>
     }
 
-let rec write_field ~ev_regime ?namespace fname =
+let rec write_field ~ev_regime ?namespace fname llty =
   let _loc = Loc.mk "<generated code @ write>" in
   let simple_write_func = function
       Vint (Bool, _) -> "write_bool"
@@ -1818,7 +1818,7 @@ let rec write_field ~ev_regime ?namespace fname =
   let rec write_tuple_values tag var_tys =
     let nelms = List.length var_tys in
     let write_elms =
-      List.map (fun (v, ty) -> write ~ev_regime:`Eager <:expr< $lid:v$ >> ty) var_tys
+      List.map (fun (v, ty) -> write <:expr< $lid:v$ >> ty) var_tys
     in
       <:expr<
         let abuf =
@@ -1847,40 +1847,22 @@ let rec write_field ~ev_regime ?namespace fname =
           $write_tuple_values tag var_tys$
       >>
 
-  and write ~ev_regime v llty = match ev_regime, llty with
-    | `Eager, (Vint (_, opts) | Bitstring32 opts | Bitstring64 (_, opts) | Bytes opts) ->
+  and write v llty = match llty with
+    | Vint (_, opts) | Bitstring32 opts | Bitstring64 (_, opts) | Bytes opts ->
         <:expr< Extprot.Msg_buffer.$lid:simple_write_func llty$
                   aux $wrap_value opts v$ >>
-    | `Lazy, (Vint (_, opts) | Bitstring32 opts | Bitstring64 (_, opts) | Bytes opts) ->
-        let v = match ev_regime with
-          | `Eager -> v
-          | `Lazy -> <:expr< XXXLazy.force $v$ >>
-        in
-          <:expr< Extprot.Msg_buffer.$lid:simple_write_func llty$
-                    aux $wrap_value opts v$ >>
-    | `Eager, Message (path, name, _) ->
+    | Message (path, name, _) ->
         let full_path = path @ [String.capitalize name] in
         let id = ident_with_path _loc full_path ("write_" ^ name) in
           <:expr< $id:id$ aux $v$ >>
-    | `Lazy, Message (path, name, _) ->
-        let full_path = path @ [String.capitalize name] in
-        let id = ident_with_path _loc full_path ("write_" ^ name) in
-          <:expr< $id:id$ aux (XXXLazy.force $v$) >>
-    | `Eager, Tuple (lltys, opts) -> write_tuple 0 (wrap_value opts v) lltys
-    | `Lazy, Tuple (lltys, opts) ->
-        let v = <:expr< XXXLazy.force $v$ >> in
-          write_tuple 0 (wrap_value opts v) lltys
-    | ev_regime, Htuple (kind, llty, opts) ->
+    | Tuple (lltys, opts) -> write_tuple 0 (wrap_value opts v) lltys
+    | Htuple (kind, llty, opts) ->
         let iter_f = match kind with
             Array -> <:expr< Array.iter >>
-          | List -> <:expr< List.iter >> in
-
-        let v = match ev_regime with
-          | `Eager -> v
-          | `Lazy -> <:expr< XXXLazy.force $v$ >>
+          | List -> <:expr< List.iter >>
         in
           <:expr<
-            let write_elm aux v = $write ~ev_regime:`Eager <:expr< v >> llty$ in
+            let write_elm aux v = $write <:expr< v >> llty$ in
             let nelms = ref 0 in
             let abuf = Extprot.Msg_buffer.create () in do {
                 $iter_f$ (fun v -> do { write_elm abuf v; incr nelms })
@@ -1894,11 +1876,7 @@ let rec write_field ~ev_regime ?namespace fname =
                 Extprot.Msg_buffer.discard abuf
               }
          >>
-    | ev_regime, Sum (constructors, opts) ->
-        let v = match ev_regime with
-          | `Eager -> v
-          | `Lazy -> <:expr< XXXLazy.force $v$ >> in
-
+    | Sum (constructors, opts) ->
         let constant, non_constant = partition_constructors constructors in
         let constant_match_cases =
           List.map
@@ -1928,10 +1906,7 @@ let rec write_field ~ev_regime ?namespace fname =
                 <:expr< match $tof$ $v$ with [ $Ast.mcOr_of_list match_cases$ ] >>
           end
 
-    | ev_regime, Record (name, fields, opts) ->
-        let v = match ev_regime with
-          | `Eager -> v
-          | `Lazy -> <:expr< XXXLazy.force $v$ >> in
+    | Record (name, fields, opts) ->
 
         let fields' =
           List.map
@@ -1945,11 +1920,22 @@ let rec write_field ~ev_regime ?namespace fname =
         in
           <:expr< let b = aux in
                   let msg = $ v $ in
-                    $dump_fields ~namespace:name 0 fields'$ >>
+                    $dump_fields ~namespace:name 0 fields'$ >> in
 
-  in match namespace with
-    | None -> write ~ev_regime <:expr< msg.$lid:fname$ >>
-    | Some ns -> write ~ev_regime <:expr< msg.$uid:String.capitalize ns$.$lid:fname$ >>
+  let v = match namespace with
+      | None -> <:expr< msg.$lid:fname$ >>
+      | Some ns -> <:expr< msg.$uid:String.capitalize ns$.$lid:fname$ >>
+  in
+    match ev_regime with
+      | `Eager -> write v llty
+      | `Lazy ->
+          let force_and_write = write <:expr< XXXLazy.force $v$ >> llty in
+            <:expr<
+              match XXXLazy.get_reader $v$ with [
+                  None -> $force_and_write$
+                | Some r -> Extprot.Reader.append_to_buffer r aux
+              ]
+            >>
 
 and write_fields ?namespace fs =
   Ast.exSem_of_list @@
