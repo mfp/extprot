@@ -62,7 +62,7 @@ module String_reader : sig
   include S
   val make : string -> int -> int -> t
 
-  val make_sub : t -> off:int -> len:int -> t
+  val make_sub : t -> off:position -> upto:position -> t
 
   val from_msgbuffer : Msg_buffer.t -> t
   val from_string : string -> t
@@ -73,4 +73,6 @@ module String_reader : sig
   val close : t -> unit
 
   val append_to_buffer : t -> Msg_buffer.t -> unit
+
+  val range_length : position -> position -> int
 end

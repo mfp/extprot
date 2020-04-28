@@ -854,7 +854,7 @@ struct
   let rec read_field msgname constr_name name ~ev_regime llty =
     let _loc = loc "<generated code @ read_field>" in
 
-    let rec read_elms f lltys_and_defs =
+    let rec read_constructor_elms f lltys_and_defs =
       (* TODO: handle missing elms *)
       let vars = List.rev @@ Array.to_list @@
                  Array.init (List.length lltys_and_defs) (sprintf "v%d")
@@ -867,7 +867,7 @@ struct
                      <:expr<
                        let $lid:varname$ =
                          if nelms >= $int:string_of_int (n+1)$ then
-                           $read llty$
+                           $read ~ev_regime:`Eager llty$
                          else
                            Extprot.Error.missing_tuple_element
                              ~message:$str:msgname$
@@ -890,7 +890,7 @@ struct
     and read_tuple_elms lltys_and_defs =
       let mk_tup vars =
         Ast.exCom_of_list @@ List.map (fun v -> <:expr< $lid:v$ >>) vars
-      in read_elms mk_tup lltys_and_defs
+      in read_constructor_elms mk_tup lltys_and_defs
 
     and read_sum_elms constr lltys =
       let c = constr in
@@ -899,9 +899,9 @@ struct
           (fun e var -> <:expr< $e$ $lid:var$ >>)
           <:expr< $uid:String.capitalize c.const_type$.$uid:c.const_name$ >>
           vars
-      in read_elms mk_expr lltys
+      in read_constructor_elms mk_expr lltys
 
-    and read ?(ev_regime = ev_regime) t =
+    and read ~ev_regime t =
       let expr = match ev_regime, t with
       | `Eager, Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
       | `Eager, Vint (Int, _) -> <:expr< $RD.reader_func `Read_rel_int$ s >>
@@ -1130,11 +1130,11 @@ struct
                   <:expr<
                     let rec $lid:loop$ acc = fun [
                         0 -> List.rev acc
-                      | n -> let v = $read llty$ in $lid:loop$ [v :: acc] (n - 1)
+                      | n -> let v = $read ~ev_regime:`Eager llty$ in $lid:loop$ [v :: acc] (n - 1)
                     ] in $lid:loop$ [] nelms
                   >>
               | Array ->
-                  <:expr< Array.init nelms (fun _ -> $read llty$) >> in
+                  <:expr< Array.init nelms (fun _ -> $read ~ev_regime:`Eager llty$) >> in
 
           let empty_htuple = match kind with
             | List -> <:expr< [] >>
@@ -1186,18 +1186,20 @@ struct
                             do {
                               $RD.reader_func `Skip_to$ s eoht;
                               Extprot.Field.from_fun
-                                (try ($f$ s ~off:boht ~len:(eoht - boht))
+                                (try ($f$ s ~off:boht ~upto:eoht)
                                  with _ ->
                                    Extprot.Error.limit_exceeded
                                      ~message:$str:msgname$
                                      ~constructor:$str:constr_name$
-                                     ~field:$str:name$ (Extprot.Error.Message_length (eoht - boht)))
+                                     ~field:$str:name$
+                                     (Extprot.Error.Message_length
+                                       (Extprot.Reader.String_reader.range_length boht eoht)))
                                 (fun s -> $e$)
                             }
                             >>
                   in
                     <:expr<
-                        let boht = $RD.reader_func `Offset$ s len in
+                        let boht = $RD.reader_func `Offset$ s 0 in
                         let t    = $RD.reader_func `Read_prefix$ s in
                           match Extprot.Codec.ll_type t with [
                               Extprot.Codec.Htuple ->
@@ -1217,7 +1219,7 @@ struct
     in
     wrap_reader (type_opts t) expr
     in
-    read llty
+    read ~ev_regime llty
 
   and field_reader_funcname ~msgname ~constr ~name =
     let mangle s =
@@ -1969,7 +1971,7 @@ let rec write_field ~ev_regime ?namespace fname llty =
             <:expr<
               match Extprot.Field.get_reader $v$ with [
                   None -> $force_and_write$
-                | Some r -> Extprot.Reader.append_to_buffer r aux
+                | Some r -> Extprot.Reader.String_reader.append_to_buffer r aux
               ]
             >>
 

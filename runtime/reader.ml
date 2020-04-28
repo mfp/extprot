@@ -240,10 +240,10 @@ struct
       invalid_arg "Reader.String_reader.make";
     { buf = s; pos = off; last = off + len }
 
-  let make_sub t ~off ~len =
-    if off < 0 || len < 0 || off + len > t.last then
+  let make_sub t ~off ~upto:last =
+    if off < 0 || last < 0 || last > t.last then
       invalid_arg "Reader.String_reader.make_sub";
-    { buf = t.buf; pos = off; last = off + len }
+    { buf = t.buf; pos = off; last; }
 
   let from_string s = make s 0 (String.length s)
 
@@ -329,4 +329,6 @@ struct
 
   let append_to_buffer t b =
     Msg_buffer.add_substring b t.buf t.pos (t.last - t.pos)
+
+  let range_length off upto = upto - off
 end
