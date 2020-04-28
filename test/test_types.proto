@@ -203,4 +203,19 @@ message defv2b = { c : color; p : pair_int_42__43 }
 
 message defv2c = { c : color; p : tuple<int_42, int__43> }
 
+message lazy01 = { v [@lazy] : bool }
+type lazyT 'a  = { v [@lazy] : 'a }
+message lazy02 = lazyT<int>
+message lazy03 = { v [@lazy] : int; v2 [@lazy] : int [@default 42] }
+message lazy04 = { v [@lazy] : int; v2 [@lazy] : [ int ] }
+message lazy05 = { v [@lazy] : int; v2 [@lazy] : [| int |] }
+message lazy06 = { x : int; v [@lazy] : sum_type2<int> }
+message lazy07 = { v [@lazy] : simple_bool }
+message lazy08 = { x : int; v [@lazy] : simple_bool }
+message lazy09 = { v [@lazy] : msg_sum }
+message lazy10 = { v [@lazy] : (simple_bool * simple_bool) }
+message lazy11 = { v [@lazy] : (msg_sum * msg_sum) }
+message lazy12 = { v [@lazy] : [ msg_sum ] }
+message lazy13 = A { v [@lazy] : bool } | B { x : int; v [@lazy] : sum_type2<int> }
+
 (* vim:set ft=ocaml: *)
