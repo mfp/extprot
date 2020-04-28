@@ -20,6 +20,8 @@ sig
   val read_raw_i64 : t -> Int64.t
   val read_raw_float : t -> float
   val read_raw_string : t -> string
+
+  val read_serialized_data : t -> int -> string
   val offset : t -> int -> position
   val skip_to : t -> position -> unit
   val skip_value : t -> Codec.prefix -> unit
@@ -46,19 +48,21 @@ type reader_func =
     | `Read_string
     | `Read_message
     | `Read_vint
+    | `Read_serialized_data
     | `Skip_to
     | `Skip_value ]
 
 val string_of_reader_func : reader_func -> string
 
-module IO_reader : sig
+module rec IO_reader : sig
   include S
   val from_io : IO.input -> t
   val from_string : ?offset:int -> string -> t
   val from_file : string -> t
+  val get_value_reader : t -> String_reader.t
 end
 
-module String_reader : sig
+and String_reader : sig
   include S
   val make : string -> int -> int -> t
 
@@ -75,4 +79,5 @@ module String_reader : sig
   val append_to_buffer : t -> Msg_buffer.t -> unit
 
   val range_length : position -> position -> int
+  val get_value_reader : t -> t
 end

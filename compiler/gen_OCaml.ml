@@ -824,14 +824,104 @@ let partition_constructors l =
   let nc = List.filter_map (function `Non_constant x -> Some x | _ -> None) l in
     (c, nc)
 
-module Make_reader
-         (RD : sig
-            val name        : string
-            val reader_func : Reader.reader_func -> Ast.expr
-            val get_string_subreader : Ast.expr option
-            val raw_rd_func : low_level -> (Ast.patt * Ast.expr) option
-            val read_msg_func : string -> string
-          end) =
+module type READER_OPS =
+sig
+  val name        : string
+  val reader_func : Reader.reader_func -> Ast.expr
+  val get_string_subreader : Ast.expr option
+  val raw_rd_func : low_level -> (Ast.patt * Ast.expr) option
+  val read_msg_func : string -> string
+end
+
+let raw_rd_func reader_func =
+  let _loc = Loc.ghost in
+  let wrap t readerf = match get_type_info @@ type_opts t with
+        Some { fromf; _ } ->
+          <:expr<
+            (fun s ->
+               try
+                 $fromf$ ($readerf$ s)
+               with [ Extprot.Error.Extprot_error _ as e -> raise e
+                    | e -> Extprot.Error.conversion_error e])
+          >>
+      | None -> readerf in
+  let patt = patt_of_ll_type in
+  let module C = Codec in
+  fun t ->
+    let x = match t with
+    | Vint (Bool, _) -> Some (patt C.Bits8, reader_func `Read_raw_bool)
+    | Vint (Int8, _) -> Some (patt C.Bits8, reader_func `Read_raw_i8)
+    | Vint (Int, _) -> Some (patt C.Vint, reader_func `Read_raw_rel_int)
+    | Bitstring32 _ -> Some (patt C.Bits32, reader_func `Read_raw_i32)
+    | Bitstring64 (Long, _) -> Some (patt C.Bits64_long, reader_func `Read_raw_i64)
+    | Bitstring64 (Float, _) -> Some (patt C.Bits64_float, reader_func `Read_raw_float)
+    | Bytes _ -> Some (patt C.Bytes, reader_func `Read_raw_string)
+    | Sum _ | Record _ | Tuple _ | Htuple _ | Message _ -> None
+    in
+    match x with
+    | None -> None
+    | Some (pat, reader) -> Some (pat, wrap t reader)
+
+module STRING_READER_OPS : READER_OPS =
+struct
+  let _loc = Loc.mk "<generated code @ add_message_reader>"
+  let name = "STR"
+  let reader_func t =
+    <:expr< Extprot.Reader.String_reader.
+              $lid:Reader.string_of_reader_func t$ >>
+
+  let raw_rd_func = raw_rd_func reader_func
+
+  let get_string_subreader =
+    Some <:expr< Extprot.Reader.String_reader.make_sub >>
+
+  let read_msg_func = ((^) "read_")
+end
+
+type field_info = string * bool * [`Eager | `Lazy ] * Gencode.low_level
+
+module type READER =
+sig
+  val read_message :
+    ?inline:bool ->
+    Gencode.msg_name ->
+    Ptypes.type_options ->
+    Gencode.low_level Gencode.message ->
+    Camlp4.PreCast.Ast.str_item * Ast.expr
+
+  val read :
+    Gencode.msg_name ->
+    Gencode.constructor_name ->
+    Gencode.field_name ->
+    ev_regime:Gencode.ev_regime ->
+    Gencode.low_level -> Ast.expr
+
+  val read_sum_elms :
+    Gencode.msg_name ->
+    Gencode.constructor_name ->
+    Gencode.field_name ->
+    Gencode.constructor ->
+    (Gencode.low_level * Ast.expr option) list -> Ast.expr
+
+  val read_tuple_elms :
+    Gencode.msg_name ->
+    Gencode.constructor_name ->
+    Gencode.field_name ->
+    (Gencode.low_level * Ast.expr option) list -> Ast.expr
+
+  val make_promoted_match_cases :
+    string ->
+    (string option * string option * field_info list) list -> Ast.match_case
+
+  val record_case_inlined :
+    string -> locs:bool -> ?namespace:string -> ?constr:string -> int ->
+    field_info list -> Ast.match_case
+end
+
+module rec STRING_READER : READER = Make_reader(STRING_READER_OPS)
+
+and Make_reader : functor (RD : READER_OPS) -> READER =
+functor(RD : READER_OPS) ->
 struct
   let _loc = Loc.mk "<generated code at Make_reader>"
 
@@ -851,58 +941,57 @@ struct
         >>
     | None -> expr
 
-  let rec read_field msgname constr_name name ~ev_regime llty =
-    let _loc = loc "<generated code @ read_field>" in
 
-    let rec read_constructor_elms f lltys_and_defs =
-      (* TODO: handle missing elms *)
-      let vars = List.rev @@ Array.to_list @@
-                 Array.init (List.length lltys_and_defs) (sprintf "v%d")
-      in
-        List.fold_right
-          (fun (n, llty, default) e ->
-             let varname = sprintf "v%d" n in
-               match default with
-                   None ->
-                     <:expr<
-                       let $lid:varname$ =
-                         if nelms >= $int:string_of_int (n+1)$ then
-                           $read ~ev_regime:`Eager llty$
-                         else
-                           Extprot.Error.missing_tuple_element
-                             ~message:$str:msgname$
-                             ~constructor:$str:constr_name$
-                             ~field:$str:name$
-                             $int:string_of_int n$
-                       in $e$
-                     >>
-                 | Some expr ->
-                     <:expr<
-                       let $lid:varname$ =
-                         if nelms >= $int:string_of_int (n+1)$ then
-                           $read ~ev_regime:`Eager llty$
-                         else $expr$
-                       in $e$
-                     >>)
-          (List.mapi (fun i (ty, default) -> (i, ty, default)) lltys_and_defs)
-          (f (List.rev vars))
+  let rec read_constructor_elms msgname constr_name name f lltys_and_defs =
+    (* TODO: handle missing elms *)
+    let vars = List.rev @@ Array.to_list @@
+               Array.init (List.length lltys_and_defs) (sprintf "v%d")
+    in
+      List.fold_right
+        (fun (n, llty, default) e ->
+           let varname = sprintf "v%d" n in
+             match default with
+                 None ->
+                   <:expr<
+                     let $lid:varname$ =
+                       if nelms >= $int:string_of_int (n+1)$ then
+                         $read msgname constr_name name ~ev_regime:`Eager llty$
+                       else
+                         Extprot.Error.missing_tuple_element
+                           ~message:$str:msgname$
+                           ~constructor:$str:constr_name$
+                           ~field:$str:name$
+                           $int:string_of_int n$
+                     in $e$
+                   >>
+               | Some expr ->
+                   <:expr<
+                     let $lid:varname$ =
+                       if nelms >= $int:string_of_int (n+1)$ then
+                         $read msgname constr_name name ~ev_regime:`Eager llty$
+                       else $expr$
+                     in $e$
+                   >>)
+        (List.mapi (fun i (ty, default) -> (i, ty, default)) lltys_and_defs)
+        (f (List.rev vars))
 
-    and read_tuple_elms lltys_and_defs =
-      let mk_tup vars =
-        Ast.exCom_of_list @@ List.map (fun v -> <:expr< $lid:v$ >>) vars
-      in read_constructor_elms mk_tup lltys_and_defs
+  and read_tuple_elms msgname constr_name name lltys_and_defs =
+    let mk_tup vars =
+      Ast.exCom_of_list @@ List.map (fun v -> <:expr< $lid:v$ >>) vars
+    in read_constructor_elms msgname constr_name name mk_tup lltys_and_defs
 
-    and read_sum_elms constr lltys =
-      let c = constr in
-      let mk_expr vars =
-        List.fold_left
-          (fun e var -> <:expr< $e$ $lid:var$ >>)
-          <:expr< $uid:String.capitalize c.const_type$.$uid:c.const_name$ >>
-          vars
-      in read_constructor_elms mk_expr lltys
+  and read_sum_elms msgname constr_name name constr lltys =
+    let c = constr in
+    let mk_expr vars =
+      List.fold_left
+        (fun e var -> <:expr< $e$ $lid:var$ >>)
+        <:expr< $uid:String.capitalize c.const_type$.$uid:c.const_name$ >>
+        vars
+    in read_constructor_elms msgname constr_name name mk_expr lltys
 
-    and read ~ev_regime t =
-      let expr = match ev_regime, t with
+  and read msgname constr_name name ~ev_regime t =
+
+    let expr = match ev_regime, t with
       | `Eager, Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
       | `Eager, Vint (Int, _) -> <:expr< $RD.reader_func `Read_rel_int$ s >>
       | `Eager, Vint (Int8, _) -> <:expr< $RD.reader_func `Read_i8$ s >>
@@ -920,8 +1009,20 @@ struct
       | `Lazy, Bytes _ -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_string$ s) >>
 
       | ev_regime, Tuple (lltys, _) -> begin
+
+          let m_string_rd     = (module STRING_READER_OPS : READER_OPS) in
+          let m_rd            = (module RD : READER_OPS) in
+
+          let read_tuple_elms, mod_rd = match ev_regime with
+            | `Eager -> read_tuple_elms, m_rd
+            | `Lazy -> STRING_READER.read_tuple_elms, m_string_rd in
+
+          let module RDORIG = RD in
+          let module RD     = (val mod_rd : READER_OPS) in
+
           let bad_type_case =
             <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
+
           let other_cases = match lltys with
               [ty] -> begin match RD.raw_rd_func ty with
                   Some (mc, reader_expr) ->
@@ -954,7 +1055,7 @@ struct
                              let len = $RD.reader_func `Read_vint$ s in
                              let eot = $RD.reader_func `Offset$ s len in
                              let nelms = $RD.reader_func `Read_vint$ s in
-                             let v = $read_tuple_elms tys_with_defvalues$ in begin
+                             let v = $read_tuple_elms msgname constr_name name tys_with_defvalues$ in begin
                                $RD.reader_func `Skip_to$ s eot;
                                v
                              end
@@ -963,7 +1064,7 @@ struct
                    >>
               | `Lazy ->
                   <:expr<
-                     let s = $RD.reader_func `Get_value_reader$ s in
+                     let s = $RDORIG.reader_func `Get_value_reader$ s in
                        Extprot.Field.from_fun s begin fun s ->
                          let t = $RD.reader_func `Read_prefix$ s in
                            match Extprot.Codec.ll_type t with [
@@ -971,7 +1072,7 @@ struct
                                  let len = $RD.reader_func `Read_vint$ s in
                                  let eot = $RD.reader_func `Offset$ s len in
                                  let nelms = $RD.reader_func `Read_vint$ s in
-                                 let v = $read_tuple_elms tys_with_defvalues$ in begin
+                                 let v = $read_tuple_elms msgname constr_name name tys_with_defvalues$ in begin
                                    $RD.reader_func `Skip_to$ s eot;
                                    v
                                  end
@@ -982,6 +1083,17 @@ struct
         end
 
       | ev_regime, Sum (constructors, _) -> begin
+
+          let m_string_rd     = (module STRING_READER_OPS : READER_OPS) in
+          let m_rd            = (module RD : READER_OPS) in
+
+          let read_sum_elms, mod_rd = match ev_regime with
+            | `Eager -> read_sum_elms, m_rd
+            | `Lazy -> STRING_READER.read_sum_elms, m_string_rd in
+
+          let module RDORIG = RD in
+          let module RD     = (val mod_rd : READER_OPS) in
+
           let constant, non_constant = partition_constructors constructors in
           let constant_match_cases =
             List.map
@@ -998,7 +1110,8 @@ struct
             let mc (c, lltys) =
               <:match_case<
                  $int:string_of_int c.const_tag$ ->
-                      $read_sum_elms c (List.map (fun llty -> (llty, default_value `Eager llty)) lltys)$
+                      $read_sum_elms msgname constr_name name c
+                        (List.map (fun llty -> (llty, default_value `Eager llty)) lltys)$
               >>
             in List.map mc non_constant @
                [ <:match_case<
@@ -1069,7 +1182,7 @@ struct
               | `Eager -> expr
               | `Lazy ->
                   <:expr<
-                    let s = $RD.reader_func `Get_value_reader$ s in
+                    let s = $RDORIG.reader_func `Get_value_reader$ s in
                       Extprot.Field.from_fun s (fun s -> $expr$)
                   >>
         end
@@ -1099,9 +1212,9 @@ struct
                   f.field_type))
               fields in
           let promoted_match_cases =
-            make_promoted_match_cases msgname [ Some name, None, fields' ] in
+            STRING_READER.make_promoted_match_cases msgname [ Some name, None, fields' ] in
           let match_cases =
-            record_case_inlined
+            STRING_READER.record_case_inlined
               ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
           in
             <:expr<
@@ -1117,6 +1230,9 @@ struct
 
       | `Lazy, Message (path, name, _) ->
           let full_path = path @ [String.capitalize name] in
+          (* We hardcode use of read_ because it's the String_reader version
+           * we want (since it will be operating on the string_reader passed
+           * to the thunk. *)
           let id = ident_with_path _loc full_path ("read_" ^ name) in
             <:expr<
               let s = $RD.reader_func `Get_value_reader$ s in
@@ -1124,17 +1240,21 @@ struct
             >>
 
       | ev_regime, Htuple (kind, llty, _) -> begin
+          let rd_func = match ev_regime with
+            | `Eager -> read
+            | `Lazy -> STRING_READER.read in
+
           let e = match kind with
-              List ->
+              | List ->
                 let loop = new_lid "loop" in
                   <:expr<
                     let rec $lid:loop$ acc = fun [
                         0 -> List.rev acc
-                      | n -> let v = $read ~ev_regime:`Eager llty$ in $lid:loop$ [v :: acc] (n - 1)
+                      | n -> let v = $rd_func msgname constr_name name ~ev_regime:`Eager llty$ in $lid:loop$ [v :: acc] (n - 1)
                     ] in $lid:loop$ [] nelms
                   >>
               | Array ->
-                  <:expr< Array.init nelms (fun _ -> $read ~ev_regime:`Eager llty$) >> in
+                  <:expr< Array.init nelms (fun _ -> $rd_func msgname constr_name name~ev_regime:`Eager llty$) >> in
 
           let empty_htuple = match kind with
             | List -> <:expr< [] >>
@@ -1164,20 +1284,20 @@ struct
                     match RD.get_string_subreader with
                       | None ->
                           <:expr<
-                            let dat = $RD.reader_func `Read_raw_string$ len in
+                            let dat = $RD.reader_func `Read_serialized_data$ s len in
                             let ()  = $RD.reader_func `Skip_to$ s eoht in
                             let b   =
-                              Msg_buffer.make
+                              Extprot.Msg_buffer.make
                                 (if nelms < 128 && len < 128 then 3 + len
                                  else 8 + len)
                             in
                               do {
-                                Msg_buffer.add_vint b t;
-                                Msg_buffer.add_vint b len;
-                                Msg_buffer.add_vint b nelms;
-                                Msg_buffer.add_string b dat;
+                                Extprot.Msg_buffer.add_vint b t;
+                                Extprot.Msg_buffer.add_vint b len;
+                                Extprot.Msg_buffer.add_vint b nelms;
+                                Extprot.Msg_buffer.add_string b dat;
                                 Extprot.Field.from_fun
-                                  (Extprot.String_reader.from_msgbuffer b)
+                                  (Extprot.Reader.String_reader.from_msgbuffer b)
                                   (fun s -> $e$)
                               }
                             >>
@@ -1209,6 +1329,7 @@ struct
                                 let () = Extprot.Limits.check_message_length len in
                                 let () = Extprot.Limits.check_num_elements nelms in
                                   if nelms = 0 then do {
+                                    ignore boht;
                                     $RD.reader_func `Skip_to$ s eoht;
                                     Extprot.Field.from_val $empty_htuple$
                                   } else $from_fun_expr$
@@ -1217,9 +1338,11 @@ struct
                       >>
         end
     in
-    wrap_reader (type_opts t) expr
-    in
-    read ~ev_regime llty
+      wrap_reader (type_opts t) expr
+
+  and read_field msgname constr_name name ~ev_regime llty =
+    let _loc = loc "<generated code @ read_field>" in
+      read msgname constr_name name ~ev_regime llty
 
   and field_reader_funcname ~msgname ~constr ~name =
     let mangle s =
@@ -1724,35 +1847,6 @@ struct
             (field_readers, main_expr)
 end
 
-let raw_rd_func reader_func =
-  let _loc = Loc.ghost in
-  let wrap t readerf = match get_type_info @@ type_opts t with
-        Some { fromf; _ } ->
-          <:expr<
-            (fun s ->
-               try
-                 $fromf$ ($readerf$ s)
-               with [ Extprot.Error.Extprot_error _ as e -> raise e
-                    | e -> Extprot.Error.conversion_error e])
-          >>
-      | None -> readerf in
-  let patt = patt_of_ll_type in
-  let module C = Codec in
-  fun t ->
-    let x = match t with
-    | Vint (Bool, _) -> Some (patt C.Bits8, reader_func `Read_raw_bool)
-    | Vint (Int8, _) -> Some (patt C.Bits8, reader_func `Read_raw_i8)
-    | Vint (Int, _) -> Some (patt C.Vint, reader_func `Read_raw_rel_int)
-    | Bitstring32 _ -> Some (patt C.Bits32, reader_func `Read_raw_i32)
-    | Bitstring64 (Long, _) -> Some (patt C.Bits64_long, reader_func `Read_raw_i64)
-    | Bitstring64 (Float, _) -> Some (patt C.Bits64_float, reader_func `Read_raw_float)
-    | Bytes _ -> Some (patt C.Bytes, reader_func `Read_raw_string)
-    | Sum _ | Record _ | Tuple _ | Htuple _ | Message _ -> None
-    in
-    match x with
-    | None -> None
-    | Some (pat, reader) -> Some (pat, wrap t reader)
-
 
 let messages_with_subsets bindings =
   SMap.fold
@@ -1767,20 +1861,7 @@ let messages_with_subsets bindings =
 let add_message_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
-  let module Mk_normal_reader =
-    Make_reader(struct
-                  let name = "STR"
-                  let reader_func t =
-                    <:expr< Extprot.Reader.String_reader.
-                              $lid:Reader.string_of_reader_func t$ >>
-
-                  let raw_rd_func = raw_rd_func reader_func
-
-                  let get_string_subreader =
-                    Some <:expr< Extprot.Reader.String_reader.make_sub >>
-
-                  let read_msg_func = ((^) "read_")
-                end) in
+  let module Mk_normal_reader = Make_reader(STRING_READER_OPS) in
 
   let with_subsets = messages_with_subsets bindings in
 

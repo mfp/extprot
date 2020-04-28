@@ -191,4 +191,10 @@ let read_raw_string t =
     read_bytes t s 0 len;
     Bytes.unsafe_to_string s
 
+let read_serialized_data t len =
+  let () = Limits.check_string_length len in
+  let s  = Bytes.create len in
+    read_bytes t s 0 len;
+    Bytes.unsafe_to_string s
+
 let read_string t = Read_prim_type(t, Bytes, read_raw_string, nil_fallback)

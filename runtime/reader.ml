@@ -28,6 +28,8 @@ sig
   val read_raw_float : t -> float
   val read_raw_string : t -> string
 
+  val read_serialized_data : t -> int -> string
+
   val offset : t -> int -> position
   val skip_to : t -> position -> unit
 
@@ -43,6 +45,7 @@ type reader_func =
       | `Read_i32 | `Read_i64 | `Read_float | `Read_string | `Read_message
       | `Read_raw_bool | `Read_raw_rel_int | `Read_raw_i8
       | `Read_raw_i32 | `Read_raw_i64 | `Read_raw_float | `Read_raw_string
+      | `Read_serialized_data
     ]
 
 let string_of_reader_func : reader_func -> string = function
@@ -66,6 +69,7 @@ let string_of_reader_func : reader_func -> string = function
   | `Read_raw_i64 -> "read_raw_i64"
   | `Read_raw_float -> "read_raw_float"
   | `Read_raw_string -> "read_raw_string"
+  | `Read_serialized_data -> "read_serialized_data"
   | `Get_value_reader -> "get_value_reader"
 
 DEFINE Read_vint(t) =
