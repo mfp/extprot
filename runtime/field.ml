@@ -4,10 +4,8 @@ sig
   type 'a t
 
   val from_val : 'a -> 'a t
-  val from_fun :
-    Reader.String_reader.t ->
-    (Reader.String_reader.t -> 'a) -> 'a t
-
+  val from_fun : Reader.String_reader.t -> (Reader.String_reader.t -> 'a) -> 'a t
+  val from_thunk : (unit -> 'a) -> 'a t
 
   val is_val     : 'a t -> bool
   val force      : 'a t -> 'a
@@ -29,6 +27,11 @@ struct
   let from_val v = { s = None; v = Value v }
 
   let from_fun s f = { s = Some s; v = Delayed (s, f) }
+
+  let dummy_reader = Reader.String_reader.from_string ""
+
+  let from_thunk f =
+    { s = None; v = Delayed (dummy_reader, (fun _ -> f ())) }
 
   let force t = match t.v with
     | Value x -> x
