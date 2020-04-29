@@ -4,8 +4,8 @@ sig
   type 'a t
 
   val from_val : 'a -> 'a t
-  val from_fun :
-    Reader.String_reader.t -> (Reader.String_reader.t -> 'a) -> 'a t
+  val from_fun : Reader.String_reader.t -> (Reader.String_reader.t -> 'a) -> 'a t
+  val from_thunk : (unit -> 'a) -> 'a t
 
   val is_val     : 'a t -> bool
   val force      : 'a t -> 'a
