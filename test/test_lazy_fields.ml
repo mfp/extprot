@@ -61,6 +61,11 @@ let force_lazy07 t =
   F.discard_packed t.Lazy07.v;
   t
 
+let force_lazy10 t =
+  ignore (F.force t.Lazy10.v);
+  F.discard_packed t.Lazy10.v;
+  t
+
 let nop x = x
 
 let tests = "lazy fields" >::: [
@@ -415,6 +420,30 @@ let tests = "lazy fields" >::: [
       Lazy06b.pp Lazy06.write Lazy06b.read
       { Lazy06.x = 42; v = thunk Sum_type2.A }
       { Lazy06b.x = 42; v = Sum_type2.A };
+  end;
+
+  "nested messages" >:: begin fun () ->
+    check_roundtrip
+      force_lazy10
+      Lazy10.pp Lazy10.write Lazy10.read
+      { Lazy10.x = 42; v = F.from_val { Simple_bool.v = true } };
+
+    check_roundtrip
+      force_lazy10
+      Lazy10.pp Lazy10.write Lazy10.read
+      { Lazy10.x = 42; v = thunk { Simple_bool.v = true } };
+
+    check_roundtrip_complex
+      force_lazy10
+      Lazy10.pp Lazy10b.write Lazy10.read
+      { Lazy10b.x = 42; v = {Simple_bool.v = true }; }
+      { Lazy10.x = 42; v = F.from_val {Simple_bool.v = true }; };
+
+    check_roundtrip_complex
+      nop
+      Lazy10b.pp Lazy10.write Lazy10b.read
+      { Lazy10.x = 42; v = F.from_val {Simple_bool.v = true }; }
+      { Lazy10b.x = 42; v = {Simple_bool.v = true }; };
   end;
 ]
 

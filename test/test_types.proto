@@ -225,6 +225,7 @@ message lazy07b = { x : int; v : (int * float) }
 message lazy08  = { x : int; v [@lazy] : (simple_bool * simple_bool) }
 message lazy09  = { v [@lazy] : simple_bool }
 message lazy10  = { x : int; v [@lazy] : simple_bool }
+message lazy10b = { x : int; v : simple_bool }
 message lazy11  = { v [@lazy] : msg_sum }
 message lazy12  = { v [@lazy] : (simple_bool * simple_bool) }
 message lazy13  = { v [@lazy] : (msg_sum * msg_sum) }
