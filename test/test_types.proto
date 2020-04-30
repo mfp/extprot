@@ -212,21 +212,23 @@ message lazy01 = {
   f [@lazy] : string
 }
 
-type lazyT 'a  = { v [@lazy] : 'a }
-message lazy02 = lazyT<int>
-message lazy03 = { v [@lazy] : int; v2 [@lazy] : int [@default 42] }
+type lazyT 'a   = { v [@lazy] : 'a }
+message lazy02  = lazyT<int>
+message lazy03  = { v [@lazy] : int; v2 [@lazy] : int [@default 42] }
 message lazy03b = { v [@lazy] : int; }
-message lazy04 = lazyT< [ int ] >
-message lazy05 = lazyT< [| int |] >
-message lazy06 = { x : int; v [@lazy] : sum_type2<int> }
-message lazy07 = { x : int; v [@lazy] : (int * float) }
-message lazy08 = { x : int; v [@lazy] : (simple_bool * simple_bool) }
-message lazy09 = { v [@lazy] : simple_bool }
-message lazy10 = { x : int; v [@lazy] : simple_bool }
-message lazy11 = { v [@lazy] : msg_sum }
-message lazy12 = { v [@lazy] : (simple_bool * simple_bool) }
-message lazy13 = { v [@lazy] : (msg_sum * msg_sum) }
-message lazy14 = { v [@lazy] : [ msg_sum ] }
-message lazy15 = A { v [@lazy] : bool } | B { x : int; v [@lazy] : sum_type2<int> }
+message lazy04  = lazyT< [ int ] >
+message lazy05  = lazyT< [| int |] >
+message lazy06  = { x : int; v [@lazy] : sum_type2<int> }
+message lazy06b = { x : int; v : sum_type2<int> }
+message lazy07  = { x : int; v [@lazy] : (int * float) }
+message lazy07b = { x : int; v : (int * float) }
+message lazy08  = { x : int; v [@lazy] : (simple_bool * simple_bool) }
+message lazy09  = { v [@lazy] : simple_bool }
+message lazy10  = { x : int; v [@lazy] : simple_bool }
+message lazy11  = { v [@lazy] : msg_sum }
+message lazy12  = { v [@lazy] : (simple_bool * simple_bool) }
+message lazy13  = { v [@lazy] : (msg_sum * msg_sum) }
+message lazy14  = { v [@lazy] : [ msg_sum ] }
+message lazy15  = A { v [@lazy] : bool } | B { x : int; v [@lazy] : sum_type2<int> }
 
 (* vim:set ft=ocaml: *)

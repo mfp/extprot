@@ -61,6 +61,8 @@ let force_lazy07 t =
   F.discard_packed t.Lazy07.v;
   t
 
+let nop x = x
+
 let tests = "lazy fields" >::: [
 
   "write primitive types (values)" >:: begin fun () ->
@@ -323,6 +325,26 @@ let tests = "lazy fields" >::: [
       { Lazy07.x = 42; v = thunk (13, 42.) };
   end;
 
+  "tuples, compat with eager fields" >:: begin fun () ->
+    check_roundtrip_complex
+      force_lazy07
+      Lazy07.pp Lazy07b.write Lazy07.read
+      { Lazy07b.x = 42; v = (13, 42.) }
+      { Lazy07.x = 42; v = F.from_val (13, 42.) };
+
+    check_roundtrip_complex
+      nop
+      Lazy07b.pp Lazy07.write Lazy07b.read
+      { Lazy07.x = 42; v = F.from_val (13, 42.) }
+      { Lazy07b.x = 42; v = (13, 42.) };
+
+    check_roundtrip_complex
+      nop
+      Lazy07b.pp Lazy07.write Lazy07b.read
+      { Lazy07.x = 42; v = thunk (13, 42.) }
+      { Lazy07b.x = 42; v = (13, 42.) };
+  end;
+
   "sum types" >:: begin fun () ->
     check_roundtrip
       force_lazy06
@@ -343,6 +365,56 @@ let tests = "lazy fields" >::: [
       force_lazy06
       Lazy06.pp Lazy06.write Lazy06.read
       { Lazy06.x = 42; v = thunk Sum_type2.A };
+  end;
+
+  "sum types, compat with eager fields" >:: begin fun () ->
+    check_roundtrip_complex
+      force_lazy06
+      Lazy06.pp Lazy06b.write Lazy06.read
+      { Lazy06b.x = 42; v = (Sum_type2.B (-123)) }
+      { Lazy06.x = 42; v = F.from_val (Sum_type2.B (-123)) };
+
+    check_roundtrip_complex
+      force_lazy06
+      Lazy06.pp Lazy06b.write Lazy06.read
+      { Lazy06b.x = 42; v = Sum_type2.A }
+      { Lazy06.x = 42; v = F.from_val Sum_type2.A };
+
+    check_roundtrip_complex
+      nop
+      Lazy06b.pp Lazy06.write Lazy06b.read
+      { Lazy06.x = 42; v = F.from_val (Sum_type2.B (-123)) }
+      { Lazy06b.x = 42; v = (Sum_type2.B (-123)) };
+
+    check_roundtrip_complex
+      nop
+      Lazy06b.pp Lazy06.write Lazy06b.read
+      { Lazy06.x = 42; v = F.from_val Sum_type2.A }
+      { Lazy06b.x = 42; v = Sum_type2.A };
+
+    check_roundtrip_complex
+      force_lazy06
+      Lazy06.pp Lazy06b.write Lazy06.read
+      { Lazy06b.x = 42; v = (Sum_type2.B (-123)) }
+      { Lazy06.x = 42; v = thunk (Sum_type2.B (-123)) };
+
+    check_roundtrip_complex
+      force_lazy06
+      Lazy06.pp Lazy06b.write Lazy06.read
+      { Lazy06b.x = 42; v = Sum_type2.A }
+      { Lazy06.x = 42; v = thunk Sum_type2.A };
+
+    check_roundtrip_complex
+      nop
+      Lazy06b.pp Lazy06.write Lazy06b.read
+      { Lazy06.x = 42; v = thunk (Sum_type2.B (-123)) }
+      { Lazy06b.x = 42; v = (Sum_type2.B (-123)) };
+
+    check_roundtrip_complex
+      nop
+      Lazy06b.pp Lazy06.write Lazy06b.read
+      { Lazy06.x = 42; v = thunk Sum_type2.A }
+      { Lazy06b.x = 42; v = Sum_type2.A };
   end;
 ]
 
