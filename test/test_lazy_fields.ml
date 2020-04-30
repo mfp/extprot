@@ -51,6 +51,16 @@ let force_lazyT t =
   F.discard_packed t.LazyT.v;
   t
 
+let force_lazy06 t =
+  ignore (F.force t.Lazy06.v);
+  F.discard_packed t.Lazy06.v;
+  t
+
+let force_lazy07 t =
+  ignore (F.force t.Lazy07.v);
+  F.discard_packed t.Lazy07.v;
+  t
+
 let tests = "lazy fields" >::: [
 
   "write primitive types (values)" >:: begin fun () ->
@@ -299,6 +309,40 @@ let tests = "lazy fields" >::: [
       force_lazyT
       Lazy05.pp Lazy05.write Lazy05.read
       { LazyT.v = thunk [||] };
+  end;
+
+  "tuples" >:: begin fun () ->
+    check_roundtrip
+      force_lazy07
+      Lazy07.pp Lazy07.write Lazy07.read
+      { Lazy07.x = 42; v = F.from_val (13, 42.) };
+
+    check_roundtrip
+      force_lazy07
+      Lazy07.pp Lazy07.write Lazy07.read
+      { Lazy07.x = 42; v = thunk (13, 42.) };
+  end;
+
+  "sum types" >:: begin fun () ->
+    check_roundtrip
+      force_lazy06
+      Lazy06.pp Lazy06.write Lazy06.read
+      { Lazy06.x = 42; v = F.from_val (Sum_type2.B (-123)) };
+
+    check_roundtrip
+      force_lazy06
+      Lazy06.pp Lazy06.write Lazy06.read
+      { Lazy06.x = 42; v = F.from_val Sum_type2.A };
+
+    check_roundtrip
+      force_lazy06
+      Lazy06.pp Lazy06.write Lazy06.read
+      { Lazy06.x = 42; v = thunk (Sum_type2.D "1111") };
+
+    check_roundtrip
+      force_lazy06
+      Lazy06.pp Lazy06.write Lazy06.read
+      { Lazy06.x = 42; v = thunk Sum_type2.A };
   end;
 ]
 
