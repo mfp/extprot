@@ -17,6 +17,9 @@ let check_roundtrip force pp enc dec v =
 let check_roundtrip_complex force pp enc dec v1 v2 =
   aeq pp (force v2) (force (decode dec (encode enc v1)))
 
+let check_serialization_equiv ?msg enc1 enc2 v1 v2 =
+  assert_equal ?msg ~printer:(sprintf "%S") (encode enc1 v1) (encode enc2 v2)
+
 let raises_extprot_err ?msg (f : 'a -> unit) x =
   try
     f x;
@@ -254,6 +257,46 @@ let tests = "lazy fields" >::: [
       };
   end;
 
+  "primitive types, bit-for-bit compat with eager" >:: begin fun () ->
+    check_serialization_equiv
+      Lazy01.write Lazy01b.write
+      { Lazy01.
+        a = F.from_val true;
+        b = F.from_val 42;
+        c = F.from_val (-4242);
+        d = F.from_val (-424242L);
+        e = F.from_val 42.;
+        f = F.from_val "abc.";
+      }
+      { Lazy01b.
+        a = true;
+        b = 42;
+        c = (-4242);
+        d = (-424242L);
+        e = 42.;
+        f = "abc.";
+      };
+
+    check_serialization_equiv
+      Lazy01.write Lazy01b.write
+      { Lazy01.
+        a = thunk true;
+        b = thunk 42;
+        c = thunk (-4242);
+        d = thunk (-424242L);
+        e = thunk 42.;
+        f = thunk "abc.";
+      }
+      { Lazy01b.
+        a = true;
+        b = 42;
+        c = (-4242);
+        d = (-424242L);
+        e = 42.;
+        f = "abc.";
+      };
+  end;
+
   "record types" >:: begin fun () ->
     check_roundtrip
       force_lazy02
@@ -445,6 +488,63 @@ let tests = "lazy fields" >::: [
       { Lazy10.x = 42; v = F.from_val {Simple_bool.v = true }; }
       { Lazy10b.x = 42; v = {Simple_bool.v = true }; };
   end;
+
+  "complex type serialization compat" >:: begin fun () ->
+    check_serialization_equiv
+      Lazy16.write Lazy16b.write
+      { Lazy16.
+        v1 = F.from_val { Simple_bool.v = true };
+        v2 = F.from_val (10, -42);
+        v3 = F.from_val ("fooobar", 123456);
+        v4 = F.from_val Sum_type.D;
+        v5 = F.from_val (Sum_type.B "foo");
+        v6 = F.from_val (Sum_type.A { Simple_bool.v = true });
+        v7 = F.from_val ["a"; "b"];
+        v8 = F.from_val [];
+        v9 = F.from_val (Array.init 345 ((-) 100));
+        v0 = F.from_val [||];
+      }
+      { Lazy16b.
+        v1 = { Simple_bool.v = true };
+        v2 = (10, -42);
+        v3 = ("fooobar", 123456);
+        v4 = Sum_type.D;
+        v5 = (Sum_type.B "foo");
+        v6 = (Sum_type.A { Simple_bool.v = true });
+        v7 = ["a"; "b"];
+        v8 = [];
+        v9 = (Array.init 345 ((-) 100));
+        v0 = [||];
+      };
+
+    check_serialization_equiv
+      Lazy16.write Lazy16b.write
+      { Lazy16.
+        v1 = thunk { Simple_bool.v = true };
+        v2 = thunk (10, -42);
+        v3 = thunk ("fooobar", 123456);
+        v4 = thunk Sum_type.D;
+        v5 = thunk (Sum_type.B "foo");
+        v6 = thunk (Sum_type.A { Simple_bool.v = true });
+        v7 = thunk ["a"; "b"];
+        v8 = thunk [];
+        v9 = thunk (Array.init 345 ((-) 100));
+        v0 = thunk [||];
+      }
+      { Lazy16b.
+        v1 = { Simple_bool.v = true };
+        v2 = (10, -42);
+        v3 = ("fooobar", 123456);
+        v4 = Sum_type.D;
+        v5 = (Sum_type.B "foo");
+        v6 = (Sum_type.A { Simple_bool.v = true });
+        v7 = ["a"; "b"];
+        v8 = [];
+        v9 = (Array.init 345 ((-) 100));
+        v0 = [||];
+      }
+  end
+
 ]
 
 let () = Register_test.register "lazy fields"

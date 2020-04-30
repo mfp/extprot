@@ -212,6 +212,15 @@ message lazy01 = {
   f [@lazy] : string
 }
 
+message lazy01b = {
+  a : bool;
+  b : byte;
+  c : int;
+  d : long;
+  e : float;
+  f : string
+}
+
 type lazyT 'a   = { v [@lazy] : 'a }
 message lazy02  = lazyT<int>
 message lazy03  = { v [@lazy] : int; v2 [@lazy] : int [@default 42] }
@@ -231,5 +240,31 @@ message lazy12  = { v [@lazy] : (simple_bool * simple_bool) }
 message lazy13  = { v [@lazy] : (msg_sum * msg_sum) }
 message lazy14  = { v [@lazy] : [ msg_sum ] }
 message lazy15  = A { v [@lazy] : bool } | B { x : int; v [@lazy] : sum_type2<int> }
+
+message lazy16  = {
+  v1 [@lazy] : simple_bool;
+  v2 [@lazy] : (int * int);
+  v3 [@lazy] : tuple<string, int>;
+  v4 [@lazy] : sum_type<int, int, int>;
+  v5 [@lazy] : sum_type<int, string, int>;
+  v6 [@lazy] : sum_type<simple_bool, int, int>;
+  v7 [@lazy] : [ string ];
+  v8 [@lazy] : [ string ];
+  v9 [@lazy] : [| int |];
+  v0 [@lazy] : [| int |];
+}
+
+message lazy16b  = {
+  v1 : simple_bool;
+  v2 : (int * int);
+  v3 : tuple<string, int>;
+  v4 : sum_type<int, int, int>;
+  v5 : sum_type<int, string, int>;
+  v6 : sum_type<simple_bool, int, int>;
+  v7 : [ string ];
+  v8 : [ string ];
+  v9 : [| int |];
+  v0 : [| int |];
+}
 
 (* vim:set ft=ocaml: *)
