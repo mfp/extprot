@@ -9,6 +9,7 @@ sig
 
   val is_val     : 'a t -> bool
   val force      : 'a t -> 'a
+  val discard_packed : 'a t -> unit
   val get_reader : 'a t -> Reader.String_reader.t option
 end
 

@@ -9,6 +9,7 @@ sig
 
   val is_val     : 'a t -> bool
   val force      : 'a t -> 'a
+  val discard_packed : 'a t -> unit
   val get_reader : 'a t -> Reader.String_reader.t option
 end
 
@@ -39,6 +40,10 @@ struct
         let x = f s in
           t.v <- Value x;
           x
+
+  let discard_packed t = match t.v with
+    | Value _ -> t.s <- None
+    | _ -> ()
 
   let is_val t = match t.v with
     | Value _ -> true
