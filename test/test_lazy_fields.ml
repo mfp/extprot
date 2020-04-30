@@ -12,7 +12,11 @@ let check_write ?msg expected f v () =
   assert_equal ?msg ~printer:(sprintf "%S") expected (E.Conv.serialize f v)
 
 let check_roundtrip force pp enc dec v =
-  aeq pp (force v) (force (decode dec (encode enc v)))
+  aeq pp (force v) (force (decode dec (encode enc v)));
+  (* Verify with 2 rounds of serialization + deserialization, so that
+   * after the 1st one the thunks hold the cached serialized data when it
+   * applies, and it is used to serialize again. *)
+  aeq pp (force v) (force (decode dec (encode enc (decode dec (encode enc v)))))
 
 let check_roundtrip_complex force pp enc dec v1 v2 =
   aeq pp (force v2) (force (decode dec (encode enc v1)))
