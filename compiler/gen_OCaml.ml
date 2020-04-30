@@ -1314,7 +1314,13 @@ struct
                                      ~field:$str:name$
                                      (Extprot.Error.Message_length
                                        (Extprot.Reader.String_reader.range_length boht eoht)))
-                                (fun s -> $e$)
+                                (fun s ->
+                                  let _ = $STRING_READER_OPS.reader_func `Read_prefix$ s in
+                                  (* size *)
+                                  let _ = $STRING_READER_OPS.reader_func `Read_vint$ s in
+                                  (* nelms *)
+                                  let _ = $STRING_READER_OPS.reader_func `Read_vint$ s in
+                                    $e$)
                             }
                             >>
                   in

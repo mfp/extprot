@@ -48,6 +48,7 @@ let force_lazy03 t =
 
 let force_lazyT t =
   ignore (F.force t.LazyT.v);
+  F.discard_packed t.LazyT.v;
   t
 
 let tests = "lazy fields" >::: [
@@ -118,6 +119,98 @@ let tests = "lazy fields" >::: [
       ();
   end;
 
+  "write list types (values)" >:: begin fun () ->
+     (* 001       tuple, tag 0
+      * 009       len
+      * 001       nelms
+      *  005       htuple, tag 0
+      *  006       len
+      *  002       nelms
+      *   000 020  int(10)
+      *   000 128 004 int(256)
+      * *)
+     check_write
+       "\001\
+        \009\
+        \001\
+        \005\006\002\
+        \000\020\
+        \000\128\004"
+       Lazy04.write
+       ~msg:"{ LazyT.v = [10; 256]; }"
+       { LazyT.v = F.from_val [10; 256]; }
+       ()
+  end;
+
+  "write list types (thunks)" >:: begin fun () ->
+     (* 001       tuple, tag 0
+      * 009       len
+      * 001       nelms
+      *  005       htuple, tag 0
+      *  006       len
+      *  002       nelms
+      *   000 020  int(10)
+      *   000 128 004 int(256)
+      * *)
+     check_write
+       "\001\
+        \009\
+        \001\
+        \005\006\002\
+        \000\020\
+        \000\128\004"
+       Lazy04.write
+       ~msg:"{ LazyT.v = [10; 256]; }"
+       { LazyT.v = thunk [10; 256]; }
+       ()
+  end;
+
+  "write array types (values)" >:: begin fun () ->
+     (* 001       tuple, tag 0
+      * 009       len
+      * 001       nelms
+      *  005       htuple, tag 0
+      *  006       len
+      *  002       nelms
+      *   000 020  int(10)
+      *   000 128 004 int(256)
+      * *)
+     check_write
+       "\001\
+        \009\
+        \001\
+        \005\006\002\
+        \000\020\
+        \000\128\004"
+       Lazy05.write
+       ~msg:"{ LazyT.v = [|10; 256|]; }"
+       { LazyT.v = F.from_val [|10; 256|]; }
+       ()
+  end;
+
+  "write array types (thunks)" >:: begin fun () ->
+     (* 001       tuple, tag 0
+      * 009       len
+      * 001       nelms
+      *  005       htuple, tag 0
+      *  006       len
+      *  002       nelms
+      *   000 020  int(10)
+      *   000 128 004 int(256)
+      * *)
+     check_write
+       "\001\
+        \009\
+        \001\
+        \005\006\002\
+        \000\020\
+        \000\128\004"
+       Lazy05.write
+       ~msg:"{ LazyT.v = [|10; 256|]; }"
+       { LazyT.v = thunk [|10; 256|]; }
+       ()
+  end;
+
   "primitive types" >:: begin fun () ->
     check_roundtrip
       force_lazy01
@@ -162,6 +255,50 @@ let tests = "lazy fields" >::: [
       Lazy03.pp Lazy03b.write Lazy03.read
       { Lazy03b.v = F.from_val 424242 }
       { Lazy03.v = F.from_val 424242; v2 = F.from_val 42 };
+  end;
+
+  "lists" >:: begin fun () ->
+    check_roundtrip
+      force_lazyT
+      Lazy04.pp Lazy04.write Lazy04.read
+      { LazyT.v = F.from_val [1; 2; 42] };
+
+    check_roundtrip
+      force_lazyT
+      Lazy04.pp Lazy04.write Lazy04.read
+      { LazyT.v = thunk [1; 2; 42] };
+
+    check_roundtrip
+      force_lazyT
+      Lazy04.pp Lazy04.write Lazy04.read
+      { LazyT.v = F.from_val [] };
+
+    check_roundtrip
+      force_lazyT
+      Lazy04.pp Lazy04.write Lazy04.read
+      { LazyT.v = thunk [] };
+  end;
+
+  "arrays" >:: begin fun () ->
+    check_roundtrip
+      force_lazyT
+      Lazy05.pp Lazy05.write Lazy05.read
+      { LazyT.v = F.from_val [|1; 2; 42|] };
+
+    check_roundtrip
+      force_lazyT
+      Lazy05.pp Lazy05.write Lazy05.read
+      { LazyT.v = thunk [|1; 2; 42|] };
+
+    check_roundtrip
+      force_lazyT
+      Lazy05.pp Lazy05.write Lazy05.read
+      { LazyT.v = F.from_val [||] };
+
+    check_roundtrip
+      force_lazyT
+      Lazy05.pp Lazy05.write Lazy05.read
+      { LazyT.v = thunk [||] };
   end;
 ]
 
