@@ -219,7 +219,17 @@ let rec default_value ev_regime t =
           | Some c ->
               Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
       end
-    | Record (_name, _, _) -> None
+    | Record (name, fields, _) -> begin
+        Some
+          (default_record
+             ~namespace:name
+             ~msgname:name
+             (List.map
+                (fun f ->
+                   (* mutable flag not used, we pick false arbitrarily *)
+                   (f.field_name, false, (if f.field_lazy then `Lazy else `Eager), f.field_type))
+                fields))
+      end
     | Htuple (List, _, _) -> Some <:expr< [] >>
     | Htuple (Array, _, _) -> Some <:expr< [| |] >>
     | Message (path, name, _) ->
@@ -241,6 +251,25 @@ let rec default_value ev_regime t =
   | _, None, None -> None
   | `Eager, None, Some v -> Some v
   | `Lazy, None, Some v -> Some <:expr< Extprot.Field.from_val $v$ >>
+
+and default_record ~msgname ?namespace fields =
+  let _loc = Loc.ghost in
+  let default_values =
+    maybe_all
+      (fun (name, _, ev_regime, llty) ->
+         Option.map (fun v -> (name, v)) (default_value ev_regime llty))
+      fields
+  in match default_values with
+      None -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
+    | Some l ->
+        let assigns =
+          List.map
+            (fun (name, v) -> match namespace with
+                 None -> <:rec_binding< $lid:name$ = $v$ >>
+               | Some ns ->
+                   <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $v$ >>)
+            l
+        in <:expr< { $Ast.rbSem_of_list assigns$ } >>
 
 let ident_of_ctyp ty =
   let _loc = Loc.ghost in
@@ -469,24 +498,6 @@ let generate_container bindings =
 
   in function
       Message_decl (msgname, mexpr, opts) -> begin
-        let default_record ?namespace fields =
-          let default_values =
-            maybe_all
-              (fun (name, _, ev_regime, llty) ->
-                 Option.map (fun v -> (name, v)) (default_value ev_regime llty))
-              fields
-          in match default_values with
-              None -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
-            | Some l ->
-                let assigns =
-                  List.map
-                    (fun (name, v) -> match namespace with
-                         None -> <:rec_binding< $lid:name$ = $v$ >>
-                       | Some ns ->
-                           <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $v$ >>)
-                    l
-                in <:expr< { $Ast.rbSem_of_list assigns$ } >> in
-
         let wrap x =
           match get_type_info opts with
               None -> x
@@ -499,7 +510,7 @@ let generate_container bindings =
           | Message_single (namespace, fields) ->
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
-                  ref (fun () -> $ wrap (default_record ?namespace fields) $)
+                  ref (fun () -> $ wrap (default_record ~msgname ?namespace fields) $)
               >>
 
           | Message_alias (path, name) ->
@@ -514,7 +525,7 @@ let generate_container bindings =
               let namespace = Option.default constr namespace in
               let v =
                 <:expr< $uid:String.capitalize constr$
-                           $ default_record ~namespace fields $ >>
+                           $ default_record ~msgname ~namespace fields $ >>
               in
                 <:str_item<
                   value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
@@ -526,7 +537,7 @@ let generate_container bindings =
             let l = List.map subset_field @@ List.filter_map (must_keep_field subset) l in
               <:str_item<
                 value $lid:msgname ^ "_default"$ : ref (unit -> $lid:msgname$) =
-                  ref (fun () -> $ wrap (default_record l) $)
+                  ref (fun () -> $ wrap (default_record ~msgname l) $)
               >> in
 
         let container =

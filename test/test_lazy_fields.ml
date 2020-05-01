@@ -663,7 +663,13 @@ let tests = "lazy fields" >::: [
       force_lazy19
       Lazy19.pp Lazy19b.write Lazy19.read
       { Lazy19b.x = -32245; v = { LazyT.v = F.from_val "heh" } }
-      { Lazy19.x = -32245; v = F.from_val { LazyT.v = F.from_val "heh" } }
+      { Lazy19.x = -32245; v = F.from_val { LazyT.v = F.from_val "heh" } };
+
+    check_roundtrip_complex
+      force_lazy19
+      Lazy19.pp Lazy19c.write Lazy19.read
+      { Lazy19c.x = -32245; }
+      { Lazy19.x = -32245; v = F.from_val { LazyT.v = F.from_val "hohoho" } }
   end;
 
 ]
