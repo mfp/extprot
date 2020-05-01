@@ -1135,15 +1135,13 @@ struct
 
       | ev_regime, Sum (constructors, _) -> begin
 
-          let m_string_rd     = (module STR_OPS : READER_OPS) in
-          let m_rd            = (module RD : READER_OPS) in
-
-          let read_sum_elms, mod_rd = match ev_regime with
-            | `Eager -> read_sum_elms, m_rd
-            | `Lazy -> STRING_READER.read_sum_elms, m_string_rd in
-
-          let module RDORIG = RD in
-          let module RD     = (val mod_rd : READER_OPS) in
+          let f__raw_rd_func, f__reader_func, f__read_sum_elms =
+            match ev_regime with
+              | `Eager -> RD.raw_rd_func, RD.reader_func, read_sum_elms
+              | `Lazy ->
+                  STR_OPS.raw_rd_func, STR_OPS.reader_func,
+                  STRING_READER.read_sum_elms
+          in
 
           let constant, non_constant = partition_constructors constructors in
           let constant_match_cases =
@@ -1161,7 +1159,7 @@ struct
             let mc (c, lltys) =
               <:match_case<
                  $int:string_of_int c.const_tag$ ->
-                      $read_sum_elms msgname constr_name name c
+                      $f__read_sum_elms msgname constr_name name c
                         (List.map (fun llty -> (llty, default_value `Eager llty)) lltys)$
               >>
             in List.map mc non_constant @
@@ -1179,11 +1177,11 @@ struct
 
           let wrap_non_constant e =
             <:expr<
-              let len = $RD.reader_func `Read_vint$ s in
-              let eot' = $RD.reader_func `Offset$ s len in
-              let nelms = $RD.reader_func `Read_vint$ s in
+              let len = $f__reader_func `Read_vint$ s in
+              let eot' = $f__reader_func `Offset$ s len in
+              let nelms = $f__reader_func `Read_vint$ s in
               let v = $e$ in begin
-                $RD.reader_func `Skip_to$ s eot';
+                $f__reader_func `Skip_to$ s eot';
                 v
               end >> in
 
@@ -1198,7 +1196,7 @@ struct
             <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
 
           let other_cases = match non_constant with
-              (c, [ty]) :: _ -> begin match RD.raw_rd_func ty with
+              (c, [ty]) :: _ -> begin match f__raw_rd_func ty with
                   Some (mc, reader_expr) ->
                     <:match_case<
                         $mc$ -> $uid:String.capitalize c.const_type$.$uid:c.const_name$ ($reader_expr$ s)
@@ -1206,7 +1204,7 @@ struct
                     >>
                 | None -> bad_type_case
               end
-            | (c, ty :: tys) :: _ -> begin match RD.raw_rd_func ty with
+            | (c, ty :: tys) :: _ -> begin match f__raw_rd_func ty with
                   Some (mc, reader_expr) -> begin match maybe_all (default_value `Eager) tys with
                       None -> bad_type_case
                     | Some defs ->
@@ -1222,7 +1220,7 @@ struct
             | _ -> bad_type_case in
 
           let expr =
-            <:expr< let t = $RD.reader_func `Read_prefix$ s in
+            <:expr< let t = $f__reader_func `Read_prefix$ s in
               match Extprot.Codec.ll_type t with [
                 $Ast.mcOr_of_list match_cases$
                 | $other_cases$
@@ -1233,7 +1231,7 @@ struct
               | `Eager -> expr
               | `Lazy ->
                   <:expr<
-                    let s = $RDORIG.reader_func `Get_value_reader$ s in
+                    let s = $RD.reader_func `Get_value_reader$ s in
                       Extprot.Field.from_fun s (fun s -> $expr$)
                   >>
         end
