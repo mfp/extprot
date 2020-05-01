@@ -40,7 +40,8 @@ end
 
 type reader_func =
     [
-      | `Get_value_reader | `Offset | `Skip_to | `Read_prefix | `Skip_value
+      | `Get_value_reader | `Get_value_reader_with_prefix
+      | `Offset | `Skip_to | `Read_prefix | `Skip_value
       | `Read_vint | `Read_bool | `Read_rel_int | `Read_i8
       | `Read_i32 | `Read_i64 | `Read_float | `Read_string | `Read_message
       | `Read_raw_bool | `Read_raw_rel_int | `Read_raw_i8
@@ -71,6 +72,7 @@ let string_of_reader_func : reader_func -> string = function
   | `Read_raw_string -> "read_raw_string"
   | `Read_serialized_data -> "read_serialized_data"
   | `Get_value_reader -> "get_value_reader"
+  | `Get_value_reader_with_prefix -> "get_value_reader_with_prefix"
 
 DEFINE Read_vint(t) =
   let b = ref (read_byte t) in if !b < 128 then !b else
@@ -196,9 +198,8 @@ struct
 
   let read_message t = Read_msg(t)
 
-  let get_value_reader t =
+  let get_value_reader_with_prefix t p =
     let b = Msg_buffer.create () in
-    let p = read_prefix t in
       Msg_buffer.add_vint b p;
       let buf =
         match ll_type p with
@@ -230,6 +231,10 @@ struct
 
       in
         { TY.buf; last = String.length buf; pos = 0 }
+
+  let get_value_reader t =
+    let p = read_prefix t in
+      get_value_reader_with_prefix t p
 end
 
 module String_reader =
@@ -325,6 +330,12 @@ struct
   let get_value_reader t =
     let pos = t.pos in
     let p   = read_prefix t in
+      skip_value t p;
+      let last = t.pos in
+        { t with last; pos }
+
+  let get_value_reader_with_prefix t p =
+    let pos = t.pos - Codec.vint_length p in
       skip_value t p;
       let last = t.pos in
         { t with last; pos }

@@ -1234,8 +1234,17 @@ struct
               | `Lazy_Immediate -> <:expr< Extprot.Field.from_val $expr$ >>
               | `Lazy ->
                   <:expr<
-                    let s = $RD.reader_func `Get_value_reader$ s in
-                      Extprot.Field.from_fun s (fun s -> $expr$)
+                    let t   = $RD.reader_func `Read_prefix$ s in
+                      match Extprot.Codec.ll_type t with [
+                         Extprot.Codec.Enum ->
+                            Extprot.Field.from_val @@
+                            match Extprot.Codec.ll_tag t with [
+                              $Ast.mcOr_of_list constant_match_cases$
+                            ]
+                        | _ ->
+                            let s = $RD.reader_func `Get_value_reader_with_prefix$ s t in
+                              Extprot.Field.from_fun s (fun s -> $expr$)
+                      ]
                   >>
         end
 

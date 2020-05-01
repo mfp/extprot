@@ -30,6 +30,7 @@ end
 
 type reader_func =
     [ `Get_value_reader
+    | `Get_value_reader_with_prefix
     | `Offset
     | `Read_bool
     | `Read_float
@@ -60,6 +61,7 @@ module rec IO_reader : sig
   val from_string : ?offset:int -> string -> t
   val from_file : string -> t
   val get_value_reader : t -> String_reader.t
+  val get_value_reader_with_prefix : t -> Codec.prefix -> String_reader.t
 end
 
 and String_reader : sig
@@ -80,4 +82,5 @@ and String_reader : sig
 
   val range_length : position -> position -> int
   val get_value_reader : t -> t
+  val get_value_reader_with_prefix : t -> Codec.prefix -> t
 end
