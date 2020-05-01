@@ -1041,7 +1041,7 @@ struct
       | `Lazy, Bitstring64 (Float, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_float$ s) >>
       | `Lazy, Bytes _ -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_string$ s) >>
 
-      | ev_regime, Tuple (lltys, _) -> begin
+      | ev_regime, (Tuple (lltys, _) as llty) -> begin
 
           let bad_type_case =
             <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
@@ -1077,7 +1077,7 @@ struct
           let tys_with_defvalues =
             List.map (fun llty -> (llty, default_value `Eager llty)) lltys in
 
-          let size_estimate = List.fold_left (+) 1 @@ List.map llty_word_size_estimate lltys in
+          let size_estimate = llty_word_size_estimate llty in
 
             match ev_regime with
               | `Eager ->
