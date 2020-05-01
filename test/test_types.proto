@@ -267,4 +267,48 @@ message lazy16b  = {
   v0 : [| int |];
 }
 
+type string_hohoho = string options "default" = "hohoho"
+
+message lazy17 = {
+  v1 [@lazy] : int [@default 789];
+  v2 [@lazy] : string_hohoho;
+  v3 [@lazy] : sum_type<int, int, int>;
+  v4 [@lazy] : [ int ];
+  v5 [@lazy] : [| int |];
+  v6 [@lazy] : simple_bool;
+}
+
+message lazy17b = {
+  v1 : int;
+  v2 : string_hohoho;
+  v3 : sum_type<int, int, int>;
+  v4 : [ int ];
+  v5 : [| int |];
+}
+
+message lazy17c = {
+  v1 : int;
+  v2 : string_hohoho;
+  v3 : sum_type<int, int, int>;
+  v4 : [ int ];
+}
+
+message lazy17d = {
+  v1 : int;
+  v2 : string_hohoho;
+  v3 : sum_type<int, int, int>;
+}
+
+message lazy17e = {
+  v1 : int;
+  v2 : string_hohoho;
+}
+
+message lazy17f = {
+  v1 : int;
+}
+
+message lazy18 = { v1 [@lazy] : lazy17; v2 [@lazy] : lazy17 }
+message lazy18b = { v1 : lazy17f; }
+
 (* vim:set ft=ocaml: *)

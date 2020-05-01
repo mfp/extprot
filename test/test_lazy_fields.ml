@@ -73,6 +73,28 @@ let force_lazy10 t =
   F.discard_packed t.Lazy10.v;
   t
 
+let force_lazy17 t =
+  ignore (F.force t.Lazy17.v1);
+  ignore (F.force t.Lazy17.v2);
+  ignore (F.force t.Lazy17.v3);
+  ignore (F.force t.Lazy17.v4);
+  ignore (F.force t.Lazy17.v5);
+  ignore (F.force t.Lazy17.v6);
+  F.discard_packed t.Lazy17.v1;
+  F.discard_packed t.Lazy17.v2;
+  F.discard_packed t.Lazy17.v3;
+  F.discard_packed t.Lazy17.v4;
+  F.discard_packed t.Lazy17.v5;
+  F.discard_packed t.Lazy17.v6;
+  t
+
+let force_lazy18 t =
+  ignore (F.force t.Lazy18.v1);
+  ignore (F.force t.Lazy18.v2);
+  F.discard_packed t.Lazy18.v1;
+  F.discard_packed t.Lazy18.v2;
+  t
+
 let nop x = x
 
 let tests = "lazy fields" >::: [
@@ -547,7 +569,75 @@ let tests = "lazy fields" >::: [
         v9 = (Array.init 345 ((-) 100));
         v0 = [||];
       }
-  end
+  end;
+
+  "default values" >:: begin fun () ->
+    check_roundtrip_complex
+      force_lazy17
+      Lazy17.pp Lazy17b.write Lazy17.read
+      { Lazy17b.v1 = 13; v2 = "foo"; v3 = Sum_type.C 3;
+        v4 = [ 4; 5 ]; v5 = [| 7; 8 |]; }
+      { Lazy17.v1 = F.from_val 13; v2 = F.from_val "foo";
+        v3 = F.from_val (Sum_type.C 3); v4 = F.from_val [ 4; 5 ];
+        v5 = F.from_val [| 7; 8 |];
+        v6 = F.from_val { Simple_bool.v = false } };
+
+    check_roundtrip_complex
+      force_lazy17
+      Lazy17.pp Lazy17c.write Lazy17.read
+      { Lazy17c.v1 = 13; v2 = "foo"; v3 = Sum_type.C 3;
+        v4 = [ 4; 5 ]; }
+      { Lazy17.v1 = F.from_val 13; v2 = F.from_val "foo";
+        v3 = F.from_val (Sum_type.C 3); v4 = F.from_val [ 4; 5 ];
+        v5 = F.from_val [| |];
+        v6 = F.from_val { Simple_bool.v = false } };
+
+    check_roundtrip_complex
+      force_lazy17
+      Lazy17.pp Lazy17d.write Lazy17.read
+      { Lazy17d.v1 = 13; v2 = "foo"; v3 = Sum_type.C 3; }
+      { Lazy17.v1 = F.from_val 13; v2 = F.from_val "foo";
+        v3 = F.from_val (Sum_type.C 3); v4 = F.from_val [ ];
+        v5 = F.from_val [| |];
+        v6 = F.from_val { Simple_bool.v = false } };
+
+    check_roundtrip_complex
+      force_lazy17
+      Lazy17.pp Lazy17e.write Lazy17.read
+      { Lazy17e.v1 = 13; v2 = "foo"; }
+      { Lazy17.v1 = F.from_val 13; v2 = F.from_val "foo";
+        v3 = F.from_val Sum_type.D; v4 = F.from_val [ ];
+        v5 = F.from_val [| |];
+        v6 = F.from_val { Simple_bool.v = false } };
+
+    check_roundtrip_complex
+      force_lazy17
+      Lazy17.pp Lazy17f.write Lazy17.read
+      { Lazy17f.v1 = 13; }
+      { Lazy17.v1 = F.from_val 13; v2 = F.from_val "hohoho";
+        v3 = F.from_val Sum_type.D; v4 = F.from_val [ ];
+        v5 = F.from_val [| |];
+        v6 = F.from_val { Simple_bool.v = false } };
+
+    check_roundtrip_complex
+      force_lazy18
+      Lazy18.pp Lazy18b.write Lazy18.read
+      { Lazy18b.v1 = { Lazy17f.v1 = 13; } }
+      { Lazy18.
+        v1 =
+          F.from_val @@
+          { Lazy17.v1 = F.from_val 13; v2 = F.from_val "hohoho";
+            v3 = F.from_val Sum_type.D; v4 = F.from_val [ ];
+            v5 = F.from_val [| |];
+            v6 = F.from_val { Simple_bool.v = false } };
+        v2 =
+          F.from_val @@
+          { Lazy17.v1 = F.from_val 789; v2 = F.from_val "hohoho";
+            v3 = F.from_val Sum_type.D; v4 = F.from_val [ ];
+            v5 = F.from_val [| |];
+            v6 = F.from_val { Simple_bool.v = false } };
+      }
+  end;
 
 ]
 
