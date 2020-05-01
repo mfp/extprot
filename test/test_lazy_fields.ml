@@ -46,7 +46,13 @@ let force_lazy01 t =
 
 let force_lazy02 t =
   ignore (F.force t.LazyT.v);
+  F.discard_packed t.LazyT.v;
   t
+
+let force_lazy02b t =
+  let t_ = force_lazy02 t in
+  let _  = force_lazy02 t_ in
+    t
 
 let force_lazy03 t =
   ignore (F.force t.Lazy03.v);
@@ -93,6 +99,11 @@ let force_lazy18 t =
   ignore (F.force t.Lazy18.v2);
   F.discard_packed t.Lazy18.v1;
   F.discard_packed t.Lazy18.v2;
+  t
+
+let force_lazy19 t =
+  ignore (F.force t.Lazy19.v);
+  F.discard_packed t.Lazy19.v;
   t
 
 let nop x = x
@@ -333,6 +344,16 @@ let tests = "lazy fields" >::: [
       force_lazy02
       Lazy02.pp Lazy02.write Lazy02.read
       { LazyT.v = thunk 42 };
+
+    check_serialization_equiv
+      Lazy02c.write Lazy02b.write
+      { RecT.v = { RecT.v = 42 } }
+      { LazyT.v = F.from_val { LazyT.v = F.from_val 42 } };
+
+    check_roundtrip
+      force_lazy02b
+      Lazy02b.pp Lazy02b.write Lazy02b.read
+      { LazyT.v = F.from_val { LazyT.v = F.from_val 42 } };
   end;
 
   "lazy with default" >:: begin fun () ->
@@ -636,7 +657,13 @@ let tests = "lazy fields" >::: [
             v3 = F.from_val Sum_type.D; v4 = F.from_val [ ];
             v5 = F.from_val [| |];
             v6 = F.from_val { Simple_bool.v = false } };
-      }
+      };
+
+    check_roundtrip_complex
+      force_lazy19
+      Lazy19.pp Lazy19b.write Lazy19.read
+      { Lazy19b.x = -32245; v = { LazyT.v = F.from_val "heh" } }
+      { Lazy19.x = -32245; v = F.from_val { LazyT.v = F.from_val "heh" } }
   end;
 
 ]

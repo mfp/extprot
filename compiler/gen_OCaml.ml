@@ -916,6 +916,11 @@ sig
   val record_case_inlined :
     string -> locs:bool -> ?namespace:string -> ?constr:string -> int ->
     field_info list -> Ast.match_case
+
+  val wrap_msg_reader :
+    Gencode.msg_name ->
+    ?promoted_match_cases:Ast.match_case ->
+    Ast.match_case -> Ast.expr
 end
 
 module rec STRING_READER : READER = Make_reader(STRING_READER_OPS)
@@ -1211,6 +1216,7 @@ struct
                   (if f.field_lazy then `Lazy else `Eager),
                   f.field_type))
               fields in
+
           let promoted_match_cases =
             STRING_READER.make_promoted_match_cases msgname [ Some name, None, fields' ] in
           let match_cases =
@@ -1218,9 +1224,9 @@ struct
               ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
           in
             <:expr<
-              let s = $RD.reader_func `Get_value_reader$ in
+              let s = $RD.reader_func `Get_value_reader$ s in
                 Extprot.Field.from_fun s
-                  (fun s -> $wrap_msg_reader name ~promoted_match_cases match_cases$)
+                  (fun s -> $STRING_READER.wrap_msg_reader name ~promoted_match_cases match_cases$)
               >>
 
       | `Eager, Message (path, name, _) ->

@@ -222,7 +222,10 @@ message lazy01b = {
 }
 
 type lazyT 'a   = { v [@lazy] : 'a }
+type recT 'a    = { v : 'a }
 message lazy02  = lazyT<int>
+message lazy02b = lazyT< lazyT<int> >
+message lazy02c = recT< recT<int> >
 message lazy03  = { v [@lazy] : int; v2 [@lazy] : int [@default 42] }
 message lazy03b = { v [@lazy] : int; }
 message lazy04  = lazyT< [ int ] >
@@ -308,7 +311,10 @@ message lazy17f = {
   v1 : int;
 }
 
-message lazy18 = { v1 [@lazy] : lazy17; v2 [@lazy] : lazy17 }
+message lazy18  = { v1 [@lazy] : lazy17; v2 [@lazy] : lazy17 }
 message lazy18b = { v1 : lazy17f; }
+
+message lazy19  = { x : int; v [@lazy] : lazyT<string_hohoho> }
+message lazy19b = { x : int; v: lazyT<string_hohoho> }
 
 (* vim:set ft=ocaml: *)
