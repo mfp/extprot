@@ -1133,14 +1133,16 @@ struct
                     >>
         end
 
-      | ev_regime, Sum (constructors, _) -> begin
+      | ev_regime, (Sum (constructors, _) as llty) -> begin
 
-          let f__raw_rd_func, f__reader_func, f__read_sum_elms =
+          let f__raw_rd_func, f__reader_func, f__read_sum_elms, ev_regime =
             match ev_regime with
-              | `Eager -> RD.raw_rd_func, RD.reader_func, read_sum_elms
+              | `Eager -> RD.raw_rd_func, RD.reader_func, read_sum_elms, `Eager
+              | `Lazy when llty_word_size_estimate llty < 16 (* approx threshold *) ->
+                  RD.raw_rd_func, RD.reader_func, read_sum_elms, `Lazy_Immediate
               | `Lazy ->
                   STR_OPS.raw_rd_func, STR_OPS.reader_func,
-                  STRING_READER.read_sum_elms
+                  STRING_READER.read_sum_elms, `Lazy
           in
 
           let constant, non_constant = partition_constructors constructors in
@@ -1229,6 +1231,7 @@ struct
           in
             match ev_regime with
               | `Eager -> expr
+              | `Lazy_Immediate -> <:expr< Extprot.Field.from_val $expr$ >>
               | `Lazy ->
                   <:expr<
                     let s = $RD.reader_func `Get_value_reader$ s in
