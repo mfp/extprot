@@ -2,9 +2,16 @@
 module type S =
 sig
   type 'a t
+  type hint
+  type path
+
+  val null_path : path
+  val path_append_type   : path -> string -> path
+  val path_append_constr : path -> string -> int -> path
+  val path_append_field  : path -> string -> int -> path
 
   val from_val : 'a -> 'a t
-  val from_fun : Reader.String_reader.t -> (Reader.String_reader.t -> 'a) -> 'a t
+  val from_fun : ?hint:hint -> level:int -> path:path -> Reader.String_reader.t -> (Reader.String_reader.t -> 'a) -> 'a t
   val from_thunk : (unit -> 'a) -> 'a t
 
   val is_val     : 'a t -> bool
@@ -25,9 +32,17 @@ struct
     | Delayed of Reader.String_reader.t * (Reader.String_reader.t -> 'a)
     | Value of 'a
 
+  type hint = unit
+  type path = unit
+
+  let null_path = ()
+  let path_append_type _ _   = ()
+  let path_append_constr _ _ _ = ()
+  let path_append_field _ _ _  = ()
+
   let from_val v = { s = None; v = Value v }
 
-  let from_fun s f = { s = Some s; v = Delayed (s, f) }
+  let from_fun ?hint:_ ~level:_ ~path:_ s f = { s = Some s; v = Delayed (s, f) }
 
   let dummy_reader = Reader.String_reader.from_string ""
 
@@ -83,7 +98,7 @@ struct
 
   let from_val v = { s = None; v = Value v }
 
-  let from_fun s f =
+  let from_fun ?hint:_ ~level:_ ~path:_ s f =
     let s = C.compress s in
 
     let f s =

@@ -21,7 +21,7 @@ let raises_extprot_err ?msg (f : 'a -> unit) x =
 
 let test_serialize_versioned_roundtrip v =
   let s = C.serialize_versioned [| Simple_tuple.write |] 0 v in
-  let v' = C.deserialize_versioned [| Simple_tuple.read |] s in
+  let v' = C.deserialize_versioned [| (fun s -> Simple_tuple.read s) |] s in
     aeq Simple_tuple.pp v v'
 
 let pputs fmt = Format.printf (fmt ^^ "@.")
@@ -29,7 +29,7 @@ let pputs fmt = Format.printf (fmt ^^ "@.")
 let test_read_frame_deserialize' v =
   let s = C.serialize_versioned [| Simple_tuple.write |] 0 v in
   let version, msg = C.read_frame (IO.input_string s) in
-  let v' = C.deserialize_versioned' [| Simple_tuple.read |] version msg in
+  let v' = C.deserialize_versioned' [| (fun s -> Simple_tuple.read s) |] version msg in
     aeq Simple_tuple.pp v v'
 
 let values = [ { Simple_tuple.v = (42, true) } ]
