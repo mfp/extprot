@@ -541,7 +541,7 @@ let tests = "lazy fields" >::: [
       Lazy16.write Lazy16b.write
       { Lazy16.
         v1 = F.from_val { Simple_bool.v = true };
-        v2 = F.from_val (10, -42);
+        v2 = F.from_val (10, "-42");
         v3 = F.from_val ("fooobar", 123456);
         v4 = F.from_val Sum_type.D;
         v5 = F.from_val (Sum_type.B "foo");
@@ -553,7 +553,7 @@ let tests = "lazy fields" >::: [
       }
       { Lazy16b.
         v1 = { Simple_bool.v = true };
-        v2 = (10, -42);
+        v2 = (10, "-42");
         v3 = ("fooobar", 123456);
         v4 = Sum_type.D;
         v5 = (Sum_type.B "foo");
@@ -568,7 +568,7 @@ let tests = "lazy fields" >::: [
       Lazy16.write Lazy16b.write
       { Lazy16.
         v1 = thunk { Simple_bool.v = true };
-        v2 = thunk (10, -42);
+        v2 = thunk (10, "-42");
         v3 = thunk ("fooobar", 123456);
         v4 = thunk Sum_type.D;
         v5 = thunk (Sum_type.B "foo");
@@ -580,7 +580,7 @@ let tests = "lazy fields" >::: [
       }
       { Lazy16b.
         v1 = { Simple_bool.v = true };
-        v2 = (10, -42);
+        v2 = (10, "-42");
         v3 = ("fooobar", 123456);
         v4 = Sum_type.D;
         v5 = (Sum_type.B "foo");

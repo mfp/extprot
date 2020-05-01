@@ -1058,7 +1058,19 @@ struct
               end
             | _ -> (* can't happen *) bad_type_case in
           let tys_with_defvalues =
-            List.map (fun llty -> (llty, default_value `Eager llty)) lltys
+            List.map (fun llty -> (llty, default_value `Eager llty)) lltys in
+
+          let min_size_estimate =
+            List.fold_left
+              (fun n llty -> match llty with
+                 | Vint _ -> n + 1
+                 | Bitstring32 _ -> n + 2
+                 | Bitstring64 _ -> n + 3
+                 | Sum (cs, _) when
+                     List.for_all (function `Constant _ -> true | _ -> false) cs ->
+                     n + 1
+                 | Sum _ | Record _ | Bytes _ | Tuple _ | Htuple _ | Message _ -> n + 1000)
+              0 lltys
           in
             match ev_regime with
               | `Eager ->
@@ -1076,6 +1088,24 @@ struct
                          | $other_cases$
                        ]
                    >>
+
+              (* we use an approx threshold based on reader + thunk overhead *)
+              | `Lazy when min_size_estimate < 16 ->
+                  <:expr<
+                     let t = $RD.reader_func `Read_prefix$ s in
+                       match Extprot.Codec.ll_type t with [
+                           Extprot.Codec.Tuple ->
+                             let len = $RD.reader_func `Read_vint$ s in
+                             let eot = $RD.reader_func `Offset$ s len in
+                             let nelms = $RD.reader_func `Read_vint$ s in
+                             let v = $read_tuple_elms msgname constr_name name tys_with_defvalues$ in begin
+                               $RD.reader_func `Skip_to$ s eot;
+                               Extprot.Field.from_val v
+                             end
+                         | $other_cases$
+                       ]
+                   >>
+
               | `Lazy ->
                   <:expr<
                      let s = $RD.reader_func `Get_value_reader$ s in

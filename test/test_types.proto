@@ -247,7 +247,7 @@ message lazy15  = A { v [@lazy] : bool } | B { x : int; v [@lazy] : sum_type2<in
 
 message lazy16  = {
   v1 [@lazy] : simple_bool;
-  v2 [@lazy] : (int * int);
+  v2 [@lazy] : (int * string);
   v3 [@lazy] : tuple<string, int>;
   v4 [@lazy] : sum_type<int, int, int>;
   v5 [@lazy] : sum_type<int, string, int>;
@@ -260,7 +260,7 @@ message lazy16  = {
 
 message lazy16b  = {
   v1 : simple_bool;
-  v2 : (int * int);
+  v2 : (int * string);
   v3 : tuple<string, int>;
   v4 : sum_type<int, int, int>;
   v5 : sum_type<int, string, int>;
