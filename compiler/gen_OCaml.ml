@@ -1255,6 +1255,25 @@ struct
           in
             wrap_msg_reader name ~promoted_match_cases match_cases
 
+      | `Lazy, (Record (name, fields, opts) as llty) when llty_word_size_estimate llty < 16 ->
+          let fields' =
+            List.map
+              (fun f ->
+                 (f.field_name, true,
+                  (if f.field_lazy then `Lazy else `Eager),
+                  f.field_type))
+              fields in
+          let promoted_match_cases =
+            make_promoted_match_cases msgname [ Some name, None, fields' ] in
+          let match_cases =
+            record_case_inlined
+              ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
+          in
+            <:expr<
+              Extprot.Field.from_val
+                $wrap_msg_reader name ~promoted_match_cases match_cases$
+            >>
+
       | `Lazy, Record (name, fields, opts) ->
           let fields' =
             List.map
