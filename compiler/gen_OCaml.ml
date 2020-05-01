@@ -957,6 +957,23 @@ struct
         >>
     | None -> expr
 
+  let rec llty_word_size_estimate : Gencode_types.low_level -> int = function
+    | Vint _ -> 1
+    | Bitstring32 _ -> 2
+    | Bitstring64 _ -> 3
+    | Sum (cs, _) ->
+        List.fold_left max 0 @@
+        List.map
+          (function
+            | `Constant _ -> 1
+            | `Non_constant (_, lltys) ->
+                List.fold_left (+) 1 @@ List.map llty_word_size_estimate lltys)
+          cs
+    | Tuple (lltys, _) ->
+        List.fold_left (+) 1 @@ List.map llty_word_size_estimate lltys
+    | Record (_, fs, _) ->
+        List.fold_left (+) 1 @@ List.map (fun f -> llty_word_size_estimate f.field_type) fs
+    | Bytes _ | Htuple _ | Message _ -> 1000
 
   let rec read_constructor_elms msgname constr_name name f lltys_and_defs =
     (* TODO: handle missing elms *)
@@ -1060,18 +1077,8 @@ struct
           let tys_with_defvalues =
             List.map (fun llty -> (llty, default_value `Eager llty)) lltys in
 
-          let min_size_estimate =
-            List.fold_left
-              (fun n llty -> match llty with
-                 | Vint _ -> n + 1
-                 | Bitstring32 _ -> n + 2
-                 | Bitstring64 _ -> n + 3
-                 | Sum (cs, _) when
-                     List.for_all (function `Constant _ -> true | _ -> false) cs ->
-                     n + 1
-                 | Sum _ | Record _ | Bytes _ | Tuple _ | Htuple _ | Message _ -> n + 1000)
-              0 lltys
-          in
+          let size_estimate = List.fold_left (+) 1 @@ List.map llty_word_size_estimate lltys in
+
             match ev_regime with
               | `Eager ->
                   <:expr<
@@ -1090,7 +1097,7 @@ struct
                    >>
 
               (* we use an approx threshold based on reader + thunk overhead *)
-              | `Lazy when min_size_estimate < 16 ->
+              | `Lazy when size_estimate < 16 ->
                   <:expr<
                      let t = $RD.reader_func `Read_prefix$ s in
                        match Extprot.Codec.ll_type t with [
