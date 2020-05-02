@@ -14,6 +14,7 @@ let output     = ref None
 let generators = ref None
 let width      = ref 100
 let nolocs     = ref false
+let fieldmod   = ref ""
 
 let arg_spec =
   Arg.align
@@ -25,6 +26,9 @@ let arg_spec =
 
       "-nolocs", Arg.Set nolocs,
         " Do not indicate precise locations by default in deserialization exceptions.";
+
+      "-fieldmod", Arg.Set_string fieldmod,
+        "MODULE Use MODULE for lazy fields (must be of module type Extprot.Field.S)";
 
       "-w", Arg.Set_int width,
         sprintf "N Set width to N characters in generated code (default: %d)." !width;
@@ -72,9 +76,10 @@ let () =
        let bindings = Gencode.collect_bindings decls in
        let local    = List.filter_map (function (entry,Ptypes.Local) -> Some entry | (_,Ptypes.Extern) -> None) entries in
 
-       let global_opts =
-         if !nolocs then ["locs", "false"]
-         else []
+       let global_opts = if !nolocs then ["locs", "false"] else [] in
+       let global_opts = match !fieldmod with
+         | "" -> global_opts
+         | s -> ("field-module", String.capitalize s) :: global_opts
        in
          begin
            match Ptypes.check_declarations decls with

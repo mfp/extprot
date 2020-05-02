@@ -261,7 +261,7 @@ let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr
               assert false
 
 let iter_message bindings f g msgname msg =
-  let proc_field f const (fname, mutabl, ev_regime, ty) = f const fname mutabl ty in
+  let proc_field f const (fname, mutabl, _ev_regime, ty) = f const fname mutabl ty in
 
   let iter_expanded_type const name ty =
     match beta_reduce_texpr bindings ty with
@@ -393,7 +393,7 @@ sig
   val generate_container : bindings -> declaration -> container option
   val msgdecl_generators : (string * container msgdecl_generator) list
   val typedecl_generators : (string * container typedecl_generator) list
-  val generate_code : ?width:int -> entry list -> string
+  val generate_code : ?global_opts:(string * string) list -> ?width:int -> entry list -> string
 end
 
 let (|>) x f = f x
@@ -440,7 +440,7 @@ struct
            Container container
           end
       end |>
-      Gen.generate_code ?width
+      Gen.generate_code ~global_opts ?width
 end
 
 module Prettyprint =

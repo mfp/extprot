@@ -247,10 +247,10 @@ let rec default_value ev_regime t =
   | _, Some { default=None; ty; _ }, Some _ -> failwith @@ sprintf "no default value specified for external type %s" ty
   | _, Some { default=None; _ }, None -> None
   | `Eager, Some { default=Some override; _ }, _ -> Some override
-  | `Lazy, Some { default=Some override; _ }, _ -> Some <:expr< Extprot.Field.from_val $override$ >>
+  | `Lazy, Some { default=Some override; _ }, _ -> Some <:expr< EXTPROT_FIELD____.from_val $override$ >>
   | _, None, None -> None
   | `Eager, None, Some v -> Some v
-  | `Lazy, None, Some v -> Some <:expr< Extprot.Field.from_val $v$ >>
+  | `Lazy, None, Some v -> Some <:expr< EXTPROT_FIELD____.from_val $v$ >>
 
 and default_record ~msgname ?namespace fields =
   let _loc = Loc.ghost in
@@ -319,7 +319,7 @@ let generate_container bindings =
           let ty = ctyp_of_texpr bindings texpr in
           let ty = match ev_regime with
             | `Eager -> ty
-            | `Lazy -> <:ctyp< Extprot.Field.t $ty$ >>
+            | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >>
           in
             match mutabl with
                 true -> <:ctyp< $lid:name$ : mutable $ty$ >>
@@ -412,7 +412,7 @@ let generate_container bindings =
          let ty = ctyp_of_texpr bindings texpr in
          let ty = match ev_regime with
            | `Eager -> ty
-           | `Lazy -> <:ctyp< Extprot.Field.t $ty$ >>
+           | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >>
          in
            match mutabl with
              true -> <:ctyp< $lid:name$ : mutable $ty$ >>
@@ -551,7 +551,7 @@ let generate_container bindings =
                 let ty = ctyp_of_poly_texpr_core bindings texpr in
                 let ty = match ev_regime with
                   | `Eager -> ty
-                  | `Lazy -> <:ctyp< Extprot.Field.t $ty$ >>
+                  | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >>
                 in
                   match mutabl with
                     true -> <:ctyp< $lid:name$ : mutable $ty$ >>
@@ -623,7 +623,7 @@ let default_function = function
     None -> None
   | Some _ -> assert false
 
-let generate_code ?width containers =
+let generate_code ?(global_opts=[]) ?width containers =
   let _loc = loc "<generated code>" in
   let container_of_str_item c =
     <:str_item<
@@ -635,15 +635,46 @@ let generate_code ?width containers =
          $maybe_str_item c.c_reader$;
          $maybe_str_item c.c_io_reader$;
          $maybe_str_item c.c_writer$
-       end >>
-  in string_of_ast ?width (fun o -> o#implem)
+       end >> in
+
+  let field_mod_declaration =
+    match List.assoc "field-module" global_opts with
+      | exception Not_found ->
+          <:str_item< module EXTPROT_FIELD____ = Extprot.Field >>
+      | modpath ->
+          let rec split_modpath ?(acc=[]) = function
+            | "" -> List.rev acc
+            | s ->
+                match String.index s '.' with
+                  | exception Not_found -> List.rev @@ s :: acc
+                  | n ->
+                      split_modpath
+                        ~acc:(String.sub s 0 n :: acc)
+                        (String.sub s (n + 1) (String.length s - n - 1))
+          in
+            let mod_uid =
+              match List.rev @@ split_modpath modpath with
+                | [] -> failwith "empty fieldmod path"
+                | [m] -> <:module_expr< $uid:m$ >>
+                | m :: ms ->
+                    let id =
+                      List.fold_left
+                        (fun id p -> <:ident< $uid:p$.$id$ >>)
+                        <:ident< $uid:m$ >>
+                        ms
+                    in
+                      <:module_expr< $id:id$ >>
+          in
+            <:str_item< module EXTPROT_FIELD____ = $mod_uid$ >>
+  in
+    string_of_ast ?width (fun o -> o#implem)
        (List.fold_left
           begin fun s e ->
             match e with
             | Toplevel t -> <:str_item< $s$; $t$; >>
             | Container c -> <:str_item< $s$; $container_of_str_item c$ >>
           end
-          <:str_item< >>
+          field_mod_declaration
           containers)
 
 let wrap_value opts expr =
@@ -711,8 +742,8 @@ struct
       let selector = match namespace, ev_regime with
         | None, `Eager -> <:expr< (fun t -> t.$lid:name$) >>
         | Some ns, `Eager -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >>
-        | None, `Lazy -> <:expr< (fun t -> Extprot.Field.force t.$lid:name$) >>
-        | Some ns, `Lazy -> <:expr< (fun t -> Extprot.Field.force t.$uid:String.capitalize ns$.$lid:name$) >>
+        | None, `Lazy -> <:expr< (fun t -> EXTPROT_FIELD____.force t.$lid:name$) >>
+        | Some ns, `Lazy -> <:expr< (fun t -> EXTPROT_FIELD____.force t.$uid:String.capitalize ns$.$lid:name$) >>
       in
       let prefix = match namespace with
           None -> String.capitalize msgname
@@ -806,7 +837,7 @@ struct
 
             let selector = match ev_regime with
               | `Eager -> <:expr< (fun t -> t.$lid:name$) >>
-              | `Lazy ->  <:expr< (fun t -> Extprot.Field.force t.$lid:name$) >>
+              | `Lazy ->  <:expr< (fun t -> EXTPROT_FIELD____.force t.$lid:name$) >>
             in
               <:expr<
                 ( $str:field_name$,
@@ -1026,7 +1057,7 @@ struct
   let update_path_if_needed ~name ~fieldno llty e =
     if may_use_hint_path llty then
       <:expr<
-         let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+         let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
          let _    = path in
            $e$
       >>
@@ -1091,13 +1122,13 @@ struct
       | `Eager, Bitstring64 (Float, _) -> <:expr< $RD.reader_func `Read_float$ s >>
       | `Eager, Bytes _ -> <:expr< $RD.reader_func `Read_string$ s >>
 
-      | `Lazy, Vint (Bool, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_bool$ s) >>
-      | `Lazy, Vint (Int, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_rel_int$ s) >>
-      | `Lazy, Vint (Int8, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_i8$ s) >>
-      | `Lazy, Bitstring32 _ -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_i32$ s) >>
-      | `Lazy, Bitstring64 (Long, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_i64$ s) >>
-      | `Lazy, Bitstring64 (Float, _) -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_float$ s) >>
-      | `Lazy, Bytes _ -> <:expr< Extprot.Field.from_val ($RD.reader_func `Read_string$ s) >>
+      | `Lazy, Vint (Bool, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_bool$ s) >>
+      | `Lazy, Vint (Int, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_rel_int$ s) >>
+      | `Lazy, Vint (Int8, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_i8$ s) >>
+      | `Lazy, Bitstring32 _ -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_i32$ s) >>
+      | `Lazy, Bitstring64 (Long, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_i64$ s) >>
+      | `Lazy, Bitstring64 (Float, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_float$ s) >>
+      | `Lazy, Bytes _ -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_string$ s) >>
 
       | ev_regime, (Tuple (lltys, _) as llty) -> begin
 
@@ -1164,7 +1195,7 @@ struct
                              let nelms = $RD.reader_func `Read_vint$ s in
                              let v = $read_tuple_elms msgname constr_name name tys_with_defvalues$ in begin
                                $RD.reader_func `Skip_to$ s eot;
-                               Extprot.Field.from_val v
+                               EXTPROT_FIELD____.from_val v
                              end
                          | $other_cases$
                        ]
@@ -1173,8 +1204,8 @@ struct
               | `Lazy ->
                   <:expr<
                      let s = $RD.reader_func `Get_value_reader$ s in
-                     let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
-                       Extprot.Field.from_fun ?hint ~level ~path s begin fun s ->
+                     let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                       EXTPROT_FIELD____.from_fun ?hint ~level ~path s begin fun s ->
                          let t = $STR_OPS.reader_func `Read_prefix$ s in
                            match Extprot.Codec.ll_type t with [
                                Extprot.Codec.Tuple ->
@@ -1291,20 +1322,20 @@ struct
               | `Eager -> update_path_if_needed ~name ~fieldno llty expr
               | `Lazy_Immediate ->
                   update_path_if_needed ~name ~fieldno llty
-                    <:expr< Extprot.Field.from_val $expr$ >>
+                    <:expr< EXTPROT_FIELD____.from_val $expr$ >>
               | `Lazy ->
                   <:expr<
                     let t   = $RD.reader_func `Read_prefix$ s in
                       match Extprot.Codec.ll_type t with [
                          Extprot.Codec.Enum ->
-                            Extprot.Field.from_val @@
+                            EXTPROT_FIELD____.from_val @@
                             match Extprot.Codec.ll_tag t with [
                               $Ast.mcOr_of_list constant_match_cases$
                             ]
                         | _ ->
                             let s = $RD.reader_func `Get_value_reader_with_prefix$ s t in
-                            let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
-                              Extprot.Field.from_fun ?hint ~level ~path s (fun s -> $expr$)
+                            let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                              EXTPROT_FIELD____.from_fun ?hint ~level ~path s (fun s -> $expr$)
                       ]
                   >>
         end
@@ -1342,7 +1373,7 @@ struct
           in
             update_path_if_needed ~name ~fieldno llty @@
             <:expr<
-              Extprot.Field.from_val
+              EXTPROT_FIELD____.from_val
                 $wrap_msg_reader name ~promoted_match_cases match_cases$
             >>
 
@@ -1363,8 +1394,8 @@ struct
           in
             <:expr<
               let s = $RD.reader_func `Get_value_reader$ s in
-              let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
-                Extprot.Field.from_fun ?hint ~level ~path s
+              let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                EXTPROT_FIELD____.from_fun ?hint ~level ~path s
                   (fun s -> $STRING_READER.wrap_msg_reader name ~promoted_match_cases match_cases$)
               >>
 
@@ -1383,7 +1414,7 @@ struct
             update_path_if_needed ~name ~fieldno llty @@
             <:expr<
               let s = $RD.reader_func `Get_value_reader$ s in
-                Extprot.Field.from_fun ?hint ~level ~path s (fun s -> $id:id$ s)
+                EXTPROT_FIELD____.from_fun ?hint ~level ~path s (fun s -> $id:id$ s)
             >>
 
       | ev_regime, Htuple (kind, llty, _) -> begin
@@ -1453,7 +1484,7 @@ struct
                                 Extprot.Msg_buffer.add_vint b len;
                                 Extprot.Msg_buffer.add_vint b nelms;
                                 Extprot.Msg_buffer.add_string b dat;
-                                Extprot.Field.from_fun ?hint ~level ~path
+                                EXTPROT_FIELD____.from_fun ?hint ~level ~path
                                   (Extprot.Reader.String_reader.from_msgbuffer b)
                                   (fun s -> $e$)
                               }
@@ -1462,7 +1493,7 @@ struct
                           <:expr<
                             do {
                               $RD.reader_func `Skip_to$ s eoht;
-                              Extprot.Field.from_fun ?hint ~level ~path
+                              EXTPROT_FIELD____.from_fun ?hint ~level ~path
                                 (try ($f$ s ~off:boht ~upto:eoht)
                                  with _ ->
                                    Extprot.Error.limit_exceeded
@@ -1494,9 +1525,9 @@ struct
                                   if nelms = 0 then do {
                                     ignore boht;
                                     $RD.reader_func `Skip_to$ s eoht;
-                                    Extprot.Field.from_val $empty_htuple$
+                                    EXTPROT_FIELD____.from_val $empty_htuple$
                                   } else begin
-                                    let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                                    let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                                       $from_fun_expr$
                                   end
                             | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
@@ -1549,7 +1580,7 @@ struct
                       e loc >> in
       let default = match ev_regime, default_value ev_regime llty with
         | `Eager, Some expr -> expr
-        | `Lazy, Some expr -> <:expr< Extprot.Field.from_val $expr$ >>
+        | `Lazy, Some expr -> <:expr< EXTPROT_FIELD____.from_val $expr$ >>
         | _, None ->
             <:expr< Extprot.Error.missing_field
                       ~message:$str:msgname$
@@ -1667,7 +1698,7 @@ struct
       else
         <:match_case<
           $int:string_of_int tag$ ->
-            let path = Extprot.Field.Hint_path.append_constr path $str:constr_name$ $int:string_of_int tag$ in
+            let path = EXTPROT_FIELD____.Hint_path.append_constr path $str:constr_name$ $int:string_of_int tag$ in
             let _    = path in
               try
                 let v = $e$ in begin
@@ -1719,7 +1750,7 @@ struct
         <:match_case<
           $int:string_of_int tag$ ->
             let path =
-              Extprot.Field.Hint_path.append_constr path
+              EXTPROT_FIELD____.Hint_path.append_constr path
                 $str:Option.default "<default>" constr$ $int:string_of_int tag$  in
             let _    = path in
               try
@@ -1760,7 +1791,7 @@ struct
             let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
               <:expr<
                 let $lid:name$ =
-                  let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                  let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                   let _    = path in
                     $uid:String.capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
                 in
@@ -1818,7 +1849,7 @@ struct
                 <:expr<
                    let $lid:name$ =
                      if nelms >= $int:string_of_int (fieldno + 1)$ then begin
-                       let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                       let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                        let _    = path in
                          $read_expr$
                      end else $default$
@@ -1924,7 +1955,7 @@ struct
               | `Lazy, Some (mc, reader_expr) ->
                 <:expr<
                   match Extprot.Codec.ll_type t with [
-                      $mc$ -> Extprot.Field.from_val ($reader_expr$ s)
+                      $mc$ -> EXTPROT_FIELD____.from_val ($reader_expr$ s)
                     | _ -> raise_bad_wire_type ()
                   ]
                 >>
@@ -2092,8 +2123,8 @@ let add_message_reader bindings msgname mexpr opts c =
   let str_item_read =
     if msg_may_use_hint_path llrec then
       <:str_item<
-        value $lid:"read_" ^ msgname$ ?hint ?(level = 0) ?(path = Extprot.Field.Hint_path.null) s =
-          let path  = Extprot.Field.Hint_path.append_type path $str:msgname$ in
+        value $lid:"read_" ^ msgname$ ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s =
+          let path  = EXTPROT_FIELD____.Hint_path.append_type path $str:msgname$ in
           let level = level + 1 in
           let _     = path in
           let _     = level in
@@ -2101,7 +2132,7 @@ let add_message_reader bindings msgname mexpr opts c =
         >>
     else
       <:str_item<
-        value $lid:"read_" ^ msgname$ ?hint ?(level = 0) ?(path = Extprot.Field.Hint_path.null) s =
+        value $lid:"read_" ^ msgname$ ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s =
           $read_expr$;
         >>
   in
@@ -2154,8 +2185,8 @@ let add_message_io_reader bindings msgname mexpr opts c =
           Some <:str_item<
                   $field_readers$;
                   value $lid:"io_read_" ^ msgname$
-                    ?hint ?(level = 0) ?(path = Extprot.Field.Hint_path.null) s =
-                    let path  = Extprot.Field.Hint_path.append_type path $str:msgname$ in
+                    ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s =
+                    let path  = EXTPROT_FIELD____.Hint_path.append_type path $str:msgname$ in
                     let level = level + 1 in
                     let _     = path in
                     let _     = level in
@@ -2170,7 +2201,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
           Some <:str_item<
                   $field_readers$;
                   value $lid:"io_read_" ^ msgname$
-                    ?hint ?(level = 0) ?(path = Extprot.Field.Hint_path.null) s =
+                    ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s =
                       $ioread_expr$;
 
                   value io_read = $lid:"io_read_" ^ msgname$;
@@ -2303,9 +2334,9 @@ let rec write_field ~ev_regime ?namespace fname llty =
     match ev_regime with
       | `Eager -> write v llty
       | `Lazy ->
-          let force_and_write = write <:expr< Extprot.Field.force $v$ >> llty in
+          let force_and_write = write <:expr< EXTPROT_FIELD____.force $v$ >> llty in
             <:expr<
-              match Extprot.Field.get_reader $v$ with [
+              match EXTPROT_FIELD____.get_reader $v$ with [
                   None -> $force_and_write$
                 | Some r -> Extprot.Reader.String_reader.append_to_buffer r aux
               ]
