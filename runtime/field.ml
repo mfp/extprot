@@ -5,10 +5,16 @@ sig
   type hint
   type path
 
-  val null_path : path
-  val path_append_type   : path -> string -> path
-  val path_append_constr : path -> string -> int -> path
-  val path_append_field  : path -> string -> int -> path
+  module Hint_path :
+  sig
+    type t = path
+
+    val null : path
+
+    val append_type   : t -> string -> t
+    val append_constr : t -> string -> int -> t
+    val append_field  : t -> string -> int -> t
+  end
 
   val from_val : 'a -> 'a t
   val from_fun : ?hint:hint -> level:int -> path:path -> Reader.String_reader.t -> (Reader.String_reader.t -> 'a) -> 'a t
@@ -35,10 +41,14 @@ struct
   type hint = unit
   type path = unit
 
-  let null_path = ()
-  let path_append_type _ _   = ()
-  let path_append_constr _ _ _ = ()
-  let path_append_field _ _ _  = ()
+  module Hint_path =
+  struct
+    type t = path
+    let null = ()
+    let append_type _ _   = ()
+    let append_constr _ _ _ = ()
+    let append_field _ _ _  = ()
+  end
 
   let from_val v = { s = None; v = Value v }
 

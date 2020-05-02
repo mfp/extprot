@@ -1026,7 +1026,7 @@ struct
   let update_path_if_needed ~name ~fieldno llty e =
     if may_use_hint_path llty then
       <:expr<
-         let path = Extprot.Field.path_append_field path $str:name$ $int:string_of_int fieldno$ in
+         let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
          let _    = path in
            $e$
       >>
@@ -1173,7 +1173,7 @@ struct
               | `Lazy ->
                   <:expr<
                      let s = $RD.reader_func `Get_value_reader$ s in
-                     let path = Extprot.Field.path_append_field path $str:name$ $int:string_of_int fieldno$ in
+                     let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                        Extprot.Field.from_fun ?hint ~level ~path s begin fun s ->
                          let t = $STR_OPS.reader_func `Read_prefix$ s in
                            match Extprot.Codec.ll_type t with [
@@ -1303,7 +1303,7 @@ struct
                             ]
                         | _ ->
                             let s = $RD.reader_func `Get_value_reader_with_prefix$ s t in
-                            let path = Extprot.Field.path_append_field path $str:name$ $int:string_of_int fieldno$ in
+                            let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                               Extprot.Field.from_fun ?hint ~level ~path s (fun s -> $expr$)
                       ]
                   >>
@@ -1363,7 +1363,7 @@ struct
           in
             <:expr<
               let s = $RD.reader_func `Get_value_reader$ s in
-              let path = Extprot.Field.path_append_field path $str:name$ $int:string_of_int fieldno$ in
+              let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                 Extprot.Field.from_fun ?hint ~level ~path s
                   (fun s -> $STRING_READER.wrap_msg_reader name ~promoted_match_cases match_cases$)
               >>
@@ -1496,7 +1496,7 @@ struct
                                     $RD.reader_func `Skip_to$ s eoht;
                                     Extprot.Field.from_val $empty_htuple$
                                   } else begin
-                                    let path = Extprot.Field.path_append_field path $str:name$ $int:string_of_int fieldno$ in
+                                    let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                                       $from_fun_expr$
                                   end
                             | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
@@ -1667,7 +1667,7 @@ struct
       else
         <:match_case<
           $int:string_of_int tag$ ->
-            let path = Extprot.Field.path_append_constr path $str:constr_name$ $int:string_of_int tag$ in
+            let path = Extprot.Field.Hint_path.append_constr path $str:constr_name$ $int:string_of_int tag$ in
             let _    = path in
               try
                 let v = $e$ in begin
@@ -1719,7 +1719,7 @@ struct
         <:match_case<
           $int:string_of_int tag$ ->
             let path =
-              Extprot.Field.path_append_constr path
+              Extprot.Field.Hint_path.append_constr path
                 $str:Option.default "<default>" constr$ $int:string_of_int tag$  in
             let _    = path in
               try
@@ -1760,7 +1760,7 @@ struct
             let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
               <:expr<
                 let $lid:name$ =
-                  let path = Extprot.Field.path_append_field path $str:name$ $int:string_of_int fieldno$ in
+                  let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                   let _    = path in
                     $uid:String.capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
                 in
@@ -1818,7 +1818,7 @@ struct
                 <:expr<
                    let $lid:name$ =
                      if nelms >= $int:string_of_int (fieldno + 1)$ then begin
-                       let path = Extprot.Field.path_append_field path $str:name$ $int:string_of_int fieldno$ in
+                       let path = Extprot.Field.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                        let _    = path in
                          $read_expr$
                      end else $default$
@@ -2092,8 +2092,8 @@ let add_message_reader bindings msgname mexpr opts c =
   let str_item_read =
     if msg_may_use_hint_path llrec then
       <:str_item<
-        value $lid:"read_" ^ msgname$ ?hint ?(level = 0) ?(path = Extprot.Field.null_path) s =
-          let path  = Extprot.Field.path_append_type path $str:msgname$ in
+        value $lid:"read_" ^ msgname$ ?hint ?(level = 0) ?(path = Extprot.Field.Hint_path.null) s =
+          let path  = Extprot.Field.Hint_path.append_type path $str:msgname$ in
           let level = level + 1 in
           let _     = path in
           let _     = level in
@@ -2101,7 +2101,7 @@ let add_message_reader bindings msgname mexpr opts c =
         >>
     else
       <:str_item<
-        value $lid:"read_" ^ msgname$ ?hint ?(level = 0) ?(path = Extprot.Field.null_path) s =
+        value $lid:"read_" ^ msgname$ ?hint ?(level = 0) ?(path = Extprot.Field.Hint_path.null) s =
           $read_expr$;
         >>
   in
@@ -2154,8 +2154,8 @@ let add_message_io_reader bindings msgname mexpr opts c =
           Some <:str_item<
                   $field_readers$;
                   value $lid:"io_read_" ^ msgname$
-                    ?hint ?(level = 0) ?(path = Extprot.Field.null_path) s =
-                    let path  = Extprot.Field.path_append_type path $str:msgname$ in
+                    ?hint ?(level = 0) ?(path = Extprot.Field.Hint_path.null) s =
+                    let path  = Extprot.Field.Hint_path.append_type path $str:msgname$ in
                     let level = level + 1 in
                     let _     = path in
                     let _     = level in
@@ -2170,7 +2170,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
           Some <:str_item<
                   $field_readers$;
                   value $lid:"io_read_" ^ msgname$
-                    ?hint ?(level = 0) ?(path = Extprot.Field.null_path) s =
+                    ?hint ?(level = 0) ?(path = Extprot.Field.Hint_path.null) s =
                       $ioread_expr$;
 
                   value io_read = $lid:"io_read_" ^ msgname$;
