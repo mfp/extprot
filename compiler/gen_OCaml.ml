@@ -1578,10 +1578,9 @@ struct
                       ~constructor:$str:constr_name$
                       ~field:$str:name$
                       e loc >> in
-      let default = match ev_regime, default_value ev_regime llty with
-        | `Eager, Some expr -> expr
-        | `Lazy, Some expr -> <:expr< EXTPROT_FIELD____.from_val $expr$ >>
-        | _, None ->
+      let default = match default_value ev_regime llty with
+        | Some expr -> expr
+        | None ->
             <:expr< Extprot.Error.missing_field
                       ~message:$str:msgname$
                       ~constructor:$str:constr_name$

@@ -272,6 +272,9 @@ message lazy16b  = {
   v0 : [| int |];
 }
 
+message lazy16c = {| lazy16 | v1; v2; v5; v9; v0 |}
+message lazy16d = {| lazy16 | not v0 |}
+
 type string_hohoho = string options "default" = "hohoho"
 
 message lazy17 = {

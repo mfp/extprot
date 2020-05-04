@@ -89,6 +89,19 @@ let force_lazy15 = function
       F.discard_packed v;
       t
 
+let force_lazy16c t =
+  ignore (F.force t.Lazy16c.v1);
+  ignore (F.force t.Lazy16c.v2);
+  ignore (F.force t.Lazy16c.v5);
+  ignore (F.force t.Lazy16c.v9);
+  ignore (F.force t.Lazy16c.v0);
+  F.discard_packed t.Lazy16c.v1;
+  F.discard_packed t.Lazy16c.v2;
+  F.discard_packed t.Lazy16c.v5;
+  F.discard_packed t.Lazy16c.v9;
+  F.discard_packed t.Lazy16c.v0;
+  t
+
 let force_lazy17 t =
   ignore (F.force t.Lazy17.v1);
   ignore (F.force t.Lazy17.v2);
@@ -573,6 +586,32 @@ let tests = "lazy fields" >::: [
       (Lazy15b.A { Lazy15b.A.v = true })
       (Lazy15.A { Lazy15.A.v = F.from_val true });
   end;
+
+  "subsets of messages with lazy fields" >:: begin fun () ->
+    check_roundtrip_complex
+      force_lazy16c
+      Lazy16c.pp Lazy16.write Lazy16c.read
+      { Lazy16.
+        v1 = F.from_val { Simple_bool.v = true};
+        v2 = F.from_val (-4343, "dfsdfsd");
+        v3 = F.from_val ("xxxx", 111);
+        v4 = F.from_val @@ Sum_type.B 666;
+        v5 = thunk @@ Sum_type.B "hhhhh";
+        v6 = F.from_val Sum_type.D;
+        v7 = F.from_val [ "x"; "y" ];
+        v8 = F.from_val @@ List.map (sprintf "%d") @@ Array.to_list @@ Array.init 100 ((+) 42);
+        v9 = F.from_val [| 1; -66666 |];
+        v0 = F.from_val @@ Array.init 100 ((-) 42);
+      }
+      { Lazy16c.
+        v1 = F.from_val { Simple_bool.v = true};
+        v2 = F.from_val (-4343, "dfsdfsd");
+        v5 = thunk @@ Sum_type.B "hhhhh";
+        v9 = F.from_val [| 1; -66666 |];
+        v0 = F.from_val @@ Array.init 100 ((-) 42);
+      }
+  end;
+
 
   "complex type serialization compat" >:: begin fun () ->
     check_serialization_equiv
