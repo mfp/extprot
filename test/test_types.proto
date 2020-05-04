@@ -244,6 +244,7 @@ message lazy12  = { v [@lazy] : (simple_bool * simple_bool) }
 message lazy13  = { v [@lazy] : (msg_sum * msg_sum) }
 message lazy14  = { v [@lazy] : [ msg_sum ] }
 message lazy15  = A { v [@lazy] : bool } | B { x : int; v [@lazy] : sum_type2<int> }
+message lazy15b = A { v : bool } | B { x : int; }
 
 message lazy16  = {
   v1 [@lazy] : simple_bool;

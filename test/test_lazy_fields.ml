@@ -79,6 +79,16 @@ let force_lazy10 t =
   F.discard_packed t.Lazy10.v;
   t
 
+let force_lazy15 = function
+  | Lazy15.A { Lazy15.A.v } as t ->
+      ignore (F.force v);
+      F.discard_packed v;
+      t
+  | Lazy15.B { Lazy15.B.v; _ } as t ->
+      ignore (F.force v);
+      F.discard_packed v;
+      t
+
 let force_lazy17 t =
   ignore (F.force t.Lazy17.v1);
   ignore (F.force t.Lazy17.v2);
@@ -536,6 +546,34 @@ let tests = "lazy fields" >::: [
       { Lazy10b.x = 42; v = {Simple_bool.v = true }; };
   end;
 
+  "message variants" >:: begin fun () ->
+    check_roundtrip
+      force_lazy15
+      Lazy15.pp Lazy15.write Lazy15.read
+      (Lazy15.A { Lazy15.A.v = F.from_val true });
+
+    check_roundtrip
+      force_lazy15
+      Lazy15.pp Lazy15.write Lazy15.read
+      (Lazy15.B { Lazy15.B.x = 42; v = F.from_val (Sum_type2.B 12345)});
+
+    check_roundtrip
+      force_lazy15
+      Lazy15.pp Lazy15.write Lazy15.read
+      (Lazy15.A { Lazy15.A.v = thunk true });
+
+    check_roundtrip
+      force_lazy15
+      Lazy15.pp Lazy15.write Lazy15.read
+      (Lazy15.B { Lazy15.B.x = 42; v = thunk (Sum_type2.B 12345)});
+
+    check_roundtrip_complex
+      force_lazy15
+      Lazy15.pp Lazy15b.write Lazy15.read
+      (Lazy15b.A { Lazy15b.A.v = true })
+      (Lazy15.A { Lazy15.A.v = F.from_val true });
+  end;
+
   "complex type serialization compat" >:: begin fun () ->
     check_serialization_equiv
       Lazy16.write Lazy16b.write
@@ -669,7 +707,13 @@ let tests = "lazy fields" >::: [
       force_lazy19
       Lazy19.pp Lazy19c.write Lazy19.read
       { Lazy19c.x = -32245; }
-      { Lazy19.x = -32245; v = F.from_val { LazyT.v = F.from_val "hohoho" } }
+      { Lazy19.x = -32245; v = F.from_val { LazyT.v = F.from_val "hohoho" } };
+
+    check_roundtrip_complex
+      force_lazy15
+      Lazy15.pp Lazy15b.write Lazy15.read
+      (Lazy15b.B { Lazy15b.B.x = 12345 })
+      (Lazy15.B { Lazy15.B.x = 12345; v = F.from_val Sum_type2.A });
   end;
 
 ]
