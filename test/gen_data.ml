@@ -52,6 +52,48 @@ let rec_message_sum =
   in
     rand_choice [ a; b ]
 
+let rand_lazy21b =
+  let module F = Extprot.Field in
+
+  let rand_simple_bool = rand_bool >>= fun v -> return { Simple_bool.v } in
+
+  let a =
+    let v1 = rand_simple_bool in
+    let v2 = rand_int >>= fun fst -> rand_readable_string rand_len >>= fun snd -> return (fst, snd) in
+    let v3 = v2 >>= fun (a, b) -> return (b, a) in
+    let v4 = rand_sum_type rand_int rand_int rand_int in
+    let v5 = rand_sum_type rand_int (rand_readable_string rand_len) rand_int in
+    let v6 = rand_sum_type rand_simple_bool rand_int rand_int in
+    let v7 = rand_list rand_len (rand_readable_string rand_len) in
+    let v8 = v7 in
+    let v9 = rand_array rand_len rand_int in
+    let v0 = v9 in
+      v1 >>= fun v1 -> v2 >>= fun v2 -> v3 >>= fun v3 -> v4 >>= fun v4 ->
+      v5 >>= fun v5 -> v6 >>= fun v6 -> v7 >>= fun v7 -> v8 >>= fun v8 ->
+      v9 >>= fun v9 -> v0 >>= fun v0 ->
+      return
+        { Lazy21a.
+          v1 = F.from_val v1;
+          v2 = F.from_val v2;
+          v3 = F.from_val v3;
+          v4 = F.from_val v4;
+          v5 = F.from_val v5;
+          v6 = F.from_val v6;
+          v7 = F.from_val v7;
+          v8 = F.from_val v8;
+          v9 = F.from_val v9;
+          v0 = F.from_val v0;
+        } in
+
+  let b =
+    rand_string rand_len >>= fun v -> return { LazyT.v = F.from_val { Simple_string.v } }
+  in
+    rand_choice
+      [
+        (a >>= fun a -> return @@ Lazy21b.A a);
+        (b >>= fun b -> return @@ Lazy21b.B b);
+      ]
+
 module Xml = struct
   open Printf
   module B = Buffer

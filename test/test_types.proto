@@ -328,4 +328,21 @@ message lazy20b = { v1 [@lazy] : lazyT<string>; v2 [@lazy] : lazyT<simple_bool> 
 message lazy20c = { v1 [@lazy] : lazy20a; v2 [@lazy] : lazy20a }
 message lazy20d = {| lazy20c | v2 : lazy20b |}
 
+type lazy21a  = {
+  v1 [@lazy] : simple_bool;
+  v2 [@lazy] : (int * string);
+  v3 [@lazy] : tuple<string, int>;
+  v4 [@lazy] : sum_type<int, int, int>;
+  v5 [@lazy] : sum_type<int, string, int>;
+  v6 [@lazy] : sum_type<simple_bool, int, int>;
+  v7 [@lazy] : [ string ];
+  v8 [@lazy] : [ string ];
+  v9 [@lazy] : [| int |];
+  v0 [@lazy] : [| int |];
+}
+
+message lazy21b =
+    A lazy21a
+  | B lazyT<simple_string>
+
 (* vim:set ft=ocaml: *)

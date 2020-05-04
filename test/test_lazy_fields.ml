@@ -143,6 +143,33 @@ let force_lazy20d t =
   F.discard_packed t.Lazy20d.v2;
   t
 
+let force_lazy21b = function
+  | Lazy21b.A { Lazy21a.v1; v2; v3; v4; v5; v6; v7; v8; v9; v0 } as t ->
+      ignore (F.force v1);
+      ignore (F.force v2);
+      ignore (F.force v3);
+      ignore (F.force v4);
+      ignore (F.force v5);
+      ignore (F.force v6);
+      ignore (F.force v7);
+      ignore (F.force v8);
+      ignore (F.force v9);
+      ignore (F.force v0);
+      F.discard_packed v1;
+      F.discard_packed v2;
+      F.discard_packed v3;
+      F.discard_packed v4;
+      F.discard_packed v5;
+      F.discard_packed v6;
+      F.discard_packed v7;
+      F.discard_packed v8;
+      F.discard_packed v9;
+      F.discard_packed v0;
+      t
+  | Lazy21b.B x as t ->
+      ignore (force_lazyT x);
+      t
+
 let nop x = x
 
 let tests = "lazy fields" >::: [
@@ -814,6 +841,16 @@ let tests = "lazy fields" >::: [
       Lazy15.pp Lazy15b.write Lazy15.read
       (Lazy15b.B { Lazy15b.B.x = 12345 })
       (Lazy15.B { Lazy15.B.x = 12345; v = F.from_val Sum_type2.A });
+  end;
+
+  "randomized testing" >:: begin fun () ->
+    for i = 0 to 5000 do
+      let v = Gen_data.generate Gen_data.rand_lazy21b in
+        check_roundtrip
+          force_lazy21b
+          Lazy21b.pp Lazy21b.write Lazy21b.read
+          v
+    done
   end;
 
 ]
