@@ -323,4 +323,9 @@ message lazy19  = { x : int; v [@lazy] : lazyT<string_hohoho> }
 message lazy19b = { x : int; v: lazyT<string_hohoho> }
 message lazy19c = { x : int }
 
+message lazy20a = { v1 : lazyT<string>; v2 : lazyT<simple_bool> }
+message lazy20b = { v1 [@lazy] : lazyT<string>; v2 [@lazy] : lazyT<simple_bool> }
+message lazy20c = { v1 [@lazy] : lazy20a; v2 [@lazy] : lazy20a }
+message lazy20d = {| lazy20c | v2 : lazy20b |}
+
 (* vim:set ft=ocaml: *)

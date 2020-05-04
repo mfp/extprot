@@ -129,6 +129,20 @@ let force_lazy19 t =
   F.discard_packed t.Lazy19.v;
   t
 
+let force_lazy20b t =
+  ignore (F.force (F.force t.Lazy20b.v1).LazyT.v);
+  ignore (F.force (F.force t.Lazy20b.v2).LazyT.v);
+  F.discard_packed t.Lazy20b.v1;
+  F.discard_packed (F.force t.Lazy20b.v1).LazyT.v;
+  F.discard_packed t.Lazy20b.v2;
+  F.discard_packed (F.force t.Lazy20b.v2).LazyT.v;
+  t
+
+let force_lazy20d t =
+  ignore (force_lazy20b (F.force t.Lazy20d.v2));
+  F.discard_packed t.Lazy20d.v2;
+  t
+
 let nop x = x
 
 let tests = "lazy fields" >::: [
@@ -633,6 +647,31 @@ let tests = "lazy fields" >::: [
         v9 = F.from_val [| 1; -66666 |];
         v0 = F.from_val @@ Array.init 100 ((-) 42);
       };
+  end;
+
+  "subsets with type ascription" >:: begin fun () ->
+    check_roundtrip_complex
+      force_lazy20d
+      Lazy20d.pp Lazy20c.write Lazy20d.read
+      { Lazy20c.
+        v1 =
+          F.from_val
+            { Lazy20a.
+              v1 = { LazyT.v = F.from_val "xxx123" };
+              v2 = { LazyT.v = F.from_val { Simple_bool.v = true } } };
+
+        v2 =
+          F.from_val
+            { Lazy20a.
+              v1 = { LazyT.v = F.from_val "434324234xxx123" };
+              v2 = { LazyT.v = F.from_val { Simple_bool.v = false } } };
+      }
+      { Lazy20d.v2 =
+          F.from_val
+            { Lazy20b.
+              v1 = F.from_val { LazyT.v = F.from_val "434324234xxx123" };
+              v2 = F.from_val { LazyT.v = F.from_val { Simple_bool.v = false } } };
+      }
   end;
 
   "complex type serialization compat" >:: begin fun () ->
