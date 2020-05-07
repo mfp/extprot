@@ -214,19 +214,19 @@ struct
           | Bits32 ->
               let s = Bytes.create 4 in
                 read_bytes t s 0 4;
-                Msg_buffer.add_string b s;
+                Msg_buffer.add_string b @@ Bytes.unsafe_to_string s;
                 Msg_buffer.contents b
           | Bits64_float | Bits64_long ->
               let s = Bytes.create 8 in
                 read_bytes t s 0 8;
-                Msg_buffer.add_string b s;
+                Msg_buffer.add_string b @@ Bytes.unsafe_to_string s;
                 Msg_buffer.contents b
           | Enum -> Msg_buffer.contents b
           | Tuple | Htuple | Bytes | Assoc ->
               let siz = read_vint t in
                 Msg_buffer.resize b (siz + 1);
                 read_bytes t (Msg_buffer.unsafe_contents b) 1 siz;
-                Msg_buffer.unsafe_contents b
+                Bytes.unsafe_to_string @@ Msg_buffer.unsafe_contents b
           | Invalid_ll_type -> Error.bad_wire_type ()
 
       in
