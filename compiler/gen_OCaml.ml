@@ -2131,8 +2131,11 @@ let add_message_reader bindings msgname mexpr opts c =
         >>
     else
       <:str_item<
-        value $lid:"read_" ^ msgname$ ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s =
-          $read_expr$;
+        value $lid:"read_" ^ msgname$ ?hint ?level ?path s =
+          let _ = hint in
+          let _ = level in
+          let _ = path in
+            $read_expr$;
         >>
   in
     {
@@ -2199,8 +2202,10 @@ let add_message_io_reader bindings msgname mexpr opts c =
         c with c_io_reader =
           Some <:str_item<
                   $field_readers$;
-                  value $lid:"io_read_" ^ msgname$
-                    ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s =
+                  value $lid:"io_read_" ^ msgname$ ?hint ?level ?path s =
+                    let _ = hint in
+                    let _ = level in
+                    let _ = path in
                       $ioread_expr$;
 
                   value io_read = $lid:"io_read_" ^ msgname$;
