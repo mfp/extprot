@@ -1113,99 +1113,139 @@ struct
 
   and read msgname constr_name name ~fieldno ~ev_regime t =
 
-    let expr = match ev_regime, t with
-      | `Eager, Vint (Bool, _) -> <:expr< $RD.reader_func `Read_bool$ s >>
-      | `Eager, Vint (Int, _) -> <:expr< $RD.reader_func `Read_rel_int$ s >>
-      | `Eager, Vint (Int8, _) -> <:expr< $RD.reader_func `Read_i8$ s >>
-      | `Eager, Bitstring32 _ -> <:expr< $RD.reader_func `Read_i32$ s >>
-      | `Eager, Bitstring64 (Long, _) -> <:expr< $RD.reader_func `Read_i64$ s >>
-      | `Eager, Bitstring64 (Float, _) -> <:expr< $RD.reader_func `Read_float$ s >>
-      | `Eager, Bytes _ -> <:expr< $RD.reader_func `Read_string$ s >>
+    let wrap expr = wrap_reader (type_opts t) expr in
 
-      | `Lazy, Vint (Bool, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_bool$ s) >>
-      | `Lazy, Vint (Int, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_rel_int$ s) >>
-      | `Lazy, Vint (Int8, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_i8$ s) >>
-      | `Lazy, Bitstring32 _ -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_i32$ s) >>
-      | `Lazy, Bitstring64 (Long, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_i64$ s) >>
-      | `Lazy, Bitstring64 (Float, _) -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_float$ s) >>
-      | `Lazy, Bytes _ -> <:expr< EXTPROT_FIELD____.from_val ($RD.reader_func `Read_string$ s) >>
+      match ev_regime, t with
+        | `Eager, Vint (Bool, _) -> wrap <:expr< $RD.reader_func `Read_bool$ s >>
+        | `Eager, Vint (Int, _) -> wrap <:expr< $RD.reader_func `Read_rel_int$ s >>
+        | `Eager, Vint (Int8, _) -> wrap <:expr< $RD.reader_func `Read_i8$ s >>
+        | `Eager, Bitstring32 _ -> wrap <:expr< $RD.reader_func `Read_i32$ s >>
+        | `Eager, Bitstring64 (Long, _) -> wrap <:expr< $RD.reader_func `Read_i64$ s >>
+        | `Eager, Bitstring64 (Float, _) -> wrap <:expr< $RD.reader_func `Read_float$ s >>
+        | `Eager, Bytes _ -> wrap <:expr< $RD.reader_func `Read_string$ s >>
 
-      | ev_regime, (Tuple (lltys, _) as llty) -> begin
+        | `Lazy, Vint (Bool, _) ->
+            let rd = wrap <:expr< $RD.reader_func `Read_bool$ s >> in
+              <:expr< EXTPROT_FIELD____.from_val $rd$ >>
+        | `Lazy, Vint (Int, _) ->
+            let rd = wrap <:expr< $RD.reader_func `Read_rel_int$ s >> in
+              <:expr< EXTPROT_FIELD____.from_val $rd$ >>
+        | `Lazy, Vint (Int8, _) ->
+            let rd = wrap <:expr< $RD.reader_func `Read_i8$ s >> in
+              <:expr< EXTPROT_FIELD____.from_val $rd$ >>
+        | `Lazy, Bitstring32 _ ->
+            let rd = wrap <:expr< $RD.reader_func `Read_i32$ s >> in
+              <:expr< EXTPROT_FIELD____.from_val $rd$ >>
+        | `Lazy, Bitstring64 (Long, _) ->
+            let rd = wrap <:expr< $RD.reader_func `Read_i64$ s >> in
+              <:expr< EXTPROT_FIELD____.from_val $rd$ >>
+        | `Lazy, Bitstring64 (Float, _) ->
+            let rd = wrap <:expr< $RD.reader_func `Read_float$ s >> in
+              <:expr< EXTPROT_FIELD____.from_val $rd$ >>
+        | `Lazy, Bytes _ ->
+            let rd = wrap <:expr< $RD.reader_func `Read_string$ s >> in
+              <:expr< EXTPROT_FIELD____.from_val $rd$ >>
 
-          let bad_type_case =
-            <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
+        | ev_regime, (Tuple (lltys, _) as llty) -> begin
 
-          let f__raw_rd_func, f__reader_func, f__read_tuple_elms =
-            match ev_regime with
-              | `Eager -> RD.raw_rd_func, RD.reader_func, read_tuple_elms
-              | `Lazy ->
-                  STR_OPS.raw_rd_func, STR_OPS.reader_func,
-                  STRING_READER.read_tuple_elms
-          in
+            let bad_type_case =
+              <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
 
-          let other_cases = match lltys with
-              [ty] -> begin match f__raw_rd_func ty with
-                  Some (mc, reader_expr) ->
-                    <:match_case< $mc$ -> $reader_expr$ s | $bad_type_case$ >>
-                | None -> bad_type_case
-              end
-            (* handle missing elements when expanding the primitive type to
-             * a Tuple; needs default values *)
-            | ty :: tys -> begin match f__raw_rd_func ty with
-                | Some (mc, reader_expr) -> begin match maybe_all (default_value `Eager) tys with
-                      None -> bad_type_case
-                    | Some defs ->
-                        <:match_case<
-                            $mc$ -> ($reader_expr$ s, $Ast.exCom_of_list defs$)
-                          | $bad_type_case$
-                        >>
-                  end
-                | None -> bad_type_case
-              end
-            | _ -> (* can't happen *) bad_type_case in
-          let tys_with_defvalues =
-            List.map (fun llty -> (llty, default_value `Eager llty)) lltys
-          in
-            match ev_regime with
-              | `Eager ->
-                  update_path_if_needed ~name ~fieldno llty @@
-                  <:expr<
-                     let t = $f__reader_func `Read_prefix$ s in
-                       match Extprot.Codec.ll_type t with [
-                           Extprot.Codec.Tuple ->
-                             let len = $f__reader_func `Read_vint$ s in
-                             let eot = $f__reader_func `Offset$ s len in
-                             let nelms = $f__reader_func `Read_vint$ s in
-                             let v = $f__read_tuple_elms msgname constr_name name tys_with_defvalues$ in begin
-                               $f__reader_func `Skip_to$ s eot;
-                               v
-                             end
-                         | $other_cases$
-                       ]
-                   >>
+            let f__raw_rd_func, f__reader_func, f__read_tuple_elms =
+              match ev_regime with
+                | `Eager -> RD.raw_rd_func, RD.reader_func, read_tuple_elms
+                | `Lazy ->
+                    STR_OPS.raw_rd_func, STR_OPS.reader_func,
+                    STRING_READER.read_tuple_elms
+            in
 
-              | `Lazy when deserialize_eagerly llty ->
-                  update_path_if_needed ~name ~fieldno llty @@
-                  <:expr<
-                     let t = $RD.reader_func `Read_prefix$ s in
-                       match Extprot.Codec.ll_type t with [
-                           Extprot.Codec.Tuple ->
-                             let len = $RD.reader_func `Read_vint$ s in
-                             let eot = $RD.reader_func `Offset$ s len in
-                             let nelms = $RD.reader_func `Read_vint$ s in
-                             let v = $read_tuple_elms msgname constr_name name tys_with_defvalues$ in begin
-                               $RD.reader_func `Skip_to$ s eot;
-                               EXTPROT_FIELD____.from_val v
-                             end
-                         | $other_cases$
-                       ]
-                   >>
+            let other_cases = match lltys with
+                [ty] -> begin match f__raw_rd_func ty with
+                    Some (mc, reader_expr) ->
+                      <:match_case< $mc$ -> $reader_expr$ s | $bad_type_case$ >>
+                  | None -> bad_type_case
+                end
+              (* handle missing elements when expanding the primitive type to
+               * a Tuple; needs default values *)
+              | ty :: tys -> begin match f__raw_rd_func ty with
+                  | Some (mc, reader_expr) -> begin match maybe_all (default_value `Eager) tys with
+                        None -> bad_type_case
+                      | Some defs ->
+                          <:match_case<
+                              $mc$ -> ($reader_expr$ s, $Ast.exCom_of_list defs$)
+                            | $bad_type_case$
+                          >>
+                    end
+                  | None -> bad_type_case
+                end
+              | _ -> (* can't happen *) bad_type_case in
 
-              | `Lazy ->
-                  <:expr<
-                     let s = $RD.reader_func `Get_value_reader$ s in
-                     let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
-                       EXTPROT_FIELD____.from_fun ?hint ~level ~path s begin fun s ->
+            let other_cases_wrapped_lazy_eager_loading = match lltys with
+                [ty] -> begin match RD.raw_rd_func ty with
+                    Some (mc, reader_expr) ->
+                      let e = <:expr< $reader_expr$ s >> in
+                        <:match_case< $mc$ -> EXTPROT_FIELD____.from_val ($wrap e$) | $bad_type_case$ >>
+                  | None -> bad_type_case
+                end
+              (* handle missing elements when expanding the primitive type to
+               * a Tuple; needs default values *)
+              | ty :: tys -> begin match RD.raw_rd_func ty with
+                  | Some (mc, reader_expr) -> begin match maybe_all (default_value `Eager) tys with
+                        None -> bad_type_case
+                      | Some defs ->
+                          let e = <:expr< ($reader_expr$ s, $Ast.exCom_of_list defs$) >> in
+                            <:match_case<
+                                $mc$ -> EXTPROT_FIELD____.from_val $wrap e$
+                              | $bad_type_case$
+                            >>
+                    end
+                  | None -> bad_type_case
+                end
+              | _ -> (* can't happen *) bad_type_case in
+
+            let tys_with_defvalues =
+              List.map (fun llty -> (llty, default_value `Eager llty)) lltys
+            in
+              match ev_regime with
+                | `Eager ->
+                    update_path_if_needed ~name ~fieldno llty @@
+                    wrap @@
+                    <:expr<
+                       let t = $f__reader_func `Read_prefix$ s in
+                         match Extprot.Codec.ll_type t with [
+                             Extprot.Codec.Tuple ->
+                               let len = $f__reader_func `Read_vint$ s in
+                               let eot = $f__reader_func `Offset$ s len in
+                               let nelms = $f__reader_func `Read_vint$ s in
+                               let v = $f__read_tuple_elms msgname constr_name name tys_with_defvalues$ in begin
+                                 $f__reader_func `Skip_to$ s eot;
+                                 v
+                               end
+                           | $other_cases$
+                         ]
+                     >>
+
+                | `Lazy when deserialize_eagerly llty ->
+                    update_path_if_needed ~name ~fieldno llty @@
+                    <:expr<
+                       let t = $RD.reader_func `Read_prefix$ s in
+                         match Extprot.Codec.ll_type t with [
+                             Extprot.Codec.Tuple ->
+                               let len = $RD.reader_func `Read_vint$ s in
+                               let eot = $RD.reader_func `Offset$ s len in
+                               let nelms = $RD.reader_func `Read_vint$ s in
+                               let v = $read_tuple_elms msgname constr_name name tys_with_defvalues$ in begin
+                                 $RD.reader_func `Skip_to$ s eot;
+                                 EXTPROT_FIELD____.from_val ($wrap <:expr< v >>$)
+                               end
+                           | $other_cases_wrapped_lazy_eager_loading$
+                         ]
+                     >>
+
+                | `Lazy ->
+
+                    let e =
+                      <:expr<
                          let t = $STR_OPS.reader_func `Read_prefix$ s in
                            match Extprot.Codec.ll_type t with [
                                Extprot.Codec.Tuple ->
@@ -1218,303 +1258,257 @@ struct
                                  end
                              | $other_cases$
                            ]
-                      end
-                    >>
-        end
-
-      | ev_regime, (Sum (constructors, _) as llty) -> begin
-
-          let f__raw_rd_func, f__reader_func, f__read_sum_elms, ev_regime =
-            match ev_regime with
-              | `Eager -> RD.raw_rd_func, RD.reader_func, read_sum_elms, `Eager
-              | `Lazy when deserialize_eagerly llty ->
-                  RD.raw_rd_func, RD.reader_func, read_sum_elms, `Lazy_Immediate
-              | `Lazy ->
-                  STR_OPS.raw_rd_func, STR_OPS.reader_func,
-                  STRING_READER.read_sum_elms, `Lazy
-          in
-
-          let constant, non_constant = partition_constructors constructors in
-          let constant_match_cases =
-            List.map
-              (fun c ->
-                 <:match_case<
-                   $int:string_of_int c.const_tag$ ->
-                     $uid:String.capitalize c.const_type$.$lid:c.const_name$
-                 >>)
-              constant
-            @ [ <:match_case<
-                  tag -> Extprot.Error.unknown_tag tag >> ] in
-
-          let nonconstant_match_cases =
-            let mc (c, lltys) =
-              <:match_case<
-                 $int:string_of_int c.const_tag$ ->
-                      $f__read_sum_elms msgname constr_name name c
-                        (List.map (fun llty -> (llty, default_value `Eager llty)) lltys)$
-              >>
-            in List.map mc non_constant @
-               [ <:match_case<
-                   tag -> Extprot.Error.unknown_tag tag >> ]
-          in
-
-          let maybe_match_case (llty, f, l) = match l with
-              [] | [_] (* catch-all *)-> None
-            | l ->
-                let expr =
-                  <:expr< match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list l$ ] >>
-                in
-                  Some <:match_case< $patt_of_ll_type llty$ -> $f expr$ >> in
-
-          let wrap_non_constant e =
-            <:expr<
-              let len = $f__reader_func `Read_vint$ s in
-              let eot' = $f__reader_func `Offset$ s len in
-              let nelms = $f__reader_func `Read_vint$ s in
-              let v = $e$ in begin
-                $f__reader_func `Skip_to$ s eot';
-                v
-              end >> in
-
-          let match_cases =
-            List.filter_map maybe_match_case
-              [
-                Codec.Enum, (fun e -> e), constant_match_cases;
-                Codec.Tuple, wrap_non_constant, nonconstant_match_cases;
-              ] in
-
-          let bad_type_case =
-            <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
-
-          let other_cases = match non_constant with
-              (c, [ty]) :: _ -> begin match f__raw_rd_func ty with
-                  Some (mc, reader_expr) ->
-                    <:match_case<
-                        $mc$ -> $uid:String.capitalize c.const_type$.$uid:c.const_name$ ($reader_expr$ s)
-                      | $bad_type_case$
-                    >>
-                | None -> bad_type_case
-              end
-            | (c, ty :: tys) :: _ -> begin match f__raw_rd_func ty with
-                  Some (mc, reader_expr) -> begin match maybe_all (default_value `Eager) tys with
-                      None -> bad_type_case
-                    | Some defs ->
-                        <:match_case<
-                            $mc$ ->
-                               $uid:String.capitalize c.const_type$.$uid:c.const_name$
-                                 ($reader_expr$ s, $Ast.exCom_of_list defs$)
-                          | $bad_type_case$
                         >>
-                  end
-                | None -> bad_type_case
-              end
-            | _ -> bad_type_case in
+                    in
+                      <:expr<
+                         let s = $RD.reader_func `Get_value_reader$ s in
+                         let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                           EXTPROT_FIELD____.from_fun ?hint ~level ~path s begin fun s ->
+                             $wrap e$
+                          end
+                        >>
+          end
 
-          let expr =
-            <:expr< let t = $f__reader_func `Read_prefix$ s in
-              match Extprot.Codec.ll_type t with [
-                $Ast.mcOr_of_list match_cases$
-                | $other_cases$
-              ]
-            >>
-          in
-            match ev_regime with
-              | `Eager -> update_path_if_needed ~name ~fieldno llty expr
-              | `Lazy_Immediate ->
-                  update_path_if_needed ~name ~fieldno llty
-                    <:expr< EXTPROT_FIELD____.from_val $expr$ >>
-              | `Lazy ->
-                  <:expr<
-                    let t   = $RD.reader_func `Read_prefix$ s in
-                      match Extprot.Codec.ll_type t with [
-                         Extprot.Codec.Enum ->
-                            EXTPROT_FIELD____.from_val @@
-                            match Extprot.Codec.ll_tag t with [
-                              $Ast.mcOr_of_list constant_match_cases$
-                            ]
-                        | _ ->
-                            let s = $RD.reader_func `Get_value_reader_with_prefix$ s t in
-                            let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
-                              EXTPROT_FIELD____.from_fun ?hint ~level ~path s (fun s -> $expr$)
-                      ]
-                  >>
-        end
+        | ev_regime, (Sum (constructors, _) as llty) -> begin
 
-      | `Eager, (Record (name, fields, opts) as llty) ->
-          let fields' =
-            List.map
-              (fun f ->
-                 (f.field_name, true,
-                  (if f.field_lazy then `Lazy else `Eager),
-                  f.field_type))
-              fields in
-          let promoted_match_cases =
-            make_promoted_match_cases msgname [ Some name, None, fields' ] in
-          let match_cases =
-            record_case_inlined
-              ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
-          in
-            update_path_if_needed ~name ~fieldno llty @@
-            wrap_msg_reader name ~promoted_match_cases match_cases
+            let f__raw_rd_func, f__reader_func, f__read_sum_elms, ev_regime =
+              match ev_regime with
+                | `Eager -> RD.raw_rd_func, RD.reader_func, read_sum_elms, `Eager
+                | `Lazy when deserialize_eagerly llty ->
+                    RD.raw_rd_func, RD.reader_func, read_sum_elms, `Lazy_Immediate
+                | `Lazy ->
+                    STR_OPS.raw_rd_func, STR_OPS.reader_func,
+                    STRING_READER.read_sum_elms, `Lazy
+            in
 
-      | `Lazy, (Record (name, fields, opts) as llty) when deserialize_eagerly llty ->
-          let fields' =
-            List.map
-              (fun f ->
-                 (f.field_name, true,
-                  (if f.field_lazy then `Lazy else `Eager),
-                  f.field_type))
-              fields in
-          let promoted_match_cases =
-            make_promoted_match_cases msgname [ Some name, None, fields' ] in
-          let match_cases =
-            record_case_inlined
-              ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
-          in
-            update_path_if_needed ~name ~fieldno llty @@
-            <:expr<
-              EXTPROT_FIELD____.from_val
-                $wrap_msg_reader name ~promoted_match_cases match_cases$
-            >>
+            let constant, non_constant = partition_constructors constructors in
+            let constant_match_cases =
+              List.map
+                (fun c ->
+                   <:match_case<
+                     $int:string_of_int c.const_tag$ ->
+                       $uid:String.capitalize c.const_type$.$lid:c.const_name$
+                   >>)
+                constant
+              @ [ <:match_case<
+                    tag -> Extprot.Error.unknown_tag tag >> ] in
 
-      | `Lazy, Record (name, fields, opts) ->
-          let fields' =
-            List.map
-              (fun f ->
-                 (f.field_name, true,
-                  (if f.field_lazy then `Lazy else `Eager),
-                  f.field_type))
-              fields in
+            let nonconstant_match_cases =
+              let mc (c, lltys) =
+                <:match_case<
+                   $int:string_of_int c.const_tag$ ->
+                        $f__read_sum_elms msgname constr_name name c
+                          (List.map (fun llty -> (llty, default_value `Eager llty)) lltys)$
+                >>
+              in List.map mc non_constant @
+                 [ <:match_case<
+                     tag -> Extprot.Error.unknown_tag tag >> ]
+            in
 
-          let promoted_match_cases =
-            STRING_READER.make_promoted_match_cases msgname [ Some name, None, fields' ] in
-          let match_cases =
-            STRING_READER.record_case_inlined
-              ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
-          in
-            <:expr<
-              let s = $RD.reader_func `Get_value_reader$ s in
-              let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
-                EXTPROT_FIELD____.from_fun ?hint ~level ~path s
-                  (fun s -> $STRING_READER.wrap_msg_reader name ~promoted_match_cases match_cases$)
+            let maybe_match_case (llty, f, l) = match l with
+                [] | [_] (* catch-all *)-> None
+              | l ->
+                  let expr =
+                    <:expr< match Extprot.Codec.ll_tag t with [ $Ast.mcOr_of_list l$ ] >>
+                  in
+                    Some <:match_case< $patt_of_ll_type llty$ -> $f expr$ >> in
+
+            let wrap_non_constant e =
+              <:expr<
+                let len = $f__reader_func `Read_vint$ s in
+                let eot' = $f__reader_func `Offset$ s len in
+                let nelms = $f__reader_func `Read_vint$ s in
+                let v = $e$ in begin
+                  $f__reader_func `Skip_to$ s eot';
+                  v
+                end >> in
+
+            let match_cases =
+              List.filter_map maybe_match_case
+                [
+                  Codec.Enum, (fun e -> e), constant_match_cases;
+                  Codec.Tuple, wrap_non_constant, nonconstant_match_cases;
+                ] in
+
+            let bad_type_case =
+              <:match_case< ll_type -> Extprot.Error.bad_wire_type ~ll_type () >> in
+
+            let other_cases = match non_constant with
+                (c, [ty]) :: _ -> begin match f__raw_rd_func ty with
+                    Some (mc, reader_expr) ->
+                      <:match_case<
+                          $mc$ -> $uid:String.capitalize c.const_type$.$uid:c.const_name$ ($reader_expr$ s)
+                        | $bad_type_case$
+                      >>
+                  | None -> bad_type_case
+                end
+              | (c, ty :: tys) :: _ -> begin match f__raw_rd_func ty with
+                    Some (mc, reader_expr) -> begin match maybe_all (default_value `Eager) tys with
+                        None -> bad_type_case
+                      | Some defs ->
+                          <:match_case<
+                              $mc$ ->
+                                 $uid:String.capitalize c.const_type$.$uid:c.const_name$
+                                   ($reader_expr$ s, $Ast.exCom_of_list defs$)
+                            | $bad_type_case$
+                          >>
+                    end
+                  | None -> bad_type_case
+                end
+              | _ -> bad_type_case in
+
+            let expr =
+              <:expr< let t = $f__reader_func `Read_prefix$ s in
+                match Extprot.Codec.ll_type t with [
+                  $Ast.mcOr_of_list match_cases$
+                  | $other_cases$
+                ]
               >>
-
-      | `Eager, (Message (path, name, _) as llty) ->
-          let full_path = path @ [String.capitalize name] in
-          let id = ident_with_path _loc full_path (RD.read_msg_func name) in
-            update_path_if_needed ~name ~fieldno llty @@
-            <:expr< $id:id$ ?hint ~level ~path s >>
-
-      | `Lazy, (Message (path, name, _) as llty) ->
-          let full_path = path @ [String.capitalize name] in
-          (* We hardcode use of read_ because it's the String_reader version
-           * we want (since it will be operating on the string_reader passed
-           * to the thunk. *)
-          let id = ident_with_path _loc full_path ("read_" ^ name) in
-            update_path_if_needed ~name ~fieldno llty @@
-            <:expr<
-              let s = $RD.reader_func `Get_value_reader$ s in
-                EXTPROT_FIELD____.from_fun ?hint ~level ~path s (fun s -> $id:id$ s)
-            >>
-
-      | ev_regime, Htuple (kind, llty, _) -> begin
-          let rd_func = match ev_regime with
-            | `Eager -> read
-            | `Lazy -> STRING_READER.read in
-
-          let e = match kind with
-              | List ->
-                let loop = new_lid "loop" in
-                  <:expr<
-                    let rec $lid:loop$ acc = fun [
-                        0 -> List.rev acc
-                      | n ->
-                         let v =
-                           $rd_func msgname constr_name name
-                              ~fieldno ~ev_regime:`Eager llty$
-                         in $lid:loop$ [v :: acc] (n - 1)
-                    ] in $lid:loop$ [] nelms
-                  >>
-              | Array ->
-                  <:expr<
-                    Array.init nelms
-                      (fun _ ->
-                        $rd_func msgname constr_name name
-                          ~fieldno ~ev_regime:`Eager llty$)
-                  >> in
-
-          let empty_htuple = match kind with
-            | List -> <:expr< [] >>
-            | Array -> <:expr< [| |] >>
-          in
-            match ev_regime with
-              | `Eager ->
-                  update_path_if_needed ~name ~fieldno llty @@
-                  <:expr<
-                      let t = $RD.reader_func `Read_prefix$ s in
+            in
+              match ev_regime with
+                | `Eager ->
+                    update_path_if_needed ~name ~fieldno llty @@
+                    wrap expr
+                | `Lazy_Immediate ->
+                    update_path_if_needed ~name ~fieldno llty
+                      <:expr< EXTPROT_FIELD____.from_val $wrap expr$ >>
+                | `Lazy ->
+                    <:expr<
+                      let t   = $RD.reader_func `Read_prefix$ s in
                         match Extprot.Codec.ll_type t with [
-                            Extprot.Codec.Htuple ->
-                              let len = $RD.reader_func `Read_vint$ s in
-                              let eoht = $RD.reader_func `Offset$ s len in
-                              let nelms = $RD.reader_func `Read_vint$ s in
-                              let () = Extprot.Limits.check_message_length len in
-                              let () = Extprot.Limits.check_num_elements nelms in
-                              let v = $e$ in begin
-                                $RD.reader_func `Skip_to$ s eoht;
-                                v
-                              end
-                          | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
+                           Extprot.Codec.Enum ->
+                              EXTPROT_FIELD____.from_val @@
+                              $wrap
+                                 <:expr<
+                                    match Extprot.Codec.ll_tag t with [
+                                      $Ast.mcOr_of_list constant_match_cases$
+                                    ]
+                                 >>$
+                          | _ ->
+                              let s = $RD.reader_func `Get_value_reader_with_prefix$ s t in
+                              let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                                EXTPROT_FIELD____.from_fun ?hint ~level ~path s
+                                  (fun s -> $wrap expr$)
                         ]
                     >>
-              | `Lazy ->
+          end
 
-                  let from_fun_expr =
-                    match RD.get_string_subreader with
-                      | None ->
-                          <:expr<
-                            let dat = $RD.reader_func `Read_serialized_data$ s len in
-                            let ()  = $RD.reader_func `Skip_to$ s eoht in
-                            let b   =
-                              Extprot.Msg_buffer.make
-                                (if nelms < 128 && len < 128 then 3 + len
-                                 else 8 + len)
-                            in
-                              do {
-                                Extprot.Msg_buffer.add_vint b t;
-                                Extprot.Msg_buffer.add_vint b len;
-                                Extprot.Msg_buffer.add_vint b nelms;
-                                Extprot.Msg_buffer.add_string b dat;
-                                EXTPROT_FIELD____.from_fun ?hint ~level ~path
-                                  (Extprot.Reader.String_reader.from_msgbuffer b)
-                                  (fun s -> $e$)
-                              }
-                            >>
-                      | Some f ->
-                          <:expr<
-                            do {
-                              $RD.reader_func `Skip_to$ s eoht;
-                              EXTPROT_FIELD____.from_fun ?hint ~level ~path
-                                (try ($f$ s ~off:boht ~upto:eoht)
-                                 with _ ->
-                                   Extprot.Error.limit_exceeded
-                                     ~message:$str:msgname$
-                                     ~constructor:$str:constr_name$
-                                     ~field:$str:name$
-                                     (Extprot.Error.Message_length
-                                       (Extprot.Reader.String_reader.range_length boht eoht)))
-                                (fun s ->
-                                  let _ = $STR_OPS.reader_func `Read_prefix$ s in
-                                  (* size *)
-                                  let _ = $STR_OPS.reader_func `Read_vint$ s in
-                                  (* nelms *)
-                                  let _ = $STR_OPS.reader_func `Read_vint$ s in
-                                    $e$)
-                            }
-                            >>
-                  in
+        | `Eager, (Record (name, fields, opts) as llty) ->
+            let fields' =
+              List.map
+                (fun f ->
+                   (f.field_name, true,
+                    (if f.field_lazy then `Lazy else `Eager),
+                    f.field_type))
+                fields in
+            let promoted_match_cases =
+              make_promoted_match_cases msgname [ Some name, None, fields' ] in
+            let match_cases =
+              record_case_inlined
+                ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
+            in
+              update_path_if_needed ~name ~fieldno llty @@
+              wrap @@
+              wrap_msg_reader name ~promoted_match_cases match_cases
+
+        | `Lazy, (Record (name, fields, opts) as llty) when deserialize_eagerly llty ->
+            let fields' =
+              List.map
+                (fun f ->
+                   (f.field_name, true,
+                    (if f.field_lazy then `Lazy else `Eager),
+                    f.field_type))
+                fields in
+            let promoted_match_cases =
+              make_promoted_match_cases msgname [ Some name, None, fields' ] in
+            let match_cases =
+              record_case_inlined
+                ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
+            in
+              update_path_if_needed ~name ~fieldno llty @@
+              <:expr<
+                EXTPROT_FIELD____.from_val
+                  $wrap @@ wrap_msg_reader name ~promoted_match_cases match_cases$
+              >>
+
+        | `Lazy, Record (name, fields, opts) ->
+            let fields' =
+              List.map
+                (fun f ->
+                   (f.field_name, true,
+                    (if f.field_lazy then `Lazy else `Eager),
+                    f.field_type))
+                fields in
+
+            let promoted_match_cases =
+              STRING_READER.make_promoted_match_cases msgname [ Some name, None, fields' ] in
+            let match_cases =
+              STRING_READER.record_case_inlined
+                ~locs:(use_locs opts) ~namespace:name msgname 0 fields'
+            in
+              <:expr<
+                let s = $RD.reader_func `Get_value_reader$ s in
+                let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                  EXTPROT_FIELD____.from_fun ?hint ~level ~path s
+                    (fun s -> $wrap @@ STRING_READER.wrap_msg_reader name ~promoted_match_cases match_cases$)
+                >>
+
+        | `Eager, (Message (path, name, _) as llty) ->
+            let full_path = path @ [String.capitalize name] in
+            let id = ident_with_path _loc full_path (RD.read_msg_func name) in
+              update_path_if_needed ~name ~fieldno llty @@
+              wrap @@
+              <:expr< $id:id$ ?hint ~level ~path s >>
+
+        | `Lazy, (Message (path, name, _) as llty) ->
+            let full_path = path @ [String.capitalize name] in
+            (* We hardcode use of read_ because it's the String_reader version
+             * we want (since it will be operating on the string_reader passed
+             * to the thunk. *)
+            let id = ident_with_path _loc full_path ("read_" ^ name) in
+              update_path_if_needed ~name ~fieldno llty @@
+              <:expr<
+                let s = $RD.reader_func `Get_value_reader$ s in
+                  EXTPROT_FIELD____.from_fun ?hint ~level ~path s
+                    (fun s -> $wrap <:expr< $id:id$ s >>$)
+              >>
+
+        | ev_regime, Htuple (kind, llty, _) -> begin
+            let rd_func = match ev_regime with
+              | `Eager -> read
+              | `Lazy -> STRING_READER.read in
+
+            let e = match kind with
+                | List ->
+                  let loop = new_lid "loop" in
                     <:expr<
-                        let boht = $RD.reader_func `Offset$ s 0 in
-                        let t    = $RD.reader_func `Read_prefix$ s in
+                      let rec $lid:loop$ acc = fun [
+                          0 -> List.rev acc
+                        | n ->
+                           let v =
+                             $rd_func msgname constr_name name
+                                ~fieldno ~ev_regime:`Eager llty$
+                           in $lid:loop$ [v :: acc] (n - 1)
+                      ] in $lid:loop$ [] nelms
+                    >>
+                | Array ->
+                    <:expr<
+                      Array.init nelms
+                        (fun _ ->
+                          $rd_func msgname constr_name name
+                            ~fieldno ~ev_regime:`Eager llty$)
+                    >> in
+
+            let empty_htuple = match kind with
+              | List -> <:expr< [] >>
+              | Array -> <:expr< [| |] >>
+            in
+              match ev_regime with
+                | `Eager ->
+                    update_path_if_needed ~name ~fieldno llty @@
+                    wrap @@
+                    <:expr<
+                        let t = $RD.reader_func `Read_prefix$ s in
                           match Extprot.Codec.ll_type t with [
                               Extprot.Codec.Htuple ->
                                 let len = $RD.reader_func `Read_vint$ s in
@@ -1522,20 +1516,81 @@ struct
                                 let nelms = $RD.reader_func `Read_vint$ s in
                                 let () = Extprot.Limits.check_message_length len in
                                 let () = Extprot.Limits.check_num_elements nelms in
-                                  if nelms = 0 then do {
-                                    ignore boht;
-                                    $RD.reader_func `Skip_to$ s eoht;
-                                    EXTPROT_FIELD____.from_val $empty_htuple$
-                                  } else begin
-                                    let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
-                                      $from_fun_expr$
-                                  end
+                                let v = $e$ in begin
+                                  $RD.reader_func `Skip_to$ s eoht;
+                                  v
+                                end
                             | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
                           ]
                       >>
-        end
-    in
-      wrap_reader (type_opts t) expr
+                | `Lazy ->
+
+                    let from_fun_expr =
+                      match RD.get_string_subreader with
+                        | None ->
+                            <:expr<
+                              let dat = $RD.reader_func `Read_serialized_data$ s len in
+                              let ()  = $RD.reader_func `Skip_to$ s eoht in
+                              let b   =
+                                Extprot.Msg_buffer.make
+                                  (if nelms < 128 && len < 128 then 3 + len
+                                   else 8 + len)
+                              in
+                                do {
+                                  Extprot.Msg_buffer.add_vint b t;
+                                  Extprot.Msg_buffer.add_vint b len;
+                                  Extprot.Msg_buffer.add_vint b nelms;
+                                  Extprot.Msg_buffer.add_string b dat;
+                                  EXTPROT_FIELD____.from_fun ?hint ~level ~path
+                                    (Extprot.Reader.String_reader.from_msgbuffer b)
+                                    (fun s -> $wrap e$)
+                                }
+                              >>
+                        | Some f ->
+                            <:expr<
+                              do {
+                                $RD.reader_func `Skip_to$ s eoht;
+                                EXTPROT_FIELD____.from_fun ?hint ~level ~path
+                                  (try ($f$ s ~off:boht ~upto:eoht)
+                                   with _ ->
+                                     Extprot.Error.limit_exceeded
+                                       ~message:$str:msgname$
+                                       ~constructor:$str:constr_name$
+                                       ~field:$str:name$
+                                       (Extprot.Error.Message_length
+                                         (Extprot.Reader.String_reader.range_length boht eoht)))
+                                  (fun s ->
+                                    let _ = $STR_OPS.reader_func `Read_prefix$ s in
+                                    (* size *)
+                                    let _ = $STR_OPS.reader_func `Read_vint$ s in
+                                    (* nelms *)
+                                    let _ = $STR_OPS.reader_func `Read_vint$ s in
+                                      $wrap e$)
+                              }
+                              >>
+                    in
+                      <:expr<
+                          let boht = $RD.reader_func `Offset$ s 0 in
+                          let t    = $RD.reader_func `Read_prefix$ s in
+                            match Extprot.Codec.ll_type t with [
+                                Extprot.Codec.Htuple ->
+                                  let len = $RD.reader_func `Read_vint$ s in
+                                  let eoht = $RD.reader_func `Offset$ s len in
+                                  let nelms = $RD.reader_func `Read_vint$ s in
+                                  let () = Extprot.Limits.check_message_length len in
+                                  let () = Extprot.Limits.check_num_elements nelms in
+                                    if nelms = 0 then do {
+                                      ignore boht;
+                                      $RD.reader_func `Skip_to$ s eoht;
+                                      EXTPROT_FIELD____.from_val $wrap empty_htuple$
+                                    } else begin
+                                      let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                                        $from_fun_expr$
+                                    end
+                              | ty -> Extprot.Error.bad_wire_type ~ll_type:ty ()
+                            ]
+                        >>
+          end
 
   and read_field msgname constr_name name ~ev_regime ~fieldno llty =
     let _loc = loc "<generated code @ read_field>" in

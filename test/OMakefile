@@ -12,6 +12,7 @@ TEST_MODULES[] =
     test_types
     gen_data
     test_util
+    wrapped_types
     unit_write
     test_conv
     test_extensions

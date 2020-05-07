@@ -170,6 +170,11 @@ let force_lazy21b = function
       ignore (force_lazyT x);
       t
 
+let force_lazy22 t =
+  ignore (F.force t.Lazy22.v);
+  F.discard_packed t.Lazy22.v;
+  t
+
 let nop x = x
 
 let tests = "lazy fields" >::: [
@@ -396,6 +401,23 @@ let tests = "lazy fields" >::: [
         e = 42.;
         f = "abc.";
       };
+  end;
+
+  "external types" >:: begin fun () ->
+    check_roundtrip
+      force_lazy22
+      Lazy22.pp Lazy22.write Lazy22.read
+      { Lazy22.v = F.from_val @@ Digest_type.from_string "afe43acd3a3b3b05242b4f38976eaf48a65" };
+
+    check_roundtrip
+      force_lazy22
+      Lazy22.pp Lazy22.write Lazy22.read
+      { Lazy22.v = thunk @@ Digest_type.from_string "afe43acd3a3b3b05242b4f38976eaf48a65" };
+
+    check_serialization_equiv
+      Lazy22.write Lazy22b.write
+      { Lazy22.v = F.from_val @@ Digest_type.from_string "afe43acd3a3b3b05242b4f38976eaf48a65" }
+      { Lazy22b.v = Digest_type.from_string "afe43acd3a3b3b05242b4f38976eaf48a65" };
   end;
 
   "record types" >:: begin fun () ->

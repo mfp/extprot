@@ -345,4 +345,46 @@ message lazy21b =
     A lazy21a
   | B lazyT<simple_string>
 
+type w0 = bool options "ocaml.type" = "Wrapped_types.Wrap_bool.t; Wrapped_types.Wrap_bool.from_x; Wrapped_types.Wrap_bool.to_x; Wrapped_types.Wrap_bool.from_x true"
+type w1 = int options "ocaml.type" = "Wrapped_types.Wrap_int.t, Wrapped_types.Wrap_int.from_x, Wrapped_types.Wrap_int.to_x"
+type w2 = byte options "ocaml.type" = "Wrapped_types.Wrap_int.t, Wrapped_types.Wrap_int.from_x, Wrapped_types.Wrap_int.to_x"
+type w3 = long options "ocaml.type" = "Wrapped_types.Wrap_i64.t, Wrapped_types.Wrap_i64.from_x, Wrapped_types.Wrap_i64.to_x"
+type w4 = float options "ocaml.type" = "Wrapped_types.Wrap_float.t, Wrapped_types.Wrap_float.from_x, Wrapped_types.Wrap_float.to_x"
+type w5 = string options "ocaml.type" = "Wrapped_types.Wrap_string.t, Wrapped_types.Wrap_string.from_x, Wrapped_types.Wrap_string.to_x"
+type w6 = (int * int * int) options "ocaml.type" = "Wrapped_types.Wrap_tuple_iii.t, Wrapped_types.Wrap_tuple_iii.from_x, Wrapped_types.Wrap_tuple_iii.to_x"
+type w7 = (int * string * int) options "ocaml.type" = "Wrapped_types.Wrap_tuple_isi.t, Wrapped_types.Wrap_tuple_isi.from_x, Wrapped_types.Wrap_tuple_isi.to_x"
+
+type wsum_ = A | B string options "ocaml.type_equals" = "Wrapped_types.Sum.t"
+type w8 = wsum_ options "ocaml.type" = "Wrapped_types.Wrap_sum.t; Wrapped_types.Wrap_sum.from_x; Wrapped_types.Wrap_sum.to_x; Wrapped_types.Wrap_sum.from_x Wsum_.A"
+
+type wrec_ = { a : int; b : string } options "ocaml.type_equals" = "Wrapped_types.Rec.t"
+type w9 = wrec_ options "ocaml.type" = "Wrapped_types.Wrap_rec.t; Wrapped_types.Wrap_rec.from_x; Wrapped_types.Wrap_rec.to_x; failwith \"missing wrec_\""
+
+type w10 = [ int ] options "ocaml.type" = "Wrapped_types.Wrap_list.t, Wrapped_types.Wrap_list.from_x, Wrapped_types.Wrap_list.to_x, Wrapped_types.Wrap_list.from_x [1; 2; 3]"
+type w11 = [| int |] options "ocaml.type" = "Wrapped_types.Wrap_array.t, Wrapped_types.Wrap_array.from_x, Wrapped_types.Wrap_array.to_x, Wrapped_types.Wrap_array.from_x [|1; 2; 3|]"
+
+type w12 = A | B w9
+
+message lazy22  = { v [@lazy] : digest }
+message lazy22b = { v : digest }
+message lazy23_0b = { v : w0 }
+message lazy23_0 = { v [@lazy] : w0 }
+message lazy23_1 = { v [@lazy] : w1 }
+message lazy23_2 = { v [@lazy] : w2 }
+message lazy23_3 = { v [@lazy] : w3 }
+message lazy23_4 = { v [@lazy] : w4 }
+message lazy23_5 = { v [@lazy] : w5 }
+message lazy23_6 = { v [@lazy] : w6 }
+message lazy23_7 = { v [@lazy] : w7 }
+message lazy23_8 = { v [@lazy] : w8 }
+message lazy23_9 = { v [@lazy] : w9 }
+message lazy23_10 = { v [@lazy] : w10 }
+message lazy23_11 = { v [@lazy] : [w9] }
+message lazy23_12 = { v [@lazy] : [w10] }
+message lazy23_13 = { v [@lazy] : w11 }
+message lazy23_14 = { v [@lazy] : [|w9|] }
+message lazy23_15 = { v [@lazy] : [|w10|] }
+message lazy23_16 = { v [@lazy] : (w0 * bool) }
+message lazy23_17 = { v [@lazy] : w12 }
+
 (* vim:set ft=ocaml: *)
