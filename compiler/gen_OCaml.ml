@@ -966,9 +966,12 @@ sig
     Ast.match_case -> Ast.expr
 end
 
+let lazy_val_overhead_estimate = 4
+let thunk_overhead_estimate = 4 (* reader *) + 9 (* Fast_write.t thunk *)
+
 let rec llty_word_size_estimate : Gencode_types.low_level -> int = function
   | Vint _ -> 1
-  | Bitstring32 _ -> 2
+  | Bitstring32 _ -> 3
   | Bitstring64 _ -> 3
   | Sum (cs, _) ->
       List.fold_left max 0 @@
@@ -976,17 +979,43 @@ let rec llty_word_size_estimate : Gencode_types.low_level -> int = function
         (function
           | `Constant _ -> 1
           | `Non_constant (_, lltys) ->
-              List.fold_left (+) 1 @@ List.map llty_word_size_estimate lltys)
+              List.fold_left (+) 1 @@
+              List.map
+                (fun llty ->
+                   (* Immediate values like int and bool take only the word
+                    * used in the tuple; values stored in a block OTOH take
+                    * the size of the block plus 1 word referencing it in the
+                    * tuple. *)
+                   let n = llty_word_size_estimate llty in
+                     if n = 1 then 1 else n + 1)
+                lltys)
         cs
   | Tuple (lltys, _) ->
-      List.fold_left (+) 1 @@ List.map llty_word_size_estimate lltys
+      List.fold_left (+) 1 @@
+      List.map
+        (fun llty ->
+           (* same logic as non-constant constructors in sum types *)
+           let n = llty_word_size_estimate llty in
+             if n = 1 then 1 else n + 1)
+        lltys
   | Record (_, fs, _) ->
-      List.fold_left (+) 1 @@ List.map (fun f -> llty_word_size_estimate f.field_type) fs
+      List.fold_left (+) 1 @@
+      List.map
+        (fun f ->
+           let n = llty_word_size_estimate f.field_type in
+             if not f.field_lazy then begin
+               if n = 1 then 1 else n + 1
+             end else begin
+               if deserialize_eagerly f.field_type then
+                 lazy_val_overhead_estimate + (if n = 1 then 1 else n + 1)
+               else
+                 thunk_overhead_estimate
+             end)
+        fs
   | Bytes _ | Htuple _ | Message _ -> 1000
 
-let deserialize_eagerly llty =
-  (* we use an approx threshold based on reader + thunk overhead *)
-  llty_word_size_estimate llty < 16
+and deserialize_eagerly llty =
+  lazy_val_overhead_estimate + llty_word_size_estimate llty < thunk_overhead_estimate
 
 let rec may_use_hint_path = function
   | Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> false
