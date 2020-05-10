@@ -1046,7 +1046,8 @@ and deserialize_eagerly llty =
 
 let rec may_use_hint_path = function
   | Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> false
-  | Message _ -> true
+  | Message (_, _, None, _) -> true
+  | Message (_, _, Some mexpr, _) -> msg_may_use_hint_path mexpr
   | Sum (cs, _) ->
       List.exists
         (function
@@ -1057,7 +1058,7 @@ let rec may_use_hint_path = function
   | Htuple (_, llty, _) -> may_use_hint_path llty
   | Record (_, fs, _) -> List.exists (fun f -> may_use_hint_path f.field_type) fs
 
-let msg_may_use_hint_path = function
+and msg_may_use_hint_path = function
   | Message_single (_, fields) ->
       List.exists
         (fun (_, _, ev_regime, llty) ->
@@ -1514,14 +1515,20 @@ struct
             let id = ident_with_path _loc full_path (RD.read_msg_func name) in
               update_path_if_needed ~name ~fieldno llty @@
               wrap @@
-              <:expr< $id:id$ ?hint ~level ~path s >>
+              if may_use_hint_path llty then
+                <:expr< $id:id$ ?hint ~level ~path s >>
+              else
+                <:expr< $id:id$ s >>
 
         | `Lazy, (Message (path, name, _, _) as llty) when deserialize_eagerly llty ->
             let full_path = path @ [String.capitalize name] in
             let id = ident_with_path _loc full_path (RD.read_msg_func name) in
               update_path_if_needed ~name ~fieldno llty @@
               wrap @@
-              <:expr< EXTPROT_FIELD____.from_val ($id:id$ ?hint ~level ~path s) >>
+              if may_use_hint_path llty then
+                <:expr< EXTPROT_FIELD____.from_val ($id:id$ ?hint ~level ~path s) >>
+              else
+                <:expr< EXTPROT_FIELD____.from_val ($id:id$ s) >>
 
         | `Lazy, (Message (path, name, _, _) as llty) ->
             let full_path = path @ [String.capitalize name] in
