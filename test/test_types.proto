@@ -388,4 +388,16 @@ message lazy23_15 = { v [@lazy] : [|w10|] }
 message lazy23_16 = { v [@lazy] : (w0 * bool) }
 message lazy23_17 = { v [@lazy] : w12 }
 
+message lazy24 = {
+  v1 : int [@default 789];
+  v2 : string_hohoho;
+  v3 : sum_type<int, int, int>;
+  v4 : [ int ];
+  v5 : [| int |];
+  v6 : simple_bool;
+}
+
+message lazy24a = {| lazy24 | v1 [@lazy]; v2 [@lazy]; v3 [@lazy] |}
+message lazy24b = {| lazy24 | v4 [@lazy]; v5 [@lazy]; v6 [@lazy] |}
+
 (* vim:set ft=ocaml: *)

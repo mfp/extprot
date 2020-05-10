@@ -16,14 +16,16 @@ let merge_options opt1 opt2 = opt2 @ opt1
 let update_bindings bindings params args =
   List.fold_right2 SMap.add params args bindings
 
-let must_keep_field subset ((name, mut, ev_regime, _) as field) = match subset with
+let must_keep_field subset ((name, mut, ev_regime, ty) as field) = match subset with
   | Exclude_fields l ->
       if not @@ List.mem name l then Some (`Orig field) else None
   | Include_fields l ->
       try
         match List.assoc name l with
-          | None -> Some (`Orig field)
-          | Some ty -> Some (`Newtype (name, mut, ev_regime, ty))
+          | (None, None) -> Some (`Orig field)
+          | (Some ty, None) -> Some (`Newtype (name, mut, ev_regime, ty))
+          | (None, Some ev_regime) -> Some (`Orig (name, mut, ev_regime, ty))
+          | (Some ty, Some ev_regime) -> Some (`Newtype (name, mut, ev_regime, ty))
       with Not_found -> None
 
 let subset_field = function
@@ -232,7 +234,7 @@ let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr
   | `Message_subset (name, l, sign) ->
       let subset =
         match sign with
-          | `Include -> Include_fields (List.map (fun (n, ty) -> (n, Option.map f ty)) l)
+          | `Include -> Include_fields (List.map (fun (n, (ty, evr)) -> (n, (Option.map f ty, evr))) l)
           | `Exclude -> Exclude_fields (List.map fst l)
       in
         match smap_find name bindings with

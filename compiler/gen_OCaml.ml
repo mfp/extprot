@@ -1666,7 +1666,7 @@ struct
     let _loc = loc "<generated code @ read_field>" in
       read msgname constr_name name ~ev_regime ~fieldno llty
 
-  and field_reader_funcname ~msgname ~constr ~name =
+  and field_reader_funcname ?(ev_regime=`Eager) ~msgname ~constr ~name () =
     let mangle s =
       let b = Buffer.create 13 in
         String.iter
@@ -1676,8 +1676,13 @@ struct
           s;
         Buffer.contents b
     in
-      sprintf "__%s_read_x%s_x%s_x%s"
-        RD.name (mangle msgname) (Option.map_default mangle "" constr) (mangle name)
+      match ev_regime with
+        | `Eager ->
+            sprintf "__%s_read_x%s_x%s_x%s"
+              RD.name (mangle msgname) (Option.map_default mangle "" constr) (mangle name)
+        | `Lazy ->
+            sprintf "__%s_readL_x%s_x%s_x%s"
+              RD.name (mangle msgname) (Option.map_default mangle "" constr) (mangle name)
 
   and record_case_field_readers msgname ~locs ?constr _ fields =
     let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
@@ -1713,7 +1718,7 @@ struct
                       ()
             >> in
 
-      let funcname  = field_reader_funcname ~msgname ~constr ~name in
+      let funcname  = field_reader_funcname ~ev_regime ~msgname ~constr ~name () in
 
       let read_expr =
         if locs then
@@ -1726,16 +1731,25 @@ struct
           read_field msgname constr_name name ~ev_regime ~fieldno llty
       in
         <:str_item<
-          value $lid:funcname$ ?hint ~level ~path s nelms =
+          value $lid:funcname$ ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s nelms =
              if nelms >= $int:string_of_int (fieldno + 1)$ then
                $read_expr$
              else $default$
-        >>
+        >> in
+
+    let fields_with_index =
+      List.concat @@
+      List.mapi
+        (fun i (name, mut, _, llty) ->
+           [ (i, (name, mut, `Eager, llty));
+             (i, (name, mut, `Lazy, llty))
+           ])
+        fields
     in
       List.fold_right
         (fun (i, fieldinfo) functions ->
            <:str_item< $read_field_with_locs i fieldinfo$; $functions$ >>)
-        (List.mapi (fun i x -> (i, x)) fields)
+        fields_with_index
         <:str_item< >>
 
   and record_case_inlined msgname ~locs ?namespace ?constr tag fields =
@@ -1835,12 +1849,39 @@ struct
   and record_case msgname ~locs:_ ?namespace ?constr tag fields =
     let _loc = Loc.mk "<generated code @ record_case>" in
 
-    let read_field_using_func _ (name, _, _ev_regime, _) expr =
-      let funcname = field_reader_funcname ~msgname ~constr ~name in
-        <:expr<
-          let $lid:name$ = $lid:funcname$ ?hint ~level ~path s nelms in
-            $expr$
-        >>
+    let read_field_using_func _ (name, _, ev_regime, llty) expr =
+      let funcname = field_reader_funcname ~msgname ~constr ~name () in
+        match ev_regime with
+          | `Eager when not @@ may_use_hint_path llty ->
+              <:expr<
+                let $lid:name$ = $lid:funcname$ s nelms in
+                  $expr$
+              >>
+          | `Eager ->
+              <:expr<
+                let $lid:name$ = $lid:funcname$ ?hint ~level ~path s nelms in
+                  $expr$
+              >>
+          | `Lazy when deserialize_eagerly llty ->
+              if may_use_hint_path llty then
+                <:expr<
+                  let $lid:name$ =
+                    EXTPROT_FIELD____.from_val
+                      ($lid:funcname$ ?hint ~level ~path s nelms)
+                  in
+                    $expr$
+                >>
+              else
+                <:expr<
+                  let $lid:name$ = EXTPROT_FIELD____.from_val ($lid:funcname$ s nelms) in
+                    $expr$
+                >>
+          | `Lazy ->
+              let funcname = field_reader_funcname ~ev_regime:`Lazy ~msgname ~constr ~name () in
+                <:expr<
+                  let $lid:name$ = ($lid:funcname$ ?hint ~level ~path s nelms) in
+                    $expr$
+                >>
     in
 
     let field_assigns =
@@ -1904,15 +1945,15 @@ struct
             (* We avoid unnecessary work updating the path if we know it won't
              * be used (because the field type is a primitive or another type
              * we can statically determine not to have lazy components). *)
-            let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
+            let funcname = field_reader_funcname ~msgname:orig ~constr ~name () in
               <:expr<
                 let $lid:name$ =
-                  $uid:String.capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
+                  $uid:String.capitalize orig$.$lid:funcname$ s nelms
                 in
                   $expr$
               >>
-        | Some (`Orig _field) ->
-            let funcname = field_reader_funcname ~msgname:orig ~constr ~name in
+        | Some (`Orig (_, _, `Eager, _)) ->
+            let funcname = field_reader_funcname ~msgname:orig ~constr ~name () in
               <:expr<
                 let $lid:name$ =
                   let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
@@ -1921,6 +1962,43 @@ struct
                 in
                   $expr$
               >>
+        | Some (`Orig (_, _, `Lazy, llty)) when deserialize_eagerly llty ->
+            let funcname = field_reader_funcname ~msgname:orig ~constr ~name () in
+              if may_use_hint_path llty then
+                <:expr<
+                  let $lid:name$ =
+                    let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                    let _    = path in
+                      EXTPROT_FIELD____.from_val
+                        ($uid:String.capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms)
+                  in
+                    $expr$
+                >>
+              else
+                <:expr<
+                  let $lid:name$ =
+                    EXTPROT_FIELD____.from_val
+                      ($uid:String.capitalize orig$.$lid:funcname$ s nelms)
+                  in
+                    $expr$
+                >>
+        | Some (`Orig (_, _, `Lazy, llty)) ->
+            let funcname = field_reader_funcname ~ev_regime:`Lazy ~msgname:orig ~constr ~name () in
+              if may_use_hint_path llty then
+                <:expr<
+                  let $lid:name$ =
+                    let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
+                    let _    = path in
+                      $uid:String.capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
+                  in
+                    $expr$
+                >>
+              else
+                <:expr<
+                  let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms
+                  in
+                    $expr$
+                >>
         | Some (`Newtype (name, _, ev_regime, llty)) ->
             let rescue_match_case = match default_value ev_regime llty with
                 None ->

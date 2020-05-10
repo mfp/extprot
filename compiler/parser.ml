@@ -153,13 +153,15 @@ EXTEND Gram
       | "{|"; n = a_LIDENT; "|"; l = LIST1 [ subset_field ] SEP ";"; "|}" ->
         `Message_subset (n, l, `Include)
       | "{|"; n = a_LIDENT; "|"; "not"; l = LIST1 [ a_LIDENT ] SEP ";"; "|}" ->
-        `Message_subset (n, List.map (fun n -> (n, None)) l, `Exclude)
+        `Message_subset (n, List.map (fun n -> (n, (None, None))) l, `Exclude)
       ] ];
 
   subset_field :
     [
-      [ name = a_LIDENT -> (name, None)
-      | name = a_LIDENT; ":"; ty = type_expr_simple -> (name, Some ty)
+      [ name = a_LIDENT -> (name, (None, None))
+      | name = a_LIDENT; ":"; ty = type_expr_simple -> (name, (Some ty, None))
+      | name = a_LIDENT; "[@"; "lazy"; "]" -> (name, (None, Some `Lazy))
+      | name = a_LIDENT; "[@"; "lazy"; "]"; ":"; ty = type_expr_simple -> (name, (Some ty, Some `Lazy))
       ] ];
 
   complex_msg_expr:

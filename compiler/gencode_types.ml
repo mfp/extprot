@@ -39,7 +39,7 @@ and field_mutable    = bool
 and ev_regime        = [ `Eager | `Lazy ]
 
 and 'a field_subset =
-  | Include_fields of (string * 'a option) list
+  | Include_fields of (string * ('a option * ev_regime option)) list
   | Exclude_fields of string list
 
 and vint_meaning =
