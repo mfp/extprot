@@ -326,7 +326,7 @@ let beta_reduced_msg_app_fields bindings name args =
         end
       | _ -> None
 
-let low_level_msg_def bindings msgname (msg : message_expr) =
+let rec low_level_msg_def bindings msgname (msg : message_expr) =
 
   let rec low_level_of_rtexp : reduced_type_expr -> low_level = function
       `Bool opts -> Vint (Bool, opts)
@@ -338,8 +338,14 @@ let low_level_msg_def bindings msgname (msg : message_expr) =
     | `Tuple (l, opts) -> Tuple (List.map low_level_of_rtexp (l :> reduced_type_expr list), opts)
     | `List (ty, opts) -> Htuple (List, low_level_of_rtexp (reduced_type_expr ty), opts)
     | `Array (ty, opts) -> Htuple (Array, low_level_of_rtexp (reduced_type_expr ty), opts)
-    | `Ext_message (path, s, opts) -> Message(path, s, opts)
-    | `Message (s, opts) -> Message ([], s, opts)
+    | `Ext_message (path, s, opts) -> Message(path, s, None, opts)
+    | `Message (s, opts) -> begin
+        match smap_find s bindings with
+          | None | Some (Type_decl _) -> Message ([], s, None, opts)
+          | Some (Message_decl (_, mexpr, _)) ->
+              let llmdef = low_level_msg_def bindings s mexpr in
+                Message ([], s, Some llmdef, opts)
+      end
     | `Record (r, opts) ->
         let fields =
           List.map

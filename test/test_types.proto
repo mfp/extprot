@@ -236,6 +236,7 @@ message lazy06b = { x : int; v : sum_type2<int> }
 message lazy07  = { x : int; v [@lazy] : (int * float) }
 message lazy07b = { x : int; v : (int * float) }
 message lazy08  = { x : int; v [@lazy] : (simple_bool * simple_bool) }
+message lazy08b = { x : int; v [@lazy] : simple_bool }
 message lazy09  = { v [@lazy] : simple_bool }
 message lazy10  = { x : int; v [@lazy] : simple_bool }
 message lazy10b = { x : int; v : simple_bool }

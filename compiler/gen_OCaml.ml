@@ -163,7 +163,7 @@ let type_opts = function
 | Sum (_, opts)
 | Record (_, _, opts)
 | Htuple (_, _, opts)
-| Message (_, _, opts)
+| Message (_, _, _, opts)
 | Tuple (_, opts) -> opts
 
 let default_value_or f default opts =
@@ -232,7 +232,7 @@ let rec default_value ev_regime t =
       end
     | Htuple (List, _, _) -> Some <:expr< [] >>
     | Htuple (Array, _, _) -> Some <:expr< [| |] >>
-    | Message (path, name, _) ->
+    | Message (path, name, _, _) ->
         let full_path = path @ [String.capitalize name] in
         let id = ident_with_path _loc full_path (name ^ "_default") in
         let e1 = <:expr< ! $id:id$ >> in
@@ -1012,7 +1012,34 @@ let rec llty_word_size_estimate : Gencode_types.low_level -> int = function
                  thunk_overhead_estimate
              end)
         fs
-  | Bytes _ | Htuple _ | Message _ -> 1000
+  | Message (_, _, Some llmdef, _) -> low_level_msg_def_size_estimate llmdef
+  | Message (_, _, None, _) -> 1000
+  | Bytes _ | Htuple _ -> 1000
+
+and low_level_msg_def_size_estimate = function
+  | Message_single (_, fs) -> field_size_estimate fs
+  | Message_sum l ->
+      List.fold_left max 1 @@
+      List.map (fun (_, _, fs) -> field_size_estimate fs) l
+  | Message_subset (_, fs, subset) ->
+      field_size_estimate @@
+      List.filter_map (function None -> None | Some (`Newtype x | `Orig x) -> Some x) @@
+      List.map (must_keep_field subset) fs
+  | Message_alias _ -> 1000
+
+and field_size_estimate fs =
+  List.fold_left (+) 1 @@
+  List.map
+    (fun (_, _, ev_regime, llty) ->
+       let n = llty_word_size_estimate llty in
+         match ev_regime with
+           | `Eager ->
+               if n = 1 then 1 else n + 1
+           | `Lazy when deserialize_eagerly llty ->
+               lazy_val_overhead_estimate + (if n = 1 then 1 else n + 1)
+           | `Lazy ->
+               thunk_overhead_estimate)
+    fs
 
 and deserialize_eagerly llty =
   lazy_val_overhead_estimate + llty_word_size_estimate llty < thunk_overhead_estimate
@@ -1036,7 +1063,7 @@ let msg_may_use_hint_path = function
         (fun (_, _, ev_regime, llty) ->
            match ev_regime with
              | `Eager -> may_use_hint_path llty
-             | `Lazy -> not @@ deserialize_eagerly llty)
+             | `Lazy -> may_use_hint_path llty || not @@ deserialize_eagerly llty)
         fields
   | Message_sum cases ->
       List.exists
@@ -1045,7 +1072,7 @@ let msg_may_use_hint_path = function
              (fun (_, _, ev_regime, llty) ->
                 match ev_regime with
                   | `Eager -> may_use_hint_path llty
-                  | `Lazy -> not @@ deserialize_eagerly llty)
+                  | `Lazy -> may_use_hint_path llty || not @@ deserialize_eagerly llty)
              fields)
         cases
   | Message_alias _ -> true
@@ -1055,7 +1082,7 @@ let msg_may_use_hint_path = function
            Option.is_some (must_keep_field subset field) &&
            begin match ev_regime with
              | `Eager -> may_use_hint_path llty
-             | `Lazy -> not @@ deserialize_eagerly llty
+             | `Lazy -> may_use_hint_path llty || not @@ deserialize_eagerly llty
            end)
         fs
 
@@ -1482,14 +1509,21 @@ struct
                     (fun s -> $wrap @@ STRING_READER.wrap_msg_reader name ~promoted_match_cases match_cases$)
                 >>
 
-        | `Eager, (Message (path, name, _) as llty) ->
+        | `Eager, (Message (path, name, _, _) as llty) ->
             let full_path = path @ [String.capitalize name] in
             let id = ident_with_path _loc full_path (RD.read_msg_func name) in
               update_path_if_needed ~name ~fieldno llty @@
               wrap @@
               <:expr< $id:id$ ?hint ~level ~path s >>
 
-        | `Lazy, (Message (path, name, _) as llty) ->
+        | `Lazy, (Message (path, name, _, _) as llty) when deserialize_eagerly llty ->
+            let full_path = path @ [String.capitalize name] in
+            let id = ident_with_path _loc full_path (RD.read_msg_func name) in
+              update_path_if_needed ~name ~fieldno llty @@
+              wrap @@
+              <:expr< EXTPROT_FIELD____.from_val ($id:id$ ?hint ~level ~path s) >>
+
+        | `Lazy, (Message (path, name, _, _) as llty) ->
             let full_path = path @ [String.capitalize name] in
             (* We hardcode use of read_ because it's the String_reader version
              * we want (since it will be operating on the string_reader passed
@@ -2344,7 +2378,7 @@ let rec write_field ~ev_regime ?namespace fname llty =
     | Vint (_, opts) | Bitstring32 opts | Bitstring64 (_, opts) | Bytes opts ->
         <:expr< Extprot.Msg_buffer.$lid:simple_write_func llty$
                   aux $wrap_value opts v$ >>
-    | Message (path, name, _) ->
+    | Message (path, name, _, _) ->
         let full_path = path @ [String.capitalize name] in
         let id = ident_with_path _loc full_path ("write_" ^ name) in
           <:expr< $id:id$ aux $v$ >>

@@ -11,7 +11,7 @@ type low_level =
   | Record of string * field list * type_options
   | Tuple of low_level list * type_options
   | Htuple of htuple_meaning * low_level * type_options
-  | Message of string list * string * type_options
+  | Message of string list * string * low_level message option * type_options
 
 and constructor = {
   const_tag : tag;
