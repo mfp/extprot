@@ -31,7 +31,7 @@ test_types.ml: $(GENERATOR) test_types.proto
 $(CamlTargets $(removesuffix $(ls *.ml))): $(BASE)/runtime/extprot.cmxa
 
 OCamlProgram(run_tests, register_test $(TEST_MODULES) test)
-OCamlProgram(bm_01, digest_type dummy_type test_types gen_data bm_01)
+OCamlProgram(bm_01, digest_type dummy_type wrapped_types test_types gen_data bm_01)
 OCamlProgram(prettyprint, prettyprint)
 
 section
