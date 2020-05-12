@@ -36,7 +36,14 @@ let empty_container name ?default_func ty_str_item =
   }
 
 let (|>) x f = f x
-let (@@) f x = f x
+
+let smap_find_default k v m = Option.default v @@ smap_find k m
+
+let smap_update f k m  =
+  SMap.add k (f @@ smap_find k m) m
+
+let smap_update_default f k v m =
+  smap_update (fun x -> f @@ Option.default v x) k m
 
 let foldl1 msg f g = function
     [] -> invalid_arg ("foldl1: empty list -- " ^ msg)
@@ -926,6 +933,7 @@ module type READER =
 sig
   val read_message :
     ?inline:bool ->
+    field_reader_func_uses : (Gencode.msg_name * [`Eager | `Lazy]) list SMap.t SMap.t ->
     Gencode.msg_name ->
     Ptypes.type_options ->
     Gencode.low_level Gencode.message ->
@@ -1689,7 +1697,7 @@ struct
             sprintf "__%s_readL_x%s_x%s_x%s"
               RD.name (mangle msgname) (Option.map_default mangle "" constr) (mangle name)
 
-  and record_case_field_readers msgname ~locs ?constr _ fields =
+  and record_case_field_readers msgname ~field_reader_func_uses ~locs ?constr _ fields =
     let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
     let constr_name = Option.default "<default>" constr in
 
@@ -1726,7 +1734,10 @@ struct
       let funcname  = field_reader_funcname ~ev_regime ~msgname ~constr ~name () in
 
         match ev_regime with
-        | `Lazy when deserialize_eagerly llty ->
+        | `Lazy when
+            deserialize_eagerly llty &&
+            (* cannot reuse eager field reader func if it's not emitted! *)
+            is_field_reader_func_used field_reader_func_uses msgname name `Eager ->
             let eagerfunc = field_reader_funcname ~ev_regime:`Eager ~msgname ~constr ~name () in
               <:str_item<
                 value $lid:funcname$ ?hint ?level ?path s nelms =
@@ -1761,9 +1772,13 @@ struct
       List.concat @@
       List.mapi
         (fun i (name, mut, _, llty) ->
-           [ (i, (name, mut, `Eager, llty));
-             (i, (name, mut, `Lazy, llty))
-           ])
+           let used evr =
+             is_field_reader_func_used field_reader_func_uses msgname name evr
+           in
+             List.concat
+               [ if used `Eager then [(i, (name, mut, `Eager, llty))] else [];
+                 if used `Lazy then [(i, (name, mut, `Lazy, llty))] else [];
+               ])
         fields
     in
       List.fold_right
@@ -1771,6 +1786,11 @@ struct
            <:str_item< $read_field_with_locs i fieldinfo$; $functions$ >>)
         fields_with_index
         <:str_item< >>
+
+  and is_field_reader_func_used field_reader_func_uses msgname name evr =
+    List.exists (fun (_, evr') -> evr = evr') @@
+    smap_find_default name [] @@
+    smap_find_default msgname SMap.empty field_reader_func_uses
 
   and record_case_inlined msgname ~locs ?namespace ?constr tag fields =
     let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
@@ -1882,26 +1902,18 @@ struct
                 let $lid:name$ = $lid:funcname$ ?hint ~level ~path s nelms in
                   $expr$
               >>
-          | `Lazy when deserialize_eagerly llty ->
-              if may_use_hint_path llty then
-                <:expr<
-                  let $lid:name$ =
-                    EXTPROT_FIELD____.from_val
-                      ($lid:funcname$ ?hint ~level ~path s nelms)
-                  in
-                    $expr$
-                >>
-              else
-                <:expr<
-                  let $lid:name$ = EXTPROT_FIELD____.from_val ($lid:funcname$ s nelms) in
-                    $expr$
-                >>
           | `Lazy ->
               let funcname = field_reader_funcname ~ev_regime:`Lazy ~msgname ~constr ~name () in
-                <:expr<
-                  let $lid:name$ = ($lid:funcname$ ?hint ~level ~path s nelms) in
-                    $expr$
-                >>
+                if may_use_hint_path llty then
+                  <:expr<
+                    let $lid:name$ = ($lid:funcname$ ?hint ~level ~path s nelms) in
+                      $expr$
+                  >>
+                else
+                  <:expr<
+                    let $lid:name$ = ($lid:funcname$ s nelms) in
+                      $expr$
+                  >>
     in
 
     let field_assigns =
@@ -1982,26 +1994,6 @@ struct
                 in
                   $expr$
               >>
-        | Some (`Orig (_, _, `Lazy, llty)) when deserialize_eagerly llty ->
-            let funcname = field_reader_funcname ~msgname:orig ~constr ~name () in
-              if may_use_hint_path llty then
-                <:expr<
-                  let $lid:name$ =
-                    let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
-                    let _    = path in
-                      EXTPROT_FIELD____.from_val
-                        ($uid:String.capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms)
-                  in
-                    $expr$
-                >>
-              else
-                <:expr<
-                  let $lid:name$ =
-                    EXTPROT_FIELD____.from_val
-                      ($uid:String.capitalize orig$.$lid:funcname$ s nelms)
-                  in
-                    $expr$
-                >>
         | Some (`Orig (_, _, `Lazy, llty)) ->
             let funcname = field_reader_funcname ~ev_regime:`Lazy ~msgname:orig ~constr ~name () in
               if may_use_hint_path llty then
@@ -2234,7 +2226,7 @@ struct
       field_infos |>
     Ast.mcOr_of_list
 
-  and read_message ?(inline = false) msgname opts = function
+  and read_message ?(inline = false) ~field_reader_func_uses msgname opts = function
       | Message_single (namespace, fields) ->
 
           let promoted_match_cases =
@@ -2249,7 +2241,7 @@ struct
             else
               let locs          = use_locs opts in
               let match_cases   = record_case ~locs:(use_locs opts) ?namespace msgname 0 fields in
-              let field_readers = record_case_field_readers ~locs msgname 0 fields in
+              let field_readers = record_case_field_readers ~field_reader_func_uses ~locs msgname 0 fields in
                 (match_cases, field_readers) in
 
           let main_expr =
@@ -2295,7 +2287,7 @@ struct
               List.rev @@
               List.mapi
                 (fun tag (_namespace, constr, fields) ->
-                   record_case_field_readers ~locs ~constr msgname tag fields)
+                   record_case_field_readers ~field_reader_func_uses ~locs ~constr msgname tag fields)
                 l in
 
           let match_cases =
@@ -2330,6 +2322,59 @@ let messages_with_subsets bindings =
        | Type_decl _ -> l)
     bindings []
 
+let field_reader_func_uses bindings =
+  let rec update m msgname = function
+    (* m: map   msgname -> fieldname -> (msgname * ev_regime) list *)
+    | `Message_record fs  ->
+        smap_update_default
+          (fun m2 ->
+             List.fold_left
+               (fun m (fname, _, fevr, _) ->
+                  smap_update_default (fun l -> (msgname, fevr) :: l) fname [] m)
+               m2 fs)
+          msgname SMap.empty m
+    | `Message_alias _ -> m
+    | `Message_sum cases ->
+        List.fold_left
+          (fun m (constr, mexpr) -> match mexpr with
+             | `Message_app _ | `Message_record _ as mexpr ->
+                 update m (msgname ^ "." ^ constr) mexpr)
+          m cases
+    | `Message_app (tyname, _, _) -> begin
+        match smap_find tyname bindings with
+          | Some (Type_decl (_, _, `Record (r, _), _)) ->
+              smap_update_default
+                (fun m ->
+                   List.fold_left
+                     (fun m (fname, _, fevr, _) ->
+                        smap_update_default (fun l -> (msgname, fevr) :: l) fname [] m)
+                     m r.record_fields)
+                msgname SMap.empty m
+          | _ -> m
+      end
+    | `Message_subset _ as mexpr ->
+        match Gencode.low_level_msg_def bindings msgname mexpr with
+          | Message_subset (origname, fs, subset) ->
+              smap_update_default
+                (fun m2 ->
+                   List.fold_left
+                     (fun m2 f ->
+                        match must_keep_field subset f with
+                          | None -> m2
+                          | Some (`Newtype (fname, _, fevr, _))
+                          | Some (`Orig (fname, _, fevr, _)) ->
+                              smap_update_default
+                                (fun l -> (msgname, fevr) :: l) fname [] m2)
+                     m2 fs)
+                origname SMap.empty m
+          | _ -> m
+  in
+    SMap.fold
+      (fun _ decl m -> match decl with
+         | Message_decl (msgname, mexpr, _) -> update m msgname mexpr
+         | Type_decl _ -> m)
+      bindings SMap.empty
+
 let add_message_reader bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
@@ -2339,6 +2384,7 @@ let add_message_reader bindings msgname mexpr opts c =
 
   let field_readers, read_expr =
     Mk_normal_reader.read_message
+      ~field_reader_func_uses:(field_reader_func_uses bindings)
       ~inline:(not @@ List.mem msgname with_subsets)
       msgname opts llrec in
 
@@ -2401,6 +2447,7 @@ let add_message_io_reader bindings msgname mexpr opts c =
 
   let field_readers, ioread_expr =
     Mk_io_reader.read_message
+      ~field_reader_func_uses:(field_reader_func_uses bindings)
       ~inline:(not @@ List.mem msgname with_subsets)
       msgname opts llrec
   in
