@@ -1725,22 +1725,37 @@ struct
 
       let funcname  = field_reader_funcname ~ev_regime ~msgname ~constr ~name () in
 
-      let read_expr =
-        if locs then
-          <:expr<
-              try
-                $read_field msgname constr_name name ~ev_regime ~fieldno llty$
-              with [$rescue_match_case$]
-          >>
-        else
-          read_field msgname constr_name name ~ev_regime ~fieldno llty
-      in
-        <:str_item<
-          value $lid:funcname$ ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s nelms =
-             if nelms >= $int:string_of_int (fieldno + 1)$ then
-               $read_expr$
-             else $default$
-        >> in
+        match ev_regime with
+        | `Lazy when deserialize_eagerly llty ->
+            let eagerfunc = field_reader_funcname ~ev_regime:`Eager ~msgname ~constr ~name () in
+              <:str_item<
+                value $lid:funcname$ ?hint ?level ?path s nelms =
+                  let _ = hint in
+                  let _ = level in
+                  let _ = path in
+                    EXTPROT_FIELD____.from_val ($lid:eagerfunc$ s nelms)
+              >>
+
+        | _ ->
+            let read_expr =
+              if locs then
+                <:expr<
+                  try
+                    $read_field msgname constr_name name ~ev_regime ~fieldno llty$
+                  with [$rescue_match_case$]
+                >>
+              else
+                read_field msgname constr_name name ~ev_regime ~fieldno llty
+            in
+              <:str_item<
+                value $lid:funcname$ ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s nelms =
+                  let _ = hint in
+                  let _ = level in
+                  let _ = path in
+                    if nelms >= $int:string_of_int (fieldno + 1)$ then
+                      $read_expr$
+                    else $default$
+              >> in
 
     let fields_with_index =
       List.concat @@
