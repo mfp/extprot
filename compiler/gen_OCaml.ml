@@ -1042,7 +1042,12 @@ and field_size_estimate fs =
     fs
 
 and deserialize_eagerly llty =
+  is_primitive_type llty ||
   lazy_val_overhead_estimate + llty_word_size_estimate llty < thunk_overhead_estimate
+
+and is_primitive_type = function
+  | Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> true
+  | Message _ | Sum _ | Tuple _ | Htuple _ | Record _ -> false
 
 let rec may_use_hint_path = function
   | Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> false
