@@ -399,5 +399,8 @@ message lazy24 = {
 
 message lazy24a = {| lazy24 | v1 [@lazy]; v2 [@lazy]; v3 [@lazy] |}
 message lazy24b = {| lazy24 | v4 [@lazy]; v5 [@lazy]; v6 [@lazy] |}
+message lazy24c = {| lazy24 | v1 [@lazy]; v2; v3 [@lazy] |}
+
+message lazy25 = {| lazy17 | v1 [@eager]; v3; v4 |}
 
 (* vim:set ft=ocaml: *)

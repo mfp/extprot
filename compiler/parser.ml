@@ -162,6 +162,8 @@ EXTEND Gram
       | name = a_LIDENT; ":"; ty = type_expr_simple -> (name, (Some ty, None))
       | name = a_LIDENT; "[@"; "lazy"; "]" -> (name, (None, Some `Lazy))
       | name = a_LIDENT; "[@"; "lazy"; "]"; ":"; ty = type_expr_simple -> (name, (Some ty, Some `Lazy))
+      | name = a_LIDENT; "[@"; "eager"; "]" -> (name, (None, Some `Eager))
+      | name = a_LIDENT; "[@"; "eager"; "]"; ":"; ty = type_expr_simple -> (name, (Some ty, Some `Eager))
       ] ];
 
   complex_msg_expr:
