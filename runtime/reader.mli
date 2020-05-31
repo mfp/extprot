@@ -70,7 +70,7 @@ and String_reader : sig
 
   val make_sub : t -> off:position -> upto:position -> t
 
-  val from_msgbuffer : Msg_buffer.t -> t
+  val unsafe_from_msgbuffer : Msg_buffer.t -> t
   val from_string : string -> t
   val from_io_reader : IO_reader.t -> t
   (** @return the reader and the message string *)

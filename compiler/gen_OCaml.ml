@@ -1625,7 +1625,7 @@ struct
                                   Extprot.Msg_buffer.add_vint b nelms;
                                   Extprot.Msg_buffer.add_string b dat;
                                   EXTPROT_FIELD____.from_fun ?hint ~level ~path
-                                    (Extprot.Reader.String_reader.from_msgbuffer b)
+                                    (Extprot.Reader.String_reader.unsafe_from_msgbuffer b)
                                     (fun s -> $wrap e$)
                                 }
                               >>

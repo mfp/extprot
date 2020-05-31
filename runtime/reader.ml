@@ -256,8 +256,8 @@ struct
 
   let from_string s = make s 0 (String.length s)
 
-  let from_msgbuffer b =
-    { buf = Msg_buffer.unsafe_contents b; pos = 0; last = Msg_buffer.length b }
+  let unsafe_from_msgbuffer b =
+    { buf = Bytes.unsafe_to_string @@ Msg_buffer.unsafe_contents b; pos = 0; last = Msg_buffer.length b }
 
   let from_io_reader' ch =
     let hd = IO_reader.read_prefix ch in
