@@ -1,6 +1,14 @@
 
 exception Wrong_protocol_version of int * int (* max_known, found *)
 
+type ('a, 'hint, 'path) string_reader =
+  ?hint:'hint -> ?level:int -> ?path:'path -> Reader.String_reader.t -> 'a
+
+type ('a, 'hint, 'path) io_reader =
+  ?hint:'hint -> ?level:int -> ?path:'path -> Reader.IO_reader.t -> 'a
+
+type 'a writer = (Msg_buffer.t -> 'a -> unit)
+
 let get_buf = function
     None -> Msg_buffer.create ()
   | Some b -> Msg_buffer.clear b; b
@@ -14,7 +22,7 @@ let dump f buf x =
   Msg_buffer.clear buf;
   f buf x
 
-let deserialize f ?(offset = 0) s =
+let deserialize (f : _ string_reader) ?(offset = 0) s =
   f (Reader.String_reader.make s offset (String.length s - offset))
 
 let serialize_versioned ?buf fs version x =
@@ -27,7 +35,7 @@ let serialize_versioned ?buf fs version x =
     fs.(version) buf x;
     Msg_buffer.contents buf
 
-let deserialize_versioned fs s =
+let deserialize_versioned (fs : _ string_reader array) s =
   let len = String.length s in
     if len < 2 then
       raise (Wrong_protocol_version (Array.length fs, -1));
@@ -37,20 +45,20 @@ let deserialize_versioned fs s =
       else
         raise (Wrong_protocol_version (Array.length fs, version))
 
-let deserialize_versioned' fs version msg =
+let deserialize_versioned' (fs : _ string_reader array) version msg =
   if version >= 0 && version < Array.length fs then
     fs.(version) (Reader.String_reader.make msg 0 (String.length msg))
   else
     raise (Wrong_protocol_version (Array.length fs, version))
 
-let read f io = f (Reader.IO_reader.from_io io)
+let read (f : _ io_reader) io = f (Reader.IO_reader.from_io io)
 
 let write ?buf (f : Msg_buffer.t -> 'a -> unit) io (x : 'a) =
   let buf = get_buf buf in
     f buf x;
     Msg_buffer.output_buffer_to_io io buf
 
-let read_versioned fs rd =
+let read_versioned (fs : _ io_reader array) rd =
   let a = Reader.IO_reader.read_byte rd in
   let b = Reader.IO_reader.read_byte rd in
   let version = a + b lsl 8 in
