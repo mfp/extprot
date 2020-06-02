@@ -41,7 +41,8 @@ struct
       if not (choose_exn exn) then raise exn
 
   let test_aux
-        rd_bool rd_string rd_long serialize_versioned deserialize_versioned =
+        rd_bool rd_string rd_long serialize_versioned
+        (deserialize_versioned : _ -> ?hint:_ -> string -> _) =
 
     let wr_bool, wr_string, wr_long =
       Simple_bool.write_simple_bool,
@@ -105,8 +106,8 @@ struct
         C.write_versioned fs idx io v;
         IO.close_out io in
 
-    let deserialize fs s =
-      read_versioned fs (IO.input_string s)
+    let deserialize fs ?hint s =
+      read_versioned fs ?hint (IO.input_string s)
     in
       test_aux
       Simple_bool.io_read_simple_bool
@@ -119,7 +120,7 @@ struct
 
   let test_read_write_versioned () =
     test_read_write_versioned_aux
-      (fun fs io -> C.read_versioned fs (Extprot.Reader.IO_reader.from_io io))
+      (fun fs ?hint io -> C.read_versioned fs ?hint (Extprot.Reader.IO_reader.from_io io))
 
   let () = Register_test.register "versioned serialization"
     [
