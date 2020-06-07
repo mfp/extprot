@@ -173,6 +173,89 @@ let type_opts = function
 | Message (_, _, _, opts)
 | Tuple (_, opts) -> opts
 
+let lazy_val_overhead_estimate = 4
+let thunk_overhead_estimate = 4 (* reader *) + 9 (* Fast_write.t thunk *)
+
+let rec llty_word_size_estimate : Gencode_types.low_level -> int = function
+  | Vint _ -> 1
+  | Bitstring32 _ -> 3
+  | Bitstring64 _ -> 3
+  | Sum (cs, _) ->
+      List.fold_left max 0 @@
+      List.map
+        (function
+          | `Constant _ -> 1
+          | `Non_constant (_, lltys) ->
+              List.fold_left (+) 1 @@
+              List.map
+                (fun llty ->
+                   (* Immediate values like int and bool take only the word
+                    * used in the tuple; values stored in a block OTOH take
+                    * the size of the block plus 1 word referencing it in the
+                    * tuple. *)
+                   let n = llty_word_size_estimate llty in
+                     if n = 1 then 1 else n + 1)
+                lltys)
+        cs
+  | Tuple (lltys, _) ->
+      List.fold_left (+) 1 @@
+      List.map
+        (fun llty ->
+           (* same logic as non-constant constructors in sum types *)
+           let n = llty_word_size_estimate llty in
+             if n = 1 then 1 else n + 1)
+        lltys
+  | Record (_, fs, _) ->
+      List.fold_left (+) 1 @@
+      List.map
+        (fun f ->
+           let n = llty_word_size_estimate f.field_type in
+             if not f.field_lazy then begin
+               if n = 1 then 1 else n + 1
+             end else begin
+               if deserialize_eagerly f.field_type then
+                 lazy_val_overhead_estimate + (if n = 1 then 1 else n + 1)
+               else
+                 thunk_overhead_estimate
+             end)
+        fs
+  | Message (_, _, Some llmdef, _) -> low_level_msg_def_size_estimate llmdef
+  | Message (_, _, None, _) -> 1000
+  | Bytes _ | Htuple _ -> 1000
+
+and low_level_msg_def_size_estimate = function
+  | Message_single (_, fs) -> field_size_estimate fs
+  | Message_sum l ->
+      List.fold_left max 1 @@
+      List.map (fun (_, _, fs) -> field_size_estimate fs) l
+  | Message_subset (_, fs, subset) ->
+      field_size_estimate @@
+      List.filter_map (function None -> None | Some (`Newtype x | `Orig x) -> Some x) @@
+      List.map (must_keep_field subset) fs
+  | Message_alias _ -> 1000
+
+and field_size_estimate fs =
+  List.fold_left (+) 1 @@
+  List.map
+    (fun (_, _, ev_regime, llty) ->
+       let n = llty_word_size_estimate llty in
+         match ev_regime with
+           | `Eager ->
+               if n = 1 then 1 else n + 1
+           | `Lazy when deserialize_eagerly llty ->
+               lazy_val_overhead_estimate + (if n = 1 then 1 else n + 1)
+           | `Lazy ->
+               thunk_overhead_estimate)
+    fs
+
+and deserialize_eagerly llty =
+  is_primitive_type llty ||
+  lazy_val_overhead_estimate + llty_word_size_estimate llty < thunk_overhead_estimate
+
+and is_primitive_type = function
+  | Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> true
+  | Message _ | Sum _ | Tuple _ | Htuple _ | Record _ -> false
+
 let default_value_or f default opts =
   try
     Some (f @@ List.assoc "default" opts)
@@ -973,89 +1056,6 @@ sig
     ?promoted_match_cases:Ast.match_case ->
     Ast.match_case -> Ast.expr
 end
-
-let lazy_val_overhead_estimate = 4
-let thunk_overhead_estimate = 4 (* reader *) + 9 (* Fast_write.t thunk *)
-
-let rec llty_word_size_estimate : Gencode_types.low_level -> int = function
-  | Vint _ -> 1
-  | Bitstring32 _ -> 3
-  | Bitstring64 _ -> 3
-  | Sum (cs, _) ->
-      List.fold_left max 0 @@
-      List.map
-        (function
-          | `Constant _ -> 1
-          | `Non_constant (_, lltys) ->
-              List.fold_left (+) 1 @@
-              List.map
-                (fun llty ->
-                   (* Immediate values like int and bool take only the word
-                    * used in the tuple; values stored in a block OTOH take
-                    * the size of the block plus 1 word referencing it in the
-                    * tuple. *)
-                   let n = llty_word_size_estimate llty in
-                     if n = 1 then 1 else n + 1)
-                lltys)
-        cs
-  | Tuple (lltys, _) ->
-      List.fold_left (+) 1 @@
-      List.map
-        (fun llty ->
-           (* same logic as non-constant constructors in sum types *)
-           let n = llty_word_size_estimate llty in
-             if n = 1 then 1 else n + 1)
-        lltys
-  | Record (_, fs, _) ->
-      List.fold_left (+) 1 @@
-      List.map
-        (fun f ->
-           let n = llty_word_size_estimate f.field_type in
-             if not f.field_lazy then begin
-               if n = 1 then 1 else n + 1
-             end else begin
-               if deserialize_eagerly f.field_type then
-                 lazy_val_overhead_estimate + (if n = 1 then 1 else n + 1)
-               else
-                 thunk_overhead_estimate
-             end)
-        fs
-  | Message (_, _, Some llmdef, _) -> low_level_msg_def_size_estimate llmdef
-  | Message (_, _, None, _) -> 1000
-  | Bytes _ | Htuple _ -> 1000
-
-and low_level_msg_def_size_estimate = function
-  | Message_single (_, fs) -> field_size_estimate fs
-  | Message_sum l ->
-      List.fold_left max 1 @@
-      List.map (fun (_, _, fs) -> field_size_estimate fs) l
-  | Message_subset (_, fs, subset) ->
-      field_size_estimate @@
-      List.filter_map (function None -> None | Some (`Newtype x | `Orig x) -> Some x) @@
-      List.map (must_keep_field subset) fs
-  | Message_alias _ -> 1000
-
-and field_size_estimate fs =
-  List.fold_left (+) 1 @@
-  List.map
-    (fun (_, _, ev_regime, llty) ->
-       let n = llty_word_size_estimate llty in
-         match ev_regime with
-           | `Eager ->
-               if n = 1 then 1 else n + 1
-           | `Lazy when deserialize_eagerly llty ->
-               lazy_val_overhead_estimate + (if n = 1 then 1 else n + 1)
-           | `Lazy ->
-               thunk_overhead_estimate)
-    fs
-
-and deserialize_eagerly llty =
-  is_primitive_type llty ||
-  lazy_val_overhead_estimate + llty_word_size_estimate llty < thunk_overhead_estimate
-
-and is_primitive_type = function
-  | Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> true
-  | Message _ | Sum _ | Tuple _ | Htuple _ | Record _ -> false
 
 let rec may_use_hint_path = function
   | Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> false
