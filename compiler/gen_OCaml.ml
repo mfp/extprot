@@ -239,12 +239,15 @@ and field_size_estimate fs =
   List.map
     (fun (_, _, ev_regime, llty) ->
        let n = llty_word_size_estimate llty in
+       let eagerly = deserialize_eagerly llty in
          match ev_regime with
            | `Eager ->
                if n = 1 then 1 else n + 1
-           | `Lazy when deserialize_eagerly llty ->
+           | `Auto when eagerly ->
+               if n = 1 then 1 else n + 1
+           | `Lazy when eagerly ->
                lazy_val_overhead_estimate + (if n = 1 then 1 else n + 1)
-           | `Lazy ->
+           | `Lazy | `Auto ->
                thunk_overhead_estimate)
     fs
 
@@ -255,6 +258,13 @@ and deserialize_eagerly llty =
 and is_primitive_type = function
   | Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> true
   | Message _ | Sum _ | Tuple _ | Htuple _ | Record _ -> false
+
+let compute_ev_regime_with_llty llty : [< `Eager | `Lazy | `Auto] -> [> `Eager | `Lazy ]= function
+  | `Eager -> `Eager
+  | `Lazy -> `Lazy
+  | `Auto ->
+      if deserialize_eagerly llty then `Eager
+      else `Lazy
 
 let default_value_or f default opts =
   try
@@ -333,7 +343,7 @@ let rec default_value ev_regime t =
         | Some [_] -> failwith "default_value: tuple with only 1 element"
         | Some (hd::tl) -> Some <:expr< ($hd$, $Ast.exCom_of_list tl$) >>
   in
-  match ev_regime, get_type_info @@ type_opts t, default_value with
+  match compute_ev_regime_with_llty t ev_regime, get_type_info @@ type_opts t, default_value with
   | _, Some { default=None; ty; _ }, Some _ -> failwith @@ sprintf "no default value specified for external type %s" ty
   | _, Some { default=None; _ }, None -> None
   | `Eager, Some { default=Some override; _ }, _ -> Some override
@@ -404,10 +414,18 @@ let generate_container bindings =
       <:str_item< $internal$; $ext$ >> in
 
   let rec message_types ?(opts = []) msgname = function
-    | `Message_record l ->
-        let ctyp (name, mutabl, ev_regime, texpr) =
+    | `Message_record l as mexpr ->
+
+        let llfields =
+          match Gencode.low_level_msg_def bindings msgname mexpr with
+            | Message_single (_, fs) ->
+                List.map (fun (_, _, _, llty) -> llty) fs
+            | _ -> failwith "low level msg def for `Message_record is not Message_single"
+        in
+
+        let ctyp ((name, mutabl, ev_regime, texpr), llty) =
           let ty = ctyp_of_texpr bindings texpr in
-          let ty = match ev_regime with
+          let ty = match compute_ev_regime_with_llty llty ev_regime with
             | `Eager -> ty
             | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >>
           in
@@ -416,7 +434,8 @@ let generate_container bindings =
               | false -> <:ctyp< $lid:name$ : $ty$ >> in
         let fields =
           foldl1 "message_types `Message_record" ctyp
-            (fun ct field -> <:ctyp< $ct$; $ctyp field$ >>) l
+            (fun ct field -> <:ctyp< $ct$; $ctyp field$ >>)
+            (List.combine l llfields)
         (* no quotations for type, wtf? *)
         (* in <:str_item< type $msgname$ = { $fields$ } >> *)
         in
@@ -457,7 +476,7 @@ let generate_container bindings =
            $message_typedefs ~opts msgname <:ctyp< [$consts$] >>$
          >>
 
-   | `Message_subset (name, selection, sign) ->
+   | `Message_subset (name, selection, sign) as mexpr ->
 
        let bindings, l =
          match smap_find name bindings with
@@ -495,12 +514,20 @@ let generate_container bindings =
                   exit_with_error
                     "Unknown field %s referenced in message subset %s."
                     field msgname)
-             selection
+             selection in
+
+       let llfields =
+         match Gencode.low_level_msg_def bindings msgname mexpr with
+           | Message_subset (_, fs, _) ->
+               List.fold_left
+                 (fun m (fname, _, _, fllty) -> SMap.add fname fllty m)
+                 SMap.empty fs
+           | _ -> failwith "low level msg def for `Message_record is not Message_subset"
        in
 
        let ctyp (name, mutabl, ev_regime, texpr) =
          let ty = ctyp_of_texpr bindings texpr in
-         let ty = match ev_regime with
+         let ty = match compute_ev_regime_with_llty (SMap.find name llfields) ev_regime with
            | `Eager -> ty
            | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >>
          in
@@ -640,7 +667,7 @@ let generate_container bindings =
               let ctyp (name, mutabl, ev_regime, texpr) =
                 let ty = ctyp_of_poly_texpr_core bindings texpr in
                 let ty = match ev_regime with
-                  | `Eager -> ty
+                  | `Eager | `Auto -> ty
                   | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >>
                 in
                   match mutabl with
@@ -785,9 +812,19 @@ struct
   let pp_name path name = <:expr< $id:ident_with_path _loc path ("pp_" ^ name)$ >>
 
   let rec pp_message ?namespace bindings msgname = function
-    | `Message_record l -> pp_message_record ?namespace bindings msgname l
+    | `Message_record l as mexpr ->
+        let ev_regimes =
+          match Gencode.low_level_msg_def bindings msgname mexpr with
+            | Message_single (_, fs) ->
+                List.fold_left
+                  (fun m (name, _, evr, llty) ->
+                     SMap.add name (compute_ev_regime_with_llty llty evr) m)
+                  SMap.empty fs
+            | _ -> failwith "low level msg def for `Message_record is not Message_single"
+        in
+          pp_message_record ?namespace bindings ~ev_regimes msgname l
 
-    | (`Message_subset (name, selection, sign) : message_expr) as _mexpr ->
+    | (`Message_subset (name, selection, sign) : message_expr) as mexpr ->
         let bindings, l =
           match smap_find name bindings with
             | Some (Message_decl (_, `Message_record l, _)) ->
@@ -804,9 +841,31 @@ struct
 
             | None | Some _ ->
                 exit_with_error
-                  "wrong message subset %s: %s is not a simple message" msgname name
+                  "wrong message subset %s: %s is not a simple message" msgname name in
+
+        let ev_regimes =
+          match Gencode.low_level_msg_def bindings msgname mexpr with
+            | Message_subset (_, fs, _) ->
+
+                let subset = subset_of_selection selection sign in
+
+                List.fold_left
+                  (fun m (name, _, evr, llty) ->
+                     (* take into account ev regime overrides in subset *)
+                     let evr = match subset with
+                       | Exclude_fields _ -> evr
+                       | Include_fields l ->
+                           try
+                             match List.assoc name l with
+                               | (_, Some evr) -> evr
+                               | (_, None) -> evr
+                           with Not_found -> evr
+                     in
+                       SMap.add name (compute_ev_regime_with_llty llty evr) m)
+                  SMap.empty fs
+            | _ -> failwith "low level msg def for `Message_record is not Message_subset"
         in
-          pp_message_record bindings msgname @@
+          pp_message_record bindings ~ev_regimes msgname @@
           List.map subset_field @@
           List.filter_map (must_keep_field @@ subset_of_selection selection sign) l
 
@@ -827,9 +886,9 @@ struct
               $pp_message ~namespace:const bindings msgname (mexpr :> message_expr)$ t>>
         in <:expr< fun [ $Ast.mcOr_of_list (List.map match_case l)$ ] >>
 
-  and pp_message_record ?namespace bindings msgname l =
-    let pp_field i (name, _, ev_regime, tyexpr) =
-      let selector = match namespace, ev_regime with
+  and pp_message_record ?namespace bindings ~ev_regimes msgname l =
+    let pp_field i (name, _, _, tyexpr) =
+      let selector = match namespace, SMap.find name ev_regimes with
         | None, `Eager -> <:expr< (fun t -> t.$lid:name$) >>
         | Some ns, `Eager -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >>
         | None, `Lazy -> <:expr< (fun t -> EXTPROT_FIELD____.force t.$lid:name$) >>
@@ -926,7 +985,7 @@ struct
               else name in
 
             let selector = match ev_regime with
-              | `Eager -> <:expr< (fun t -> t.$lid:name$) >>
+              | `Auto | `Eager -> <:expr< (fun t -> t.$lid:name$) >>
               | `Lazy ->  <:expr< (fun t -> EXTPROT_FIELD____.force t.$lid:name$) >>
             in
               <:expr<
@@ -1010,13 +1069,13 @@ struct
   let read_msg_func = ((^) "read_")
 end
 
-type field_info = string * bool * [`Eager | `Lazy ] * Gencode.low_level
+type field_info = string * bool * [`Auto | `Eager | `Lazy ] * Gencode.low_level
 
 module type READER =
 sig
   val read_message :
     ?inline:bool ->
-    field_reader_func_uses : (Gencode.msg_name * [`Eager | `Lazy]) list SMap.t SMap.t ->
+    field_reader_func_uses : (Gencode.msg_name * [`Auto | `Eager | `Lazy]) list SMap.t SMap.t ->
     Gencode.msg_name ->
     Ptypes.type_options ->
     Gencode.low_level Gencode.message ->
@@ -1027,7 +1086,7 @@ sig
     Gencode.constructor_name ->
     Gencode.field_name ->
     fieldno:int ->
-    ev_regime:Gencode.ev_regime ->
+    ev_regime:[`Eager | `Lazy] ->
     Gencode.low_level -> Ast.expr
 
   val read_sum_elms :
@@ -1075,7 +1134,7 @@ and msg_may_use_hint_path = function
   | Message_single (_, fields) ->
       List.exists
         (fun (_, _, ev_regime, llty) ->
-           match ev_regime with
+           match compute_ev_regime_with_llty llty ev_regime with
              | `Eager -> may_use_hint_path llty
              | `Lazy -> may_use_hint_path llty || not @@ deserialize_eagerly llty)
         fields
@@ -1084,7 +1143,7 @@ and msg_may_use_hint_path = function
         (fun (_, _, fields) ->
            List.exists
              (fun (_, _, ev_regime, llty) ->
-                match ev_regime with
+                match compute_ev_regime_with_llty llty ev_regime with
                   | `Eager -> may_use_hint_path llty
                   | `Lazy -> may_use_hint_path llty || not @@ deserialize_eagerly llty)
              fields)
@@ -1094,7 +1153,7 @@ and msg_may_use_hint_path = function
       List.exists
         (fun ((_, _, ev_regime, llty) as field) ->
            Option.is_some (must_keep_field subset field) &&
-           begin match ev_regime with
+           begin match compute_ev_regime_with_llty llty ev_regime with
              | `Eager -> may_use_hint_path llty
              | `Lazy -> may_use_hint_path llty || not @@ deserialize_eagerly llty
            end)
@@ -1702,6 +1761,8 @@ struct
     let constr_name = Option.default "<default>" constr in
 
     let read_field_with_locs fieldno (name, _, ev_regime, llty) =
+      let ev_regime = compute_ev_regime_with_llty llty ev_regime in
+
       let rescue_match_case = match default_value ev_regime llty with
           None ->
             <:match_case<
@@ -1737,7 +1798,7 @@ struct
         | `Lazy when
             deserialize_eagerly llty &&
             (* cannot reuse eager field reader func if it's not emitted! *)
-            is_field_reader_func_used field_reader_func_uses msgname name `Eager ->
+            is_field_reader_func_used field_reader_func_uses msgname name `Eager llty ->
             let eagerfunc = field_reader_funcname ~ev_regime:`Eager ~msgname ~constr ~name () in
               <:str_item<
                 value $lid:funcname$ ?hint ?level ?path s nelms =
@@ -1773,7 +1834,7 @@ struct
       List.mapi
         (fun i (name, mut, _, llty) ->
            let used evr =
-             is_field_reader_func_used field_reader_func_uses msgname name evr
+             is_field_reader_func_used field_reader_func_uses msgname name evr llty
            in
              List.concat
                [ if used `Eager then [(i, (name, mut, `Eager, llty))] else [];
@@ -1787,8 +1848,8 @@ struct
         fields_with_index
         <:str_item< >>
 
-  and is_field_reader_func_used field_reader_func_uses msgname name evr =
-    List.exists (fun (_, evr') -> evr = evr') @@
+  and is_field_reader_func_used field_reader_func_uses msgname name evr llty =
+    List.exists (fun (_, evr') -> compute_ev_regime_with_llty llty evr = compute_ev_regime_with_llty llty evr') @@
     smap_find_default name [] @@
     smap_find_default msgname SMap.empty field_reader_func_uses
 
@@ -1797,6 +1858,8 @@ struct
     let constr_name = Option.default "<default>" constr in
 
     let read_field_with_locs fieldno (name, _, ev_regime, llty) expr =
+
+      let ev_regime = compute_ev_regime_with_llty llty ev_regime in
 
       let rescue_match_case = match default_value ev_regime llty with
           None ->
@@ -1890,6 +1953,9 @@ struct
     let _loc = Loc.mk "<generated code @ record_case>" in
 
     let read_field_using_func _ (name, _, ev_regime, llty) expr =
+
+      let ev_regime = compute_ev_regime_with_llty llty ev_regime in
+
       let funcname = field_reader_funcname ~msgname ~constr ~name () in
         match ev_regime with
           | `Eager when not @@ may_use_hint_path llty ->
@@ -1963,7 +2029,14 @@ struct
     let constr_name = Option.default "<default>" constr in
 
     let read_field_with_locs_if_kept fieldno ((name, _, _, _) as field) expr =
-      match must_keep_field subset field with
+      match
+        match must_keep_field subset field with
+          | None -> None
+          | Some (`Orig (name, mut, evr, llty)) ->
+              Some (`Orig (name, mut, compute_ev_regime_with_llty llty evr, llty))
+          | Some (`Newtype (name, mut, evr, llty)) ->
+              Some (`Newtype (name, mut, compute_ev_regime_with_llty llty evr, llty))
+      with
         | None ->
             <:expr<
               let () =
@@ -2012,6 +2085,8 @@ struct
                     $expr$
                 >>
         | Some (`Newtype (name, _, ev_regime, llty)) ->
+            let ev_regime = compute_ev_regime_with_llty llty ev_regime in
+
             let rescue_match_case = match default_value ev_regime llty with
                 None ->
                   <:match_case<
@@ -2157,7 +2232,7 @@ struct
       match fields with
           [] -> failwith (sprintf "no fields in msg %s" msgname)
         | (_field_name, _, ev_regime, field_type) :: _ ->
-            match ev_regime, RD.raw_rd_func field_type with
+            match compute_ev_regime_with_llty field_type ev_regime, RD.raw_rd_func field_type with
               | _, None -> <:expr< raise_bad_wire_type () >>
               | `Eager, Some (mc, reader_expr) ->
                 <:expr<
@@ -2325,14 +2400,24 @@ let messages_with_subsets bindings =
 let field_reader_func_uses bindings =
   let rec update m msgname = function
     (* m: map   msgname -> fieldname -> (msgname * ev_regime) list *)
-    | `Message_record fs  ->
-        smap_update_default
-          (fun m2 ->
-             List.fold_left
-               (fun m (fname, _, fevr, _) ->
-                  smap_update_default (fun l -> (msgname, fevr) :: l) fname [] m)
-               m2 fs)
-          msgname SMap.empty m
+    | `Message_record fs as mexpr ->
+        let ev_regimes =
+          match Gencode.low_level_msg_def bindings msgname mexpr with
+            | Message_single (_, fs) ->
+                List.fold_left
+                  (fun m (name, _, evr, llty) ->
+                     SMap.add name (compute_ev_regime_with_llty llty evr) m)
+                  SMap.empty fs
+            | _ -> failwith "low level msg def for `Message_record is not Message_single"
+        in
+          smap_update_default
+            (fun m2 ->
+               List.fold_left
+                 (fun m (fname, _, _, _) ->
+                    smap_update_default
+                      (fun l -> (msgname, SMap.find fname ev_regimes) :: l) fname [] m)
+                 m2 fs)
+            msgname SMap.empty m
     | `Message_alias _ -> m
     | `Message_sum cases ->
         List.fold_left
@@ -2340,16 +2425,26 @@ let field_reader_func_uses bindings =
              | `Message_app _ | `Message_record _ as mexpr ->
                  update m (msgname ^ "." ^ constr) mexpr)
           m cases
-    | `Message_app (tyname, _, _) -> begin
+    | `Message_app (tyname, _, _) as mexpr -> begin
         match smap_find tyname bindings with
           | Some (Type_decl (_, _, `Record (r, _), _)) ->
-              smap_update_default
-                (fun m ->
-                   List.fold_left
-                     (fun m (fname, _, fevr, _) ->
-                        smap_update_default (fun l -> (msgname, fevr) :: l) fname [] m)
-                     m r.record_fields)
-                msgname SMap.empty m
+              let ev_regimes =
+                match Gencode.low_level_msg_def bindings msgname mexpr with
+                  | Message_single (_, fs) ->
+                      List.fold_left
+                        (fun m (name, _, evr, llty) ->
+                           SMap.add name (compute_ev_regime_with_llty llty evr) m)
+                        SMap.empty fs
+                  | _ -> failwith "low level msg def for `Message_record is not Message_single"
+              in
+                smap_update_default
+                  (fun m ->
+                     List.fold_left
+                       (fun m (fname, _, _, _) ->
+                          smap_update_default
+                            (fun l -> (msgname, SMap.find fname ev_regimes) :: l) fname [] m)
+                       m r.record_fields)
+                  msgname SMap.empty m
           | _ -> m
       end
     | `Message_subset _ as mexpr ->
@@ -2361,10 +2456,11 @@ let field_reader_func_uses bindings =
                      (fun m2 f ->
                         match must_keep_field subset f with
                           | None -> m2
-                          | Some (`Newtype (fname, _, fevr, _))
-                          | Some (`Orig (fname, _, fevr, _)) ->
+                          | Some (`Newtype (fname, _, fevr, llty))
+                          | Some (`Orig (fname, _, fevr, llty)) ->
                               smap_update_default
-                                (fun l -> (msgname, fevr) :: l) fname [] m2)
+                                (fun l ->
+                                   (msgname, compute_ev_regime_with_llty llty fevr) :: l) fname [] m2)
                      m2 fs)
                 origname SMap.empty m
           | _ -> m
@@ -2618,7 +2714,10 @@ let rec write_field ~ev_regime ?namespace fname llty =
 
 and write_fields ?namespace fs =
   Ast.exSem_of_list @@
-  List.map (fun (name, _, ev_regime, llty) -> write_field ~ev_regime ?namespace name llty) fs
+  List.map
+    (fun (name, _, ev_regime, llty) ->
+       let ev_regime = compute_ev_regime_with_llty llty ev_regime in
+         write_field ~ev_regime ?namespace name llty) fs
 
 and dump_fields ?namespace tag fields =
   let _loc = Loc.mk "<generated code @ dump_fields>" in

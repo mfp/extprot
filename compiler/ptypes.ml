@@ -66,6 +66,7 @@ let known_type_opts =
     "ocaml.pp";
     "ocaml.type";
     "ocaml.type_equals";
+    "autolazy";
   ]
 
 let unknown_type_opts decl : error list =

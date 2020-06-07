@@ -403,4 +403,26 @@ message lazy24c = {| lazy24 | v1 [@lazy]; v2; v3 [@lazy] |}
 
 message lazy25 = {| lazy17 | v1 [@eager]; v3; v4 |}
 
+message autolazy1 [@autolazy] =
+  {
+    v1 : int;
+    v2 : lazy24;
+  }
+
+message autolazy1b [@autolazy] =
+  {
+    v1 : int;
+    v2 [@eager]: lazy24;
+    v3 : lazy24;
+    v4 [@lazy] : int;
+  }
+
+message autolazy2 [@autolazy] =
+    A { v1 : int; v2 : lazy24; }
+  | B { v1 : float; v2 : lazy24 }
+
+message autolazy2b [@autolazy] =
+    A { v1 : int; v2 : lazy24; v3 [@eager] : lazy24; v4 [@lazy] : int }
+  | B { v1 : float; v2 : lazy24; v3 [@eager] : lazy24; v4 [@lazy] : int }
+
 (* vim:set ft=ocaml: *)

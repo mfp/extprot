@@ -353,7 +353,7 @@ let rec low_level_msg_def bindings msgname (msg : message_expr) =
           List.map
             (fun (name, _ismutable, ev_regime, ty) ->
                { field_name = name; field_type = low_level_of_rtexp ty;
-                 field_lazy = (match ev_regime with `Eager -> false | `Lazy -> true) })
+                 field_lazy = (match ev_regime with `Auto (* XXX *)| `Eager -> false | `Lazy -> true) })
             r.record_fields
         in Record (r.record_name, fields, opts)
     | `Sum (sum, opts) ->
@@ -501,6 +501,7 @@ struct
             match ev_regime with
               | `Eager -> ()
               | `Lazy -> pp ppf "lazy "
+              | `Auto -> pp ppf "auto "
           end;
           pp ppf "@[<1>%s :@ %a@]" name pp_reduced_type_expr expr
         in pp ppf "@[<1>%a@]" (list pp_field ";@ ") r.record_fields
@@ -531,6 +532,7 @@ struct
   let string_of_eval_regime = function
     | `Eager -> "eager"
     | `Lazy -> "lazy"
+    | `Auto -> "auto"
 
   let pp_fields f ppf l =
     list

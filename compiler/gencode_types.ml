@@ -36,7 +36,7 @@ and constructor_name = string
 and msg_name         = string
 and field_name       = string
 and field_mutable    = bool
-and ev_regime        = [ `Eager | `Lazy ]
+and ev_regime        = [ `Eager | `Lazy | `Auto ]
 
 and 'a field_subset =
   | Include_fields of (string * ('a option * ev_regime option)) list

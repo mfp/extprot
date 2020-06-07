@@ -20,6 +20,35 @@ let make_complex_msg_expr n = function
     `Alias (p, name)  -> `Message_alias (n :: p, name)
   | `Sum (x, l) -> `Message_sum ((n, x) :: l)
 
+let replace_auto_with_eager = function
+  | (n, mut, `Auto, ty) -> (n, mut, `Eager, ty)
+  | x -> x
+
+let mexpr_replace_auto_with_eager = function
+  | `Message_record l -> `Message_record (List.map replace_auto_with_eager l)
+  | `Message_sum l ->
+      let l =
+        List.map
+          (function
+            | (n, (`Message_app _ as x)) -> (n, x)
+            | (n, `Message_record l) ->
+                (n, `Message_record (List.map replace_auto_with_eager l)))
+          l
+      in
+        `Message_sum l
+
+  | `Message_app _ | `Message_subset _
+  | `Message_alias _ as x -> x
+
+let texpr_replace_auto_with_eager = function
+  | `Record ({ record_name; record_fields }, opts) ->
+      `Record
+        ({ record_name;
+            record_fields = List.map replace_auto_with_eager record_fields;
+         },
+         opts)
+  | x -> x
+
 EXTEND Gram
   GLOBAL: entries;
 
@@ -31,7 +60,10 @@ EXTEND Gram
   entry :
     [ "message"
         [ "message"; name = a_LIDENT; "="; e = msg_expr; opts = type_options ->
-            `Decl (Message_decl (name, e, opts)) ]
+            `Decl (Message_decl (name, mexpr_replace_auto_with_eager e, opts) : Ptypes.declaration)
+        | "message"; name = a_LIDENT; "[@"; "autolazy"; "]"; "="; e = msg_expr; opts = type_options ->
+            `Decl (Message_decl (name, e, ("autolazy", "") :: opts))
+        ]
     | "include"
         [ "include"; file = a_STRING -> `Include file ]
     | "type"
@@ -42,7 +74,7 @@ EXTEND Gram
                 `Sum (s, opts) -> `Sum ({ s with type_name = name }, opts)
               | `Record (r, opts) -> `Record ({ r with record_name = name }, opts)
               | e -> e
-            in `Decl (Type_decl (name, par, e, opts)) ] ];
+            in `Decl (Type_decl (name, par, texpr_replace_auto_with_eager e, opts)) ] ];
 
   type_options :
     [ [ -> []
@@ -127,8 +159,10 @@ EXTEND Gram
       | t1 = field -> [t1] ] ];
 
   field :
-    [ [ n = a_LIDENT; ":"; ty = type_expr_simple -> (n, false, `Eager, ty)
-      | "mutable"; n = a_LIDENT; ":"; ty = type_expr_simple -> (n, true, `Eager, ty)
+    [ [ n = a_LIDENT; ":"; ty = type_expr_simple -> (n, false, `Auto, ty)
+      | "mutable"; n = a_LIDENT; ":"; ty = type_expr_simple -> (n, true, `Auto, ty)
+      | n = a_LIDENT; "[@"; "eager"; "]"; ":"; ty = type_expr_simple -> (n, false, `Eager, ty)
+      | "mutable"; n = a_LIDENT; "[@"; "eager"; "]"; ":"; ty = type_expr_simple -> (n, true, `Eager, ty)
       | n = a_LIDENT; "[@"; "lazy"; "]"; ":"; ty = type_expr_simple -> (n, false, `Lazy, ty)
       | "mutable"; n = a_LIDENT; "[@"; "lazy"; "]"; ":"; ty = type_expr_simple -> (n, true, `Lazy, ty) ]
     ];
