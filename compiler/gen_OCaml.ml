@@ -210,14 +210,14 @@ let rec llty_word_size_estimate : Gencode_types.low_level -> int = function
       List.map
         (fun f ->
            let n = llty_word_size_estimate f.field_type in
-             if not f.field_lazy then begin
-               if n = 1 then 1 else n + 1
-             end else begin
-               if deserialize_eagerly f.field_type then
-                 lazy_val_overhead_estimate + (if n = 1 then 1 else n + 1)
-               else
-                 thunk_overhead_estimate
-             end)
+             match compute_field_ev_regime f with
+               | `Eager ->
+                   if n = 1 then 1 else n + 1
+               | `Lazy ->
+                   if deserialize_eagerly f.field_type then
+                     lazy_val_overhead_estimate + (if n = 1 then 1 else n + 1)
+                   else
+                     thunk_overhead_estimate)
         fs
   | Message (_, _, Some llmdef, _) -> low_level_msg_def_size_estimate llmdef
   | Message (_, _, None, _) -> 1000
@@ -259,7 +259,16 @@ and is_primitive_type = function
   | Vint _ | Bitstring32 _ | Bitstring64 _ | Bytes _ -> true
   | Message _ | Sum _ | Tuple _ | Htuple _ | Record _ -> false
 
-let compute_ev_regime_with_llty llty : [< `Eager | `Lazy | `Auto] -> [> `Eager | `Lazy ]= function
+and compute_field_ev_regime f = match f.field_evr with
+  | `Eager -> `Eager
+  | `Lazy -> `Lazy
+  | `Auto ->
+      if deserialize_eagerly f.field_type then `Eager
+      else `Lazy
+
+let compute_field_ev_regime f = (compute_field_ev_regime f :> Gencode.ev_regime)
+
+let compute_ev_regime_with_llty llty : [< Gencode.ev_regime] -> [> `Eager | `Lazy ]= function
   | `Eager -> `Eager
   | `Lazy -> `Lazy
   | `Auto ->
@@ -274,7 +283,7 @@ let default_value_or f default opts =
 let bad_default_value ty s =
   failwith @@ sprintf "invalid %s default value: %S" ty s
 
-let rec default_value ev_regime t =
+let rec default_value (ev_regime : Gencode.ev_regime) t =
   let _loc = Loc.ghost in
   let default_value =
     match t with
@@ -327,7 +336,7 @@ let rec default_value ev_regime t =
              (List.map
                 (fun f ->
                    (* mutable flag not used, we pick false arbitrarily *)
-                   (f.field_name, false, (if f.field_lazy then `Lazy else `Eager), f.field_type))
+                   (f.field_name, false, compute_field_ev_regime f, f.field_type))
                 fields))
       end
     | Htuple (List, _, _) -> Some <:expr< [] >>
@@ -357,7 +366,7 @@ and default_record ~msgname ?namespace fields =
   let default_values =
     maybe_all
       (fun (name, _, ev_regime, llty) ->
-         Option.map (fun v -> (name, v)) (default_value ev_regime llty))
+         Option.map (fun v -> (name, v)) (default_value (ev_regime :> Gencode.ev_regime) llty))
       fields
   in match default_values with
       None -> <:expr< Extprot.Error.missing_field ~message:$str:msgname$ () >>
@@ -1526,9 +1535,7 @@ struct
             let fields' =
               List.map
                 (fun f ->
-                   (f.field_name, true,
-                    (if f.field_lazy then `Lazy else `Eager),
-                    f.field_type))
+                   (f.field_name, true, compute_field_ev_regime f, f.field_type))
                 fields in
             let promoted_match_cases =
               make_promoted_match_cases msgname [ Some name, None, fields' ] in
@@ -1544,9 +1551,7 @@ struct
             let fields' =
               List.map
                 (fun f ->
-                   (f.field_name, true,
-                    (if f.field_lazy then `Lazy else `Eager),
-                    f.field_type))
+                   (f.field_name, true, compute_field_ev_regime f, f.field_type))
                 fields in
             let promoted_match_cases =
               make_promoted_match_cases msgname [ Some name, None, fields' ] in
@@ -1563,10 +1568,7 @@ struct
         | `Lazy, Record (name, fields, opts) ->
             let fields' =
               List.map
-                (fun f ->
-                   (f.field_name, true,
-                    (if f.field_lazy then `Lazy else `Eager),
-                    f.field_type))
+                (fun f -> (f.field_name, true, compute_field_ev_regime f, f.field_type))
                 fields in
 
             let promoted_match_cases =
@@ -2685,9 +2687,7 @@ let rec write_field ~ev_regime ?namespace fname llty =
 
         let fields' =
           List.map
-            (fun f ->
-               (f.field_name, true,
-                (if f.field_lazy then `Lazy else `Eager), f.field_type))
+            (fun f -> (f.field_name, true, compute_field_ev_regime f, f.field_type))
             fields in
         let v = match get_type_info opts with
             None -> v

@@ -22,7 +22,7 @@ and constructor = {
 and field = {
   field_name : string;
   field_type : low_level;
-  field_lazy : bool;
+  field_evr  : ev_regime;
 }
 
 and 'a message =

@@ -353,7 +353,8 @@ let rec low_level_msg_def bindings msgname (msg : message_expr) =
           List.map
             (fun (name, _ismutable, ev_regime, ty) ->
                { field_name = name; field_type = low_level_of_rtexp ty;
-                 field_lazy = (match ev_regime with `Auto (* XXX *)| `Eager -> false | `Lazy -> true) })
+                 field_evr  = ev_regime;
+               })
             r.record_fields
         in Record (r.record_name, fields, opts)
     | `Sum (sum, opts) ->
