@@ -244,8 +244,12 @@ let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr
                     name (`App (name, _args, _opts)))
            cases)
   | `Message_record fields -> Message_single (None, List.map (map_field f) fields)
-  | `Message_app (name, [], _opts) ->
-      Message_alias ([], name)
+  | `Message_app (name, [], _opts) -> begin
+      match smap_find name bindings with
+        | Some (Message_decl (_, `Message_record l, _, _opts2)) ->
+            Message_typealias (name, Some (List.map (map_field f) l))
+        | _ -> Message_typealias (name, None)
+    end
   | `Message_app (name, _args, _opts) ->
       expand_record_type
         (fun r _opts ->

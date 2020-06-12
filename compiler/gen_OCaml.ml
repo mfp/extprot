@@ -232,6 +232,8 @@ and low_level_msg_def_size_estimate = function
       field_size_estimate @@
       List.filter_map (function None -> None | Some (`Newtype x | `Orig x) -> Some x) @@
       List.map (must_keep_field subset) fs
+  | Message_typealias (_, Some fs) -> field_size_estimate fs
+  | Message_typealias (_, None)
   | Message_alias _ -> 1000
 
 and field_size_estimate fs =
@@ -641,6 +643,14 @@ let generate_container bindings =
 
           | Message_alias (path, name) ->
               let full_path = path @ [String.capitalize name] in
+              let v = <:expr< $id:ident_with_path _loc full_path (name ^ "_default") $ >> in
+              let v = <:expr< $v$.val () >> in
+                <:str_item<
+                  value $lid:msgname ^ "_default"$ = ref (fun () -> $wrap v$)
+                >>
+
+          | Message_typealias (name, _) ->
+              let full_path = [String.capitalize name] in
               let v = <:expr< $id:ident_with_path _loc full_path (name ^ "_default") $ >> in
               let v = <:expr< $v$.val () >> in
                 <:str_item<
@@ -1140,7 +1150,8 @@ let rec may_use_hint_path = function
   | Record (_, fs, _) -> List.exists (fun f -> may_use_hint_path f.field_type) fs
 
 and msg_may_use_hint_path = function
-  | Message_single (_, fields) ->
+  | Message_single (_, fields)
+  | Message_typealias (_, Some fields) ->
       List.exists
         (fun (_, _, ev_regime, llty) ->
            match compute_ev_regime_with_llty llty ev_regime with
@@ -1158,6 +1169,7 @@ and msg_may_use_hint_path = function
              fields)
         cases
   | Message_alias _ -> true
+  | Message_typealias _ -> true
   | Message_subset (_, fs, subset) ->
       List.exists
         (fun ((_, _, ev_regime, llty) as field) ->
@@ -2342,6 +2354,16 @@ struct
           in
             (<:str_item< >>, main_expr)
 
+      | Message_typealias (name, _) ->
+          let full_path = [String.capitalize name] in
+          let _loc = Loc.mk "<generated code @ read_message>" in
+          let reader_func = RD.read_msg_func name in
+          let main_expr =
+            wrap_reader opts
+            <:expr< $id:ident_with_path _loc full_path reader_func$ s >>
+          in
+            (<:str_item< >>, main_expr)
+
       | Message_sum l ->
           let promoted_match_cases =
             make_promoted_match_cases msgname
@@ -2743,6 +2765,9 @@ and write_message msgname msg =
       | Message_single (namespace, fields) -> Some (dump_fields ?namespace 0 fields)
       | Message_alias (path, name) ->
           let full_path = path @ [String.capitalize name] in
+            Some <:expr< $id:ident_with_path _loc full_path ("write_" ^ name)$ b msg >>
+      | Message_typealias (name, _) ->
+          let full_path = [String.capitalize name] in
             Some <:expr< $id:ident_with_path _loc full_path ("write_" ^ name)$ b msg >>
       | Message_sum l ->
           let match_case (tag, ns, constr, fields) =

@@ -29,6 +29,7 @@ and 'a message =
   | Message_single of namespace option * (field_name * field_mutable * ev_regime * 'a) list
   | Message_sum of (namespace option * constructor_name * (field_name * field_mutable * ev_regime * 'a) list) list
   | Message_alias of string list * string (* path * name *)
+  | Message_typealias of string * (field_name * field_mutable * ev_regime * 'a) list option (* path * name * fields *)
   | Message_subset of msg_name * (field_name * field_mutable * ev_regime * 'a) list * 'a field_subset
 
 and namespace        = string
