@@ -59,7 +59,7 @@ type reduced_type_expr = [
     reduced_type_expr base_type_expr_core
   | `Sum of reduced_type_expr sum_data_type * type_options
   | `Record of reduced_type_expr record_data_type * type_options
-  | `Message of string * type_options
+  | `Message of string * reduced_type_expr record_data_type option * type_options
   | `Ext_message of string list * string * type_options
 ]
 

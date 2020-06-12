@@ -112,8 +112,10 @@ let kind_of_message_expr = function
 | `Message_subset -> "subset"
 
 type declaration =
-    Message_decl of string * message_expr * type_options
+    Message_decl of string * message_expr * export * type_options
   | Type_decl of string * type_param list * type_expr * type_options
+
+and export = Export_YES | Export_NO
 
 type origin = Extern | Local
 

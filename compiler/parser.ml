@@ -60,9 +60,9 @@ EXTEND Gram
   entry :
     [ "message"
         [ "message"; name = a_LIDENT; "="; e = msg_expr; opts = type_options ->
-            `Decl (Message_decl (name, mexpr_replace_auto_with_eager e, opts) : Ptypes.declaration)
+            `Decl (Message_decl (name, mexpr_replace_auto_with_eager e, Export_YES, opts) : Ptypes.declaration)
         | "message"; name = a_LIDENT; "[@"; "autolazy"; "]"; "="; e = msg_expr; opts = type_options ->
-            `Decl (Message_decl (name, e, ("autolazy", "") :: opts))
+            `Decl (Message_decl (name, e, Export_YES, ("autolazy", "") :: opts))
         ]
     | "include"
         [ "include"; file = a_STRING -> `Include file ]

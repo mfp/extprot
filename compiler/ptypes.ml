@@ -2,7 +2,7 @@
 include Protocol_types
 open ExtList
 
-let declaration_name = function Message_decl (n, _, _) | Type_decl (n, _, _, _) -> n
+let declaration_name = function Message_decl (n, _, _, _) | Type_decl (n, _, _, _) -> n
 
 let declaration_arity = function
     Message_decl _ -> 0
@@ -56,7 +56,7 @@ let free_type_variables decl : string list =
         concat_map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l in
 
   match decl with
-      Message_decl (name, m, _) -> msg_free_vars [name] m
+      Message_decl (name, m, _, _) -> msg_free_vars [name] m
     | Type_decl (name, tvars, e, _) ->
         type_free_vars (name :: List.map string_of_type_param tvars) e
 
@@ -140,7 +140,7 @@ let unknown_type_opts decl : error list =
           keep_unknown_type_opts name opts @
           type_expr_errs name ty
 
-      | Message_decl (name, mexpr, opts) ->
+      | Message_decl (name, mexpr, _, opts) ->
           keep_unknown_type_opts name opts @
           mexpr_errs name mexpr
 
@@ -218,13 +218,13 @@ let check_declarations decls =
                   acc (non_constant_constructors sum)
 
           in match decl with
-              Message_decl (_, msg, _) -> loop (fold_msg errs msg) arities tl
+              Message_decl (_, msg, _, _) -> loop (fold_msg errs msg) arities tl
             | Type_decl (_, _, ty, _) -> loop (fold_ty errs ty) arities tl
     in loop [] SMap.empty l in
 
   let check_subsets decls =
     let update_bindings s = function
-      | Message_decl (name, (`Message_record _ | `Message_app _), _)
+      | Message_decl (name, (`Message_record _ | `Message_app _), _, _)
       | Type_decl (name, _, `Record _, _) ->
           SSet.add name s
       | _ -> s in
@@ -234,7 +234,7 @@ let check_declarations decls =
         (fun (bindings, es) decl ->
            let es =
              match decl with
-               | Message_decl (name, `Message_subset (src, _, _), _) ->
+               | Message_decl (name, `Message_subset (src, _, _), _, _) ->
                    if SSet.mem src bindings then es
                    else Missing_subset_source (name, src) :: es
                | _ -> es

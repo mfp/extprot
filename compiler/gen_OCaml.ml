@@ -489,10 +489,10 @@ let generate_container bindings =
 
        let bindings, l =
          match smap_find name bindings with
-           | Some (Message_decl (_, `Message_record l, _)) ->
+           | Some (Message_decl (_, `Message_record l, _, _)) ->
                (bindings, l)
 
-           | Some (Message_decl (_, `Message_app (name, args, _), _)) -> begin
+           | Some (Message_decl (_, `Message_app (name, args, _), _, _)) -> begin
                match beta_reduced_msg_app_fields bindings name args with
                  | None ->
                      exit_with_error
@@ -623,7 +623,7 @@ let generate_container bindings =
     | `Type_arg n -> <:ctyp< '$n$ >>
 
   in function
-      Message_decl (msgname, mexpr, opts) -> begin
+    | Message_decl (msgname, mexpr, _, opts) -> begin
         let wrap x =
           match get_type_info opts with
               None -> x
@@ -836,10 +836,10 @@ struct
     | (`Message_subset (name, selection, sign) : message_expr) as mexpr ->
         let bindings, l =
           match smap_find name bindings with
-            | Some (Message_decl (_, `Message_record l, _)) ->
+            | Some (Message_decl (_, `Message_record l, _, _)) ->
                   (bindings, l)
 
-            | Some (Message_decl (_, `Message_app (name, args, _), _)) -> begin
+            | Some (Message_decl (_, `Message_app (name, args, _), _, _)) -> begin
                 match beta_reduced_msg_app_fields bindings name args with
                   | None ->
                       exit_with_error
@@ -946,7 +946,7 @@ struct
     | `Ext_type (path, name, args, _) -> pp_poly_type bindings path name args
     | `Type_arg n -> <:expr< $lid:"pp_" ^ n$ >>
 
-  let add_msgdecl_pretty_printer bindings msgname mexpr opts c =
+  let add_msgdecl_pretty_printer ~export bindings msgname mexpr opts c =
     let expr = pp_message bindings msgname mexpr in
     { c with c_pretty_printer =
         Some
@@ -2392,10 +2392,10 @@ end
 let messages_with_subsets bindings =
   SMap.fold
     (fun _ decl l -> match decl with
-       | Message_decl (_, `Message_subset (name, _, _), _) -> name :: l
+       | Message_decl (_, `Message_subset (name, _, _), _, _) -> name :: l
        | Message_decl
            (_, (`Message_record _ | `Message_alias _ |
-                `Message_sum _ | `Message_app _), _)
+                `Message_sum _ | `Message_app _), _, _)
        | Type_decl _ -> l)
     bindings []
 
@@ -2469,11 +2469,11 @@ let field_reader_func_uses bindings =
   in
     SMap.fold
       (fun _ decl m -> match decl with
-         | Message_decl (msgname, mexpr, _) -> update m msgname mexpr
+         | Message_decl (msgname, mexpr, _, _) -> update m msgname mexpr
          | Type_decl _ -> m)
       bindings SMap.empty
 
-let add_message_reader bindings msgname mexpr opts c =
+let add_message_reader ~export bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_normal_reader = Make_reader(STR_OPS) in
@@ -2524,7 +2524,7 @@ let add_message_reader bindings msgname mexpr opts c =
               >>
     }
 
-let add_message_io_reader bindings msgname mexpr opts c =
+let add_message_io_reader ~export bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_io_reader>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_io_reader =
@@ -2766,7 +2766,7 @@ let wrap_writer _loc opts expr = match get_type_info opts with
       >>
   | None -> expr
 
-let add_message_writer bindings msgname mexpr opts c =
+let add_message_writer ~export bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_writer>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
     match Option.map (wrap_writer _loc opts) @@ write_message msgname llrec with
