@@ -260,11 +260,21 @@ let map_message bindings (f : base_type_expr -> _) g msgname (msg : message_expr
       let subset =
         match sign with
           | `Include -> Include_fields (List.map (fun (n, (ty, evr)) -> (n, (Option.map f ty, evr))) l)
-          | `Exclude -> Exclude_fields (List.map fst l)
-      in
+          | `Exclude -> Exclude_fields (List.map fst l) in
+
+      let rec find_orig_def name bindings =
         match smap_find name bindings with
-          | Some (Message_decl (_, `Message_record fields, _, _opts)) ->
-                Message_subset (name, List.map (map_field f) fields, subset)
+          | Some (Message_decl (_, `Message_app (name, [], _), _, _)) as x -> begin
+              match smap_find name bindings with
+                | Some (Message_decl (_, `Message_record _, _, _)) ->
+                    find_orig_def name bindings
+                | _ -> x
+            end
+          | x -> x
+      in
+        match find_orig_def name bindings with
+          | Some (Message_decl (name, `Message_record fields, _, _opts)) ->
+              Message_subset (name, List.map (map_field f) fields, subset)
 
           | Some (Message_decl (_, `Message_app (name_, args_, opts), _, opts_))
           | Some (Type_decl (name_, ([] as args_), `Record _, (opts as opts_))) -> begin
@@ -353,6 +363,8 @@ let beta_reduced_msg_app_fields bindings name args =
           in
             Some (bindings, record_fields)
         end
+      | Some (Message_decl (_, `Message_record l, _, _)) ->
+          Some (bindings, l)
       | _ -> None
 
 let rec low_level_msg_def bindings msgname (msg : message_expr) =

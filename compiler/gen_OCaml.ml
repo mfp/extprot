@@ -2414,7 +2414,15 @@ end
 let messages_with_subsets bindings =
   SMap.fold
     (fun _ decl l -> match decl with
-       | Message_decl (_, `Message_subset (name, _, _), _, _) -> name :: l
+       | Message_decl (_, `Message_subset (name, _, _), _, _) -> begin
+           let rec find_base_msgname name =
+             match smap_find name bindings with
+               | Some (Message_decl (_, `Message_app (name, [], _), _, _)) ->
+                   find_base_msgname name
+               | _ -> name
+           in
+             find_base_msgname name :: l
+         end
        | Message_decl
            (_, (`Message_record _ | `Message_alias _ |
                 `Message_sum _ | `Message_app _), _, _)
