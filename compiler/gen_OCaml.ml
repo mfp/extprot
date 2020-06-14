@@ -420,8 +420,8 @@ let generate_container bindings =
           with exn -> bad_option ~msg:(Printexc.to_string exn) "type_equals" tyname in
 
   let message_typedefs ~opts name ctyp =
-    let internal = typedef ~opts:[] ("_" ^ name) @@ maybe_type_equals opts [] ctyp in
-    let ext      = typedef ~opts name @@ maybe_type_equals opts [] <:ctyp< $ctyp$ >> in
+    let internal = typedef ~opts:[] ("_" ^ name) @@ maybe_type_equals opts ~params:[] ctyp in
+    let ext      = typedef ~opts name @@ maybe_type_equals opts ~params:[] <:ctyp< $ctyp$ >> in
       <:str_item< $internal$; $ext$ >> in
 
   let rec message_types ?(opts = []) msgname = function
