@@ -1071,7 +1071,7 @@ struct
     | `Ext_type (path, name, args, _) -> pp_poly_type bindings path name args
     | `Type_arg n -> <:expr< $lid:"pp_" ^ n$ >>
 
-  let add_msgdecl_pretty_printer ~export bindings msgname mexpr opts c =
+  let add_msgdecl_pretty_printer ~export:_ bindings msgname mexpr opts c =
     let expr = pp_message bindings msgname mexpr in
     { c with
         c_pretty_printer =
@@ -2626,6 +2626,10 @@ let field_reader_func_uses bindings =
          | Type_decl _ -> m)
       bindings SMap.empty
 
+let only_if_export export s = match export with
+  | true -> Some s
+  | false -> None
+
 let add_message_reader ~export bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_reader>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
@@ -2683,23 +2687,25 @@ let add_message_reader ~export bindings msgname mexpr opts c =
               >>;
 
         c_sig_reader =
-          Some
-            (Printf.sprintf
-               "val read_%s : (%s, %s.hint, %s.path) Extprot.Conv.string_reader\n\
-                val io_read_%s : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n\
-                val fast_io_read_%s : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n\
-                val read : (%s, %s.hint, %s.path) Extprot.Conv.string_reader\n\
-                val io_read : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n\
-                val fast_io_read : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n"
-               msgname msgname field_mod field_mod
-               msgname msgname field_mod field_mod
-               msgname msgname field_mod field_mod
-               msgname field_mod field_mod
-               msgname field_mod field_mod
-               msgname field_mod field_mod)
+          only_if_export export @@
+          begin
+            Printf.sprintf
+              "val read_%s : (%s, %s.hint, %s.path) Extprot.Conv.string_reader\n\
+               val io_read_%s : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n\
+               val fast_io_read_%s : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n\
+               val read : (%s, %s.hint, %s.path) Extprot.Conv.string_reader\n\
+               val io_read : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n\
+               val fast_io_read : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n"
+              msgname msgname field_mod field_mod
+              msgname msgname field_mod field_mod
+              msgname msgname field_mod field_mod
+              msgname field_mod field_mod
+              msgname field_mod field_mod
+              msgname field_mod field_mod
+          end
     }
 
-let add_message_io_reader ~export bindings msgname mexpr opts c =
+let add_message_io_reader ~export:_ bindings msgname mexpr opts c =
   let _loc = Loc.mk "<generated code @ add_message_io_reader>" in
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_io_reader =
@@ -2956,11 +2962,13 @@ let add_message_writer ~export bindings msgname mexpr opts c =
           in
             { c with
                 c_writer = Some writer;
-                c_sig_writer =
-                  Some (Printf.sprintf
+                c_sig_writer = begin
+                  only_if_export export @@
+                  Printf.sprintf
                           "val write_%s : %s Extprot.Conv.writer\n\
                            val write : %s Extprot.Conv.writer\n"
-                          msgname msgname msgname)
+                          msgname msgname msgname
+                end
              }
 
 let msgdecl_generators : (string * _ msgdecl_generator) list =
