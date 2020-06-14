@@ -476,13 +476,14 @@ module type GENCODE =
 sig
   type toplevel
   type container
-  type entry = Toplevel of toplevel | Container of container
+  type entry = Toplevel of (toplevel * string) | Container of container
 
-  val generate_include : string -> toplevel
+  val generate_include : string -> toplevel * string
   val generate_container : bindings -> declaration -> container option
   val msgdecl_generators : (string * container msgdecl_generator) list
   val typedecl_generators : (string * container typedecl_generator) list
-  val generate_code : ?global_opts:(string * string) list -> ?width:int -> entry list -> string
+  val generate_code :
+    ?global_opts:(string * string) list -> ?width:int -> entry list -> string * string
 end
 
 let (|>) x f = f x

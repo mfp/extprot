@@ -15,6 +15,7 @@ let generators = ref None
 let width      = ref 100
 let nolocs     = ref false
 let fieldmod   = ref ""
+let mli        = ref false
 
 let arg_spec =
   Arg.align
@@ -23,6 +24,8 @@ let arg_spec =
 
       "-g", Arg.String (fun gs -> generators := Some (String.nsplit gs ",")),
         "LIST Generators to use (comma-separated).";
+
+      "-mli", Arg.Set mli, " Generate .mli signature.";
 
       "-nolocs", Arg.Set nolocs,
         " Do not indicate precise locations by default in deserialization exceptions.";
@@ -84,9 +87,16 @@ let () =
          begin
            match Ptypes.check_declarations decls with
              | [] ->
-                 G.generate_code
-                   ~global_opts
-                   ~width:!width ?generators:!generators bindings local |> output_string och
+                 let implem, signature =
+                   G.generate_code
+                     ~global_opts
+                     ~width:!width ?generators:!generators bindings local
+                 in
+                   output_string och implem;
+                   if !mli then begin
+                     let och = open_out (Filename.chop_extension file ^ ".mli") in
+                       output_string och signature
+                   end
              | errors ->
                  print "Found %d errors:@." (List.length errors);
                  Ptypes.pp_errors Format.err_formatter errors;

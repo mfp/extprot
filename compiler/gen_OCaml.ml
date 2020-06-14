@@ -17,11 +17,31 @@ type container = {
   c_pretty_printer : Ast.str_item option;
   c_writer : Ast.str_item option;
   c_default_func : Ast.str_item option;
+
+  c_sig_import_modules : string option;
+  c_sig_types : string option;
+  c_sig_reader : string option;
+  c_sig_pretty_printer : string option;
+  c_sig_writer : string option;
+  c_sig_default_func : string option;
+
 }
+
+and signature = string
 
 type toplevel = Ast.str_item
 
-type entry = Toplevel of toplevel | Container of container
+type entry = Toplevel of (toplevel * string) | Container of container
+
+module PrOCaml =Camlp4.Printers.OCaml.Make(Camlp4.PreCast.Syntax)
+
+let string_of_ast ?width f ast =
+  let b = Buffer.create 256 in
+  let fmt = Format.formatter_of_buffer b in
+  let o = new PrOCaml.printer () in
+    Option.may (Format.pp_set_margin fmt) width;
+    Format.fprintf fmt "@[<v0>%a@]@." (f o) ast;
+    Buffer.contents b
 
 let empty_container name ?default_func ty_str_item =
   {
@@ -33,6 +53,17 @@ let empty_container name ?default_func ty_str_item =
     c_pretty_printer = None;
     c_writer = None;
     c_default_func = default_func;
+
+    c_sig_import_modules = None;
+    c_sig_types          = Some (string_of_ast (fun o -> o#implem) ty_str_item);
+    c_sig_reader         = None;
+    c_sig_pretty_printer = None;
+    c_sig_writer         = None;
+    c_sig_default_func   = begin
+      match default_func with
+        | None -> None
+        | Some _ -> Some (Printf.sprintf "val %s_default : (unit -> %s) ref" name name)
+    end
   }
 
 let (|>) x f = f x
@@ -391,7 +422,7 @@ let ident_of_ctyp ty =
 let generate_include file =
   let _loc = Loc.mk "gen_OCaml" in
   let modul = String.capitalize @@ Filename.chop_extension file in
-  <:str_item< open $uid:modul$ >>
+    (<:str_item< open $uid:modul$ >>, modul)
 
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
@@ -555,7 +586,9 @@ let generate_container bindings =
          message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
 
   and modules_to_include_of_texpr = function
-     | `App (name, _, _) -> Some <:str_item< include $uid:String.capitalize name$ >>
+     | `App (name, _, _) ->
+         let n = String.capitalize name in
+           Some (<:str_item< include $uid:n$ >>, n)
      | #type_expr -> None
 
   and ctyp_of_texpr bindings expr =
@@ -735,25 +768,22 @@ let generate_container bindings =
               get_type (ctyp_of_poly_texpr_core bindings ptexpr) opts in
         let params =
           List.map (fun n -> <:ctyp< '$lid:type_param_name n$ >>) params in
-        let type_rhs = maybe_type_equals opts ~params ty in
-        let container = empty_container name (typedef name ~params ~opts type_rhs) in
-          Some { container with c_import_modules = modules_to_include_of_texpr texpr }
+        let type_rhs   = maybe_type_equals opts ~params ty in
+        let container  = empty_container name (typedef name ~params ~opts type_rhs) in
+        let mods, sigs = match modules_to_include_of_texpr texpr with
+          | Some (a, b) -> Some a, Some b
+          | None -> None, None
+        in
+          Some { container with
+                   c_import_modules = mods;
+                   c_sig_import_modules = sigs;
+               }
 
 let loc = Camlp4.PreCast.Loc.mk
 
 let maybe_str_item =
   let _loc = loc "<generated code>" in
     Option.default <:str_item< >>
-
-module PrOCaml =Camlp4.Printers.OCaml.Make(Camlp4.PreCast.Syntax)
-
-let string_of_ast ?width f ast =
-  let b = Buffer.create 256 in
-  let fmt = Format.formatter_of_buffer b in
-  let o = new PrOCaml.printer () in
-    Option.may (Format.pp_set_margin fmt) width;
-    Format.fprintf fmt "@[<v0>%a@]@." (f o) ast;
-    Buffer.contents b
 
 let default_function = function
     None -> None
@@ -801,17 +831,66 @@ let generate_code ?(global_opts=[]) ?width containers =
                     in
                       <:module_expr< $id:id$ >>
           in
-            <:str_item< module EXTPROT_FIELD____ = $mod_uid$ >>
-  in
+            <:str_item< module EXTPROT_FIELD____ = $mod_uid$ >> in
+
+  let implem_code =
     string_of_ast ?width (fun o -> o#implem)
        (List.fold_left
           begin fun s e ->
             match e with
-            | Toplevel t -> <:str_item< $s$; $t$; >>
+            | Toplevel (t, _) -> <:str_item< $s$; $t$; >>
             | Container c -> <:str_item< $s$; $container_of_str_item c$ >>
           end
           field_mod_declaration
-          containers)
+          containers) in
+
+  let indent n s =
+    let indentation = String.make n ' ' in
+
+    let rec doindent b s off =
+      if off < String.length s then
+        match String.index_from s off '\n' with
+          | exception Not_found ->
+              Buffer.add_string b indentation;
+              Buffer.add_string b s
+          | n ->
+              Buffer.add_string b indentation;
+              Buffer.add_substring b s off (n - off + 1);
+              doindent b s (n + 1)
+    in
+
+    let b = Buffer.create 13 in
+      doindent b s 0;
+      Buffer.contents b in
+
+  let sig_code =
+    String.concat "\n\n" @@
+    List.map
+      (function
+        | Toplevel (_, modul) -> sprintf "open %s" modul
+        | Container c ->
+            let sig_body =
+              String.concat "\n" @@
+              List.map (indent 2) @@
+              List.filter ((<>) "")
+                [
+                  Option.default "" c.c_sig_import_modules;
+                  Option.default "" c.c_sig_types;
+                  Option.default "" c.c_sig_default_func;
+                  Option.default "" c.c_sig_pretty_printer;
+                  Option.default "" c.c_sig_reader;
+                  Option.default "" c.c_sig_writer
+                ]
+            in
+              sprintf
+                "module %s : sig\n\
+                 %s\n\
+                 end"
+                (String.capitalize c.c_name)
+                sig_body)
+      containers;
+  in
+    (implem_code, sig_code)
 
 let wrap_value opts expr =
   let _loc = Loc.ghost in
@@ -958,11 +1037,19 @@ struct
 
   let add_msgdecl_pretty_printer ~export bindings msgname mexpr opts c =
     let expr = pp_message bindings msgname mexpr in
-    { c with c_pretty_printer =
-        Some
-          <:str_item<
-            value $lid:"pp_" ^ msgname$ pp x = $expr$ ($wrap_value opts <:expr<x>>$);
-            value pp = $lid:"pp_" ^ msgname$; >> }
+    { c with
+        c_pretty_printer =
+          Some
+            <:str_item<
+              value $lid:"pp_" ^ msgname$ pp x = $expr$ ($wrap_value opts <:expr<x>>$);
+              value pp = $lid:"pp_" ^ msgname$;
+            >> ;
+          c_sig_pretty_printer =
+            Some (Printf.sprintf
+                    "val pp_%s : Format.formatter -> %s -> unit\n\
+                     val pp : Format.formatter -> %s -> unit\n"
+                    msgname msgname msgname)
+}
 
   let add_typedecl_pretty_printer bindings tyname typarams texpr opts c =
     let wrap expr =
@@ -2533,11 +2620,17 @@ let add_message_reader ~export bindings msgname mexpr opts c =
           let _ = level in
           let _ = path in
             $read_expr$;
-        >>
+        >> in
+
+  let field_mod =
+    match List.assoc "field-module" opts with
+      | exception Not_found -> "Extprot.Field"
+      | s -> s
   in
     {
-      c with c_reader =
-         Some <:str_item<
+      c with
+        c_reader =
+          Some <:str_item<
                 $field_readers$;
                 $str_item_read$;
 
@@ -2551,7 +2644,23 @@ let add_message_reader ~export bindings msgname mexpr opts c =
                 value read = $lid:"read_" ^ msgname$;
                 value io_read = $lid:"io_read_" ^ msgname$;
                 value fast_io_read = $lid:"fast_io_read_" ^ msgname$;
-              >>
+              >>;
+
+        c_sig_reader =
+          Some
+            (Printf.sprintf
+               "val read_%s : (%s, %s.hint, %s.path) Extprot.Conv.string_reader\n\
+                val io_read_%s : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n\
+                val fast_io_read_%s : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n\
+                val read : (%s, %s.hint, %s.path) Extprot.Conv.string_reader\n\
+                val io_read : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n\
+                val fast_io_read : (%s, %s.hint, %s.path) Extprot.Conv.io_reader\n"
+               msgname msgname field_mod field_mod
+               msgname msgname field_mod field_mod
+               msgname msgname field_mod field_mod
+               msgname field_mod field_mod
+               msgname field_mod field_mod
+               msgname field_mod field_mod)
     }
 
 let add_message_io_reader ~export bindings msgname mexpr opts c =
@@ -2808,7 +2917,15 @@ let add_message_writer ~export bindings msgname mexpr opts c =
           let writer =
             <:str_item< value $lid:"write_" ^ msgname$ b msg = $write_expr$;
                         value write = $lid:"write_" ^ msgname$; >>
-          in { c with c_writer = Some writer }
+          in
+            { c with
+                c_writer = Some writer;
+                c_sig_writer =
+                  Some (Printf.sprintf
+                          "val write_%s : %s Extprot.Conv.writer\n\
+                           val write : %s Extprot.Conv.writer\n"
+                          msgname msgname msgname)
+             }
 
 let msgdecl_generators : (string * _ msgdecl_generator) list =
   [
