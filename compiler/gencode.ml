@@ -420,15 +420,42 @@ let rec low_level_msg_def bindings msgname (msg : message_expr) =
   in
     map_message bindings low_level_field low_level_of_rtexp msgname msg
 
-let replace_monomorphic_record_types_with_messages = function
-  | Message_decl _ as x -> x
-  | Type_decl (_, _ :: _, _, _) as x -> x
-  | Type_decl (name, [], `Record (r, o1), o2) -> begin
-      let mexpr = `Message_record r.record_fields in
-      let opts  = merge_options o2 o1 in
-        Message_decl (name, mexpr, Export_NO, opts)
-    end
-  | Type_decl _ as x -> x
+let decl_name = function
+  | Message_decl (n, _, _, _) | Type_decl (n, _, _, _) -> n
+
+let replace_monomorphic_record_types_with_messages bindings =
+  let rec replace_one bindings = function
+    | Message_decl _ as x -> (x, bindings)
+    | Type_decl (_, _ :: _, _, _) as x -> (x, bindings)
+    | Type_decl (name, [], `Record (r, o1), o2) -> begin
+        let mexpr = `Message_record r.record_fields in
+        let opts  = merge_options o2 o1 in
+          (Message_decl (name, mexpr, Export_NO, opts), bindings)
+      end
+    | Type_decl (name, [], `App (name', [], o1), o2) as x -> begin
+        match smap_find name' bindings with
+          | None -> (x, bindings)
+          | Some decl ->
+              let decl, bindings = replace_one bindings decl in
+                match decl with
+                  | Message_decl (_, mexpr, export, o3) ->
+                      (Message_decl
+                         (name, mexpr, export,
+                          merge_options o2 @@ merge_options o1 o3),
+                       bindings)
+                  | x -> (x, bindings)
+      end
+
+    | Type_decl _ as x -> (x, bindings)
+  in
+    List.fold_left
+      (fun bindings (k, _) ->
+         match smap_find k bindings with
+           | None -> bindings
+           | Some decl ->
+               let decl, bindings = replace_one bindings decl in
+                 SMap.add (decl_name decl) decl bindings)
+      bindings (SMap.bindings bindings)
 
 let collect_bindings =
   List.fold_left (fun m decl -> SMap.add (declaration_name decl) decl m) SMap.empty
@@ -467,29 +494,17 @@ struct
 
   let generate_code ?width ?(generators : string list option) ?(global_opts = []) bindings entries =
 
+    let bindings = replace_monomorphic_record_types_with_messages bindings in
+
     let entries =
       List.map
         (function
           | Include _ as x -> x
-          | Decl x -> Decl (replace_monomorphic_record_types_with_messages x))
+          | Decl x ->
+              match smap_find (decl_name x) bindings with
+                | None -> Decl x
+                | Some x -> Decl x)
         entries in
-
-    let mentries =
-      List.fold_left
-        (fun m entry -> match entry with
-           | Include _ -> m
-           | Decl (Message_decl (n, _, _, _) as decl)
-           | Decl (Type_decl (n, _, _, _) as decl) ->
-               SMap.add n decl m)
-        SMap.empty entries in
-
-    let bindings =
-      SMap.fold
-        (fun name decl m ->
-           match SMap.find name mentries with
-             | exception Not_found -> SMap.add name decl m
-             | decl -> SMap.add name decl m)
-        bindings SMap.empty in
 
     let use_generator name = match generators with
         None -> true
