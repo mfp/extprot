@@ -423,6 +423,9 @@ let rec low_level_msg_def bindings msgname (msg : message_expr) =
 let decl_name = function
   | Message_decl (n, _, _, _) | Type_decl (n, _, _, _) -> n
 
+let remove_type_opts o =
+  List.filter (fun (k, _) -> k <> "ocaml.type") o
+
 let replace_monomorphic_record_types_with_messages bindings =
   let rec replace_one bindings = function
     | Message_decl _ as x -> (x, bindings)
@@ -430,7 +433,7 @@ let replace_monomorphic_record_types_with_messages bindings =
     | Type_decl (name, [], `Record (r, o1), o2) -> begin
         let mexpr = `Message_record r.record_fields in
         let opts  = merge_options o2 o1 in
-          (Message_decl (name, mexpr, Export_NO, opts), bindings)
+          (Message_decl (name, mexpr, Export_NO, remove_type_opts opts), bindings)
       end
     | Type_decl (name, [], `App (name', [], o1), o2) as x -> begin
         match smap_find name' bindings with
@@ -441,6 +444,7 @@ let replace_monomorphic_record_types_with_messages bindings =
                   | Message_decl (_, mexpr, export, o3) ->
                       (Message_decl
                          (name, mexpr, export,
+                          remove_type_opts @@
                           merge_options o2 @@ merge_options o1 o3),
                        bindings)
                   | x -> (x, bindings)
