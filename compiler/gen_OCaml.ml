@@ -43,7 +43,7 @@ let string_of_ast ?width f ast =
     Format.fprintf fmt "@[<v0>%a@]@." (f o) ast;
     Buffer.contents b
 
-let empty_container name ?default_func ty_str_item =
+let empty_container name ?default_func ?signature ty_str_item =
   {
     c_name = name;
     c_import_modules = None;
@@ -55,7 +55,11 @@ let empty_container name ?default_func ty_str_item =
     c_default_func = default_func;
 
     c_sig_import_modules = None;
-    c_sig_types          = Some (string_of_ast (fun o -> o#implem) ty_str_item);
+    c_sig_types          = begin
+      match signature with
+        | Some _ as x -> x
+        | None -> Some (string_of_ast (fun o -> o#implem) ty_str_item);
+    end;
     c_sig_reader         = None;
     c_sig_pretty_printer = None;
     c_sig_writer         = None;
@@ -419,6 +423,25 @@ let ident_of_ctyp ty =
       <:ctyp< $id:Ast.ident_of_ctyp ty$ >>
     with Invalid_argument _ -> ty
 
+let indent n s =
+  let indentation = String.make n ' ' in
+
+  let rec doindent b s off =
+    if off < String.length s then
+      match String.index_from s off '\n' with
+        | exception Not_found ->
+            Buffer.add_string b indentation;
+            Buffer.add_string b s
+        | n ->
+            Buffer.add_string b indentation;
+            Buffer.add_substring b s off (n - off + 1);
+            doindent b s (n + 1)
+  in
+
+  let b = Buffer.create 13 in
+    doindent b s 0;
+    Buffer.contents b
+
 let generate_include file =
   let _loc = Loc.mk "gen_OCaml" in
   let modul = String.capitalize @@ Filename.chop_extension file in
@@ -481,7 +504,7 @@ let generate_container bindings =
         (* no quotations for type, wtf? *)
         (* in <:str_item< type $msgname$ = { $fields$ } >> *)
         in
-          message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
+          (message_typedefs ~opts msgname <:ctyp< { $fields$ } >>, None)
 
    | `Message_app (name, args, opts) ->
        let tyname = String.capitalize name ^ "." ^ String.uncapitalize name in
@@ -490,19 +513,34 @@ let generate_container bindings =
          List.fold_left
            (fun ty tyvar -> <:ctyp< $ty$ $tyvar$ >>)
            (ctyp_of_path tyname) (List.map (ctyp_of_texpr bindings) args)
-       in message_typedefs ~opts msgname <:ctyp< $applied$ >>
+       in
+         (message_typedefs ~opts msgname <:ctyp< $applied$ >>, None)
 
    | `Message_alias (path, name) ->
        let full_path = path @ [String.capitalize name; name ] in
        let uid       = String.concat "." full_path in
-        message_typedefs ~opts msgname (ctyp_of_path uid)
+        (message_typedefs ~opts msgname (ctyp_of_path uid), None)
 
    | `Message_sum l ->
        let tydef_of_msg_branch (const, mexpr) =
          <:str_item<
            module $String.capitalize const$ = struct
-             $message_types (String.lowercase const) (mexpr :> message_expr)$
+             $fst @@ message_types (String.lowercase const) (mexpr :> message_expr)$
            end; >> in
+
+       let sig_of_msg_branch (const, mexpr) =
+         let sig_body =
+           indent 2 @@
+           string_of_ast (fun o -> o#implem)
+             <:str_item<
+               $fst @@ message_types (String.lowercase const) (mexpr :> message_expr)$
+             >>
+         in
+           sprintf "module %s : sig\n%s\nend\n\n"
+             (String.capitalize const)
+             sig_body
+       in
+
        let record_types =
          foldl1 "message_types `Sum" tydef_of_msg_branch
            (fun s b -> <:str_item< $s$; $tydef_of_msg_branch b$ >>) l in
@@ -510,13 +548,22 @@ let generate_container bindings =
        let variant (const, _) =
          <:ctyp< $uid:const$ of ($uid:const$.$lid:String.lowercase const$) >> in
        let consts = foldl1 "message_types `Message_sum" variant
-                      (fun vars c -> <:ctyp< $vars$ | $variant c$ >>) l
-
+                      (fun vars c -> <:ctyp< $vars$ | $variant c$ >>) l in
+       let signature =
+         String.concat "" @@
+         List.concat
+           [
+             List.map sig_of_msg_branch l;
+             [ string_of_ast (fun o -> o#implem)
+                 (message_typedefs ~opts msgname <:ctyp< [$consts$] >>);
+             ]
+           ]
        in
-         <:str_item<
+         (<:str_item<
            $record_types$;
            $message_typedefs ~opts msgname <:ctyp< [$consts$] >>$
-         >>
+          >>,
+          Some signature)
 
    | `Message_subset (name, selection, sign) as mexpr ->
 
@@ -583,7 +630,7 @@ let generate_container bindings =
          List.map subset_field @@
          List.filter_map (must_keep_field subset) l
        in
-         message_typedefs ~opts msgname <:ctyp< { $fields$ } >>
+         (message_typedefs ~opts msgname <:ctyp< { $fields$ } >>, None)
 
   and modules_to_include_of_texpr = function
      | `App (name, _, _) ->
@@ -709,9 +756,9 @@ let generate_container bindings =
                   ref (fun () -> $ wrap (default_record ~msgname l) $)
               >> in
 
-        let container =
-          empty_container msgname ~default_func (message_types ~opts msgname mexpr)
-        in Some container
+        let str_tys, signature = message_types ~opts msgname mexpr in
+        let container = empty_container msgname ~default_func ?signature str_tys in
+          Some container
       end
     | Type_decl (name, params, texpr, opts) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
@@ -776,7 +823,7 @@ let generate_container bindings =
         in
           Some { container with
                    c_import_modules = mods;
-                   c_sig_import_modules = sigs;
+                   c_sig_import_modules = Option.map (sprintf "open %s") sigs;
                }
 
 let loc = Camlp4.PreCast.Loc.mk
@@ -844,26 +891,15 @@ let generate_code ?(global_opts=[]) ?width containers =
           field_mod_declaration
           containers) in
 
-  let indent n s =
-    let indentation = String.make n ' ' in
+  let field_mod =
+    match List.assoc "field-module" global_opts with
+      | exception Not_found -> "Extprot.Field"
+      | s -> s in
 
-    let rec doindent b s off =
-      if off < String.length s then
-        match String.index_from s off '\n' with
-          | exception Not_found ->
-              Buffer.add_string b indentation;
-              Buffer.add_string b s
-          | n ->
-              Buffer.add_string b indentation;
-              Buffer.add_substring b s off (n - off + 1);
-              doindent b s (n + 1)
-    in
-
-    let b = Buffer.create 13 in
-      doindent b s 0;
-      Buffer.contents b in
+  let extprot_field_re = Str.regexp "EXTPROT_FIELD____" in
 
   let sig_code =
+    Str.global_replace extprot_field_re field_mod @@
     String.concat "\n\n" @@
     List.map
       (function
