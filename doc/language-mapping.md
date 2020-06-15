@@ -112,20 +112,20 @@ It is possible to make specific fields of record types, messages and
 subsets lazy with the [@lazy] annotation attached to the field names (there is
 also [@eager]):
 
-   type lazyT = { a [@lazy] : foo; b : bar }
+    type lazyT = { a [@lazy] : foo; b : bar }
 
-   message lazyM = { v0 : foo; v1 [@lazy] : bar }
+    message lazyM = { v0 : foo; v1 [@lazy] : bar }
 
-   message lazyMsub = {| lazyM | v0 [@lazy] }
+    message lazyMsub = {| lazyM | v0 [@lazy] }
 
-   message lazyS =
-       A { v0 : foo; v1 [@lazy] : foobar }
-     | B { v0 [@lazy] : baz }
+    message lazyS =
+        A { v0 : foo; v1 [@lazy] : foobar }
+      | B { v0 [@lazy] : baz }
 
 There is also a message-level annotation to turn "heavy" fields lazy
 automatically:
 
-   message autoL [@autolazy] = { a : foo; b : bar }
+    message autoL [@autolazy] = { a : foo; b : bar }
 
 will estimate a size bound for values of type `foo` and `bar`, and turn the
 fields lazy when it's greater than the size of the corresponding stub.
@@ -133,13 +133,13 @@ fields lazy when it's greater than the size of the corresponding stub.
 It is possible to override the inferred or original evaluation regime in
 autolazy messages and subsets:
 
-   message autoL2 [@autolazy] = { a : foo; b [@eager] : bar }
-   message autoL3 [@autolazy] = { a [@lazy]: foo; b : bar }
-   message autoS = {| autoL | a [@eager] }
-
-   message autolazy2b [@autolazy] =
-       A { v1 : int; v2 : foo; v3 [@eager] : foo; v4 [@lazy] : int }
-     | B { v1 : float; v2 : foo; v3 [@eager] : foo; v4 [@lazy] : int }
+    message autoL2 [@autolazy] = { a : foo; b [@eager] : bar }
+    message autoL3 [@autolazy] = { a [@lazy]: foo; b : bar }
+    message autoS = {| autoL | a [@eager] }
+    
+    message autolazy2b [@autolazy] =
+        A { v1 : int; v2 : foo; v3 [@eager] : foo; v4 [@lazy] : int }
+      | B { v1 : float; v2 : foo; v3 [@eager] : foo; v4 [@lazy] : int }
 
 Lazy fields are of type `'a Extprot.Field.t` by default. The default lazy
 field implementation is `Extprot.Field.Fast_write`, and can be replaced
