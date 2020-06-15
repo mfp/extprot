@@ -33,6 +33,13 @@ type toplevel = Ast.str_item
 
 type entry = Toplevel of (toplevel * string) | Container of container
 
+let assumed_subsets opts =
+  try
+    List.filter ((<>) "") @@
+    Str.split (Str.regexp "[,]") @@
+    List.assoc "assume_subsets" opts
+  with Not_found -> []
+
 module PrOCaml =Camlp4.Printers.OCaml.Make(Camlp4.PreCast.Syntax)
 
 let string_of_ast ?width f ast =
@@ -1893,7 +1900,7 @@ struct
             sprintf "__%s_readL_x%s_x%s_x%s"
               RD.name (mangle msgname) (Option.map_default mangle "" constr) (mangle name)
 
-  and record_case_field_readers msgname ~field_reader_func_uses ~locs ?constr _ fields =
+  and record_case_field_readers opts msgname ~field_reader_func_uses ~locs ?constr _ fields =
     let _loc = Loc.mk "<generated code @ record_case_field_readers>" in
     let constr_name = Option.default "<default>" constr in
 
@@ -1935,7 +1942,7 @@ struct
         | `Lazy when
             deserialize_eagerly llty &&
             (* cannot reuse eager field reader func if it's not emitted! *)
-            is_field_reader_func_used field_reader_func_uses msgname name `Eager llty ->
+            is_field_reader_func_used opts field_reader_func_uses msgname name `Eager llty ->
             let eagerfunc = field_reader_funcname ~ev_regime:`Eager ~msgname ~constr ~name () in
               <:str_item<
                 value $lid:funcname$ ?hint ?level ?path s nelms =
@@ -1971,7 +1978,7 @@ struct
       List.mapi
         (fun i (name, mut, _, llty) ->
            let used evr =
-             is_field_reader_func_used field_reader_func_uses msgname name evr llty
+             is_field_reader_func_used opts field_reader_func_uses msgname name evr llty
            in
              List.concat
                [ if used `Eager then [(i, (name, mut, `Eager, llty))] else [];
@@ -1985,10 +1992,12 @@ struct
         fields_with_index
         <:str_item< >>
 
-  and is_field_reader_func_used field_reader_func_uses msgname name evr llty =
-    List.exists (fun (_, evr') -> compute_ev_regime_with_llty llty evr = compute_ev_regime_with_llty llty evr') @@
-    smap_find_default name [] @@
-    smap_find_default msgname SMap.empty field_reader_func_uses
+  and is_field_reader_func_used opts field_reader_func_uses msgname name evr llty =
+    let assumed = assumed_subsets opts in
+      (List.mem "all" assumed || List.mem (String.capitalize msgname) assumed) ||
+      List.exists (fun (_, evr') -> compute_ev_regime_with_llty llty evr = compute_ev_regime_with_llty llty evr') @@
+      smap_find_default name [] @@
+      smap_find_default msgname SMap.empty field_reader_func_uses
 
   and record_case_inlined msgname ~locs ?namespace ?constr tag fields =
     let _loc        = Loc.mk "<generated code @ record_case_inlined>" in
@@ -2453,7 +2462,7 @@ struct
             else
               let locs          = use_locs opts in
               let match_cases   = record_case ~locs:(use_locs opts) ?namespace msgname 0 fields in
-              let field_readers = record_case_field_readers ~field_reader_func_uses ~locs msgname 0 fields in
+              let field_readers = record_case_field_readers opts ~field_reader_func_uses ~locs msgname 0 fields in
                 (match_cases, field_readers) in
 
           let main_expr =
@@ -2509,7 +2518,7 @@ struct
               List.rev @@
               List.mapi
                 (fun tag (_namespace, constr, fields) ->
-                   record_case_field_readers ~field_reader_func_uses ~locs ~constr msgname tag fields)
+                   record_case_field_readers opts ~field_reader_func_uses ~locs ~constr msgname tag fields)
                 l in
 
           let match_cases =
@@ -2533,24 +2542,30 @@ struct
             (field_readers, main_expr)
 end
 
+let messages_with_subsets opts bindings =
 
-let messages_with_subsets bindings =
-  SMap.fold
-    (fun _ decl l -> match decl with
-       | Message_decl (_, `Message_subset (name, _, _), _, _) -> begin
-           let rec find_base_msgname name =
-             match smap_find name bindings with
-               | Some (Message_decl (_, `Message_app (name, [], _), _, _)) ->
-                   find_base_msgname name
-               | _ -> name
-           in
-             find_base_msgname name :: l
-         end
-       | Message_decl
-           (_, (`Message_record _ | `Message_alias _ |
-                `Message_sum _ | `Message_app _), _, _)
-       | Type_decl _ -> l)
-    bindings []
+  let assume_subsets = assumed_subsets opts in
+  let assume_all = List.mem "all" assume_subsets in
+
+    SMap.fold
+      (fun _ decl l -> match decl with
+         | Message_decl (_, `Message_subset (name, _, _), _, _) when
+             assume_all || List.mem (String.capitalize name) assume_subsets ->
+             name :: l
+         | Message_decl (_, `Message_subset (name, _, _), _, _) -> begin
+             let rec find_base_msgname name =
+               match smap_find name bindings with
+                 | Some (Message_decl (_, `Message_app (name, [], _), _, _)) ->
+                     find_base_msgname name
+                 | _ -> name
+             in
+               find_base_msgname name :: l
+           end
+         | Message_decl
+             (_, (`Message_record _ | `Message_alias _ |
+                  `Message_sum _ | `Message_app _), _, _)
+         | Type_decl _ -> l)
+      bindings []
 
 let field_reader_func_uses bindings =
   let rec update m msgname = function
@@ -2636,7 +2651,7 @@ let add_message_reader ~export bindings msgname mexpr opts c =
   let llrec = Gencode.low_level_msg_def bindings msgname mexpr in
   let module Mk_normal_reader = Make_reader(STR_OPS) in
 
-  let with_subsets = messages_with_subsets bindings in
+  let with_subsets = messages_with_subsets opts bindings in
 
   let field_readers, read_expr =
     Mk_normal_reader.read_message
@@ -2723,7 +2738,7 @@ let add_message_io_reader ~export:_ bindings msgname mexpr opts c =
                   let read_msg_func = ((^) "io_read_")
                 end) in
 
-  let with_subsets = messages_with_subsets bindings in
+  let with_subsets = messages_with_subsets opts bindings in
 
   let field_readers, ioread_expr =
     Mk_io_reader.read_message

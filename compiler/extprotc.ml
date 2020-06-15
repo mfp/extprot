@@ -17,6 +17,7 @@ let nolocs     = ref false
 let fieldmod   = ref ""
 let mli        = ref false
 let export_tys = ref false
+let assume_subsets = ref ""
 
 let arg_spec =
   Arg.align
@@ -30,6 +31,9 @@ let arg_spec =
 
       "-export-type-io", Arg.Set export_tys,
         " Export (de)serialization for monomorphic record types (needed for cross-file use).";
+
+      "-assume-subsets", Arg.Set_string assume_subsets,
+        "S Enable cross-file subsets of comma-separated module list. Disables -mli. Can be 'all'. example:  -assume-subsets Msg1,Msg2";
 
       "-nolocs", Arg.Set nolocs,
         " Do not indicate precise locations by default in deserialization exceptions.";
@@ -87,8 +91,10 @@ let () =
        let global_opts = match !fieldmod with
          | "" -> global_opts
          | s -> ("field-module", String.capitalize s) :: global_opts in
-       let global_opts =
-         if !export_tys then ("export_tys", "") :: global_opts else global_opts
+       let global_opts = if !export_tys then ("export_tys", "") :: global_opts else global_opts in
+       let global_opts = ("assume_subsets", !assume_subsets) :: global_opts in
+       let () =
+         if !assume_subsets <> "" then mli := false
        in
          begin
            match Ptypes.check_declarations decls with
