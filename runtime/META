@@ -1,6 +1,6 @@
 name="extprot"
 description="extprot runtime"
-requires="extlib,bytes"
+requires="extlib,bytes,str"
 archive(byte)="extprot.cma"
 archive(native)="extprot.cmxa"
 archive(native, plugin) = "extprot.cmxs"
