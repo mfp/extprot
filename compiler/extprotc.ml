@@ -16,6 +16,7 @@ let width      = ref 100
 let nolocs     = ref false
 let fieldmod   = ref ""
 let mli        = ref false
+let export_tys = ref false
 
 let arg_spec =
   Arg.align
@@ -26,6 +27,9 @@ let arg_spec =
         "LIST Generators to use (comma-separated).";
 
       "-mli", Arg.Set mli, " Generate .mli signature.";
+
+      "-export-type-io", Arg.Set export_tys,
+        " Export (de)serialization for monomorphic record types (needed for cross-file use).";
 
       "-nolocs", Arg.Set nolocs,
         " Do not indicate precise locations by default in deserialization exceptions.";
@@ -82,7 +86,9 @@ let () =
        let global_opts = if !nolocs then ["locs", "false"] else [] in
        let global_opts = match !fieldmod with
          | "" -> global_opts
-         | s -> ("field-module", String.capitalize s) :: global_opts
+         | s -> ("field-module", String.capitalize s) :: global_opts in
+       let global_opts =
+         if !export_tys then ("export_tys", "") :: global_opts else global_opts
        in
          begin
            match Ptypes.check_declarations decls with

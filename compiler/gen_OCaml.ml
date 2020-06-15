@@ -2626,8 +2626,9 @@ let field_reader_func_uses bindings =
          | Type_decl _ -> m)
       bindings SMap.empty
 
-let only_if_export export s = match export with
+let only_if_export opts export s = match export with
   | true -> Some s
+  | _ when List.mem_assoc "export_tys" opts -> Some s
   | false -> None
 
 let add_message_reader ~export bindings msgname mexpr opts c =
@@ -2687,7 +2688,7 @@ let add_message_reader ~export bindings msgname mexpr opts c =
               >>;
 
         c_sig_reader =
-          only_if_export export @@
+          only_if_export opts export @@
           begin
             Printf.sprintf
               "val read_%s : (%s, %s.hint, %s.path) Extprot.Conv.string_reader\n\
@@ -2963,7 +2964,7 @@ let add_message_writer ~export bindings msgname mexpr opts c =
             { c with
                 c_writer = Some writer;
                 c_sig_writer = begin
-                  only_if_export export @@
+                  only_if_export opts export @@
                   Printf.sprintf
                           "val write_%s : %s Extprot.Conv.writer\n\
                            val write : %s Extprot.Conv.writer\n"
