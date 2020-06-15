@@ -106,6 +106,45 @@ You can indicate that a type is equal to an existing one with the
 defines an opt type that is equal to the usual option type. The
 "ocaml.type_equals" value must be an idenfifier with optional module path.
 
+#### Evaluation regime
+
+It is possible to make specific fields of record types, messages and
+subsets lazy with the [@lazy] annotation attached to the field names (there is
+also [@eager]):
+
+   type lazyT = { a [@lazy] : foo; b : bar }
+
+   message lazyM = { v0 : foo; v1 [@lazy] : bar }
+
+   message lazyMsub = {| lazyM | v0 [@lazy] }
+
+   message lazyS =
+       A { v0 : foo; v1 [@lazy] : foobar }
+     | B { v0 [@lazy] : baz }
+
+There is also a message-level annotation to turn "heavy" fields lazy
+automatically:
+
+   message autoL [@autolazy] = { a : foo; b : bar }
+
+will estimate a size bound for values of type `foo` and `bar`, and turn the
+fields lazy when it's greater than the size of the corresponding stub.
+
+It is possible to override the inferred or original evaluation regime in
+autolazy messages and subsets:
+
+   message autoL2 [@autolazy] = { a : foo; b [@eager] : bar }
+   message autoL3 [@autolazy] = { a [@lazy]: foo; b : bar }
+   message autoS = {| autoL | a [@eager] }
+
+   message autolazy2b [@autolazy] =
+       A { v1 : int; v2 : foo; v3 [@eager] : foo; v4 [@lazy] : int }
+     | B { v1 : float; v2 : foo; v3 [@eager] : foo; v4 [@lazy] : int }
+
+Lazy fields are of type `'a Extprot.Field.t` by default. The default lazy
+field implementation is `Extprot.Field.Fast_write`, and can be replaced
+with the `-fieldmod` command-line option.
+
 #### Include
 
 It is possible to split extprot file into several smaller files and include as needed,
@@ -123,6 +162,20 @@ will produce:
 
 "include" assumes that the OCaml file generated from included extprot file
 will be named following the default convention (i.e. "a.ml" from "a.proto")
+
+Note that the use of include can interfere with other functionality (dead-code
+elimination and mli signature generation), given that by default extprotc
+assumes the .proto file it is processing will not be included in other files,
+and will perform global dead-code elimination accordingly.
+
+This happens in the following circumstances:
+
+* when a monomorphic record type is used across file boundaries
+  and `-mli` is used: in this case, it is also required to add
+  `-export-type-io`
+* when defining subsets of messages (or monomorphic record types) defined
+  in another file: use `-assume-subsets` to disable dead-code elimination
+  selectively (also disables signature generation with `-mli`).
 
 #### Pretty-printers
 
