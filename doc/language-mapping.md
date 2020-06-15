@@ -116,7 +116,7 @@ also [@eager]):
 
     message lazyM = { v0 : foo; v1 [@lazy] : bar }
 
-    message lazyMsub = {| lazyM | v0 [@lazy] }
+    message lazyMsub = {| lazyM | v0 [@lazy] |}
 
     message lazyS =
         A { v0 : foo; v1 [@lazy] : foobar }
@@ -135,7 +135,7 @@ autolazy messages and subsets:
 
     message autoL2 [@autolazy] = { a : foo; b [@eager] : bar }
     message autoL3 [@autolazy] = { a [@lazy]: foo; b : bar }
-    message autoS = {| autoL | a [@eager] }
+    message autoS = {| autoL | a [@eager] |}
     
     message autolazy2b [@autolazy] =
         A { v1 : int; v2 : foo; v3 [@eager] : foo; v4 [@lazy] : int }
