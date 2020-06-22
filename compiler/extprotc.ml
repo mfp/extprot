@@ -67,6 +67,24 @@ let print_header ?(sub = '=') fmt =
 
 let print fmt = Format.fprintf Format.err_formatter fmt
 
+let header source =
+  let srcline =
+    let src = sprintf "%S" source in
+    let s   = sprintf "(* This file was generated automatically from %s " src in
+    let s   =
+      if String.length s < 78 - 2 then s ^ String.make (76 - String.length s) ' '
+      else s
+    in
+      s ^ "*)"
+  in
+    sprintf
+      "(****************************************************************************)\n\
+       %s\n\
+       (* Do not edit it manually!                                                 *)\n\
+       (****************************************************************************)\n\
+       \n\n"
+      srcline
+
 let () =
   Arg.parse arg_spec (fun fname -> file := Some fname) usage_msg;
   match !file with
@@ -104,9 +122,11 @@ let () =
                      ~global_opts
                      ~width:!width ?generators:!generators bindings local
                  in
+                   output_string och @@ header file;
                    output_string och implem;
                    if !mli then begin
                      let och = open_out (Filename.chop_extension file ^ ".mli") in
+                       output_string och @@ header file;
                        output_string och signature
                    end
              | errors ->
