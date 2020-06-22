@@ -2755,6 +2755,7 @@ let add_message_io_reader ~export:_ bindings msgname mexpr opts c =
                     ?hint ?(level = 0) ?(path = EXTPROT_FIELD____.Hint_path.null) s =
                     let path  = EXTPROT_FIELD____.Hint_path.append_type path $str:msgname$ in
                     let level = level + 1 in
+                    let _     = hint in
                     let _     = path in
                     let _     = level in
                       $ioread_expr$;
