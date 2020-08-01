@@ -4,18 +4,28 @@
 (** [Wrong_protocol_version (max_known, found)] *)
 exception Wrong_protocol_version of int * int
 
-val serialize : ?buf:Msg_buffer.t -> (Msg_buffer.t -> 'a -> 'b) -> 'a -> string
-val deserialize : (Reader.String_reader.t -> 'a) -> ?offset:int -> string -> 'a
+type ('a, 'hint, 'path) string_reader =
+  ?hint:'hint -> ?level:int -> ?path:'path -> Reader.String_reader.t -> 'a
 
-val read : (Reader.IO_reader.t -> 'a) -> IO.input -> 'a
+type ('a, 'hint, 'path) io_reader =
+  ?hint:'hint -> ?level:int -> ?path:'path -> Reader.IO_reader.t -> 'a
 
-val dump : (Msg_buffer.t -> 'a -> unit) -> Msg_buffer.t -> 'a -> unit
+type 'a writer = (Msg_buffer.t -> 'a -> unit)
+
+val serialize : ?buf:Msg_buffer.t -> 'a writer -> 'a -> string
+val deserialize :
+  ('a, 'hint, 'path) string_reader ->
+  ?hint:'hint -> ?offset:int -> string -> 'a
+
+val read : ('a, 'hint, 'path) io_reader -> ?hint:'hint -> IO.input -> 'a
+
+val dump : 'a writer -> Msg_buffer.t -> 'a -> unit
 
 (** @param buf the buffer to use when serializing the value. It will be
   *            automatically cleared before use. *)
 val write :
   ?buf:Msg_buffer.t ->
-  (Msg_buffer.t -> 'a -> unit) -> 'b IO.output -> 'a -> unit
+  'a writer -> 'b IO.output -> 'a -> unit
 
 (** {6 Versioned serialization} *)
 
@@ -27,10 +37,14 @@ val write :
  * @raise Wrong_protocol_version if the version is higher than the last known
  * one.
  * *)
-val read_versioned : (Reader.IO_reader.t -> 'a) array -> Reader.IO_reader.t -> 'a
+val read_versioned :
+  ('a, 'hint, 'path) io_reader array ->
+  ?hint:'hint -> Reader.IO_reader.t -> 'a
 
 (** Like {!read_versioned}, operating on an [IO.input] channel. *)
-val io_read_versioned : (Reader.IO_reader.t -> 'a) array -> IO.input -> 'a
+val io_read_versioned :
+  ('a, 'hint, 'path) io_reader array ->
+  ?hint:'hint -> IO.input -> 'a
 
 (** [write_versioned ?buf fs version io x] writes the given [version] as a
   * 16-bit, unsigned integer to [io], followed by the serialization of the
@@ -41,20 +55,22 @@ val io_read_versioned : (Reader.IO_reader.t -> 'a) array -> IO.input -> 'a
   * *)
 val write_versioned :
   ?buf:Msg_buffer.t ->
-  (Msg_buffer.t -> 'a -> unit) array -> int -> 'b IO.output -> 'a -> unit
+  'a writer array -> int -> 'b IO.output -> 'a -> unit
 
 (** Analog to {!write_versioned}, returning a string. *)
 val serialize_versioned : ?buf:Msg_buffer.t ->
-  (Msg_buffer.t -> 'a -> unit) array -> int -> 'a -> string
+  'a writer array -> int -> 'a -> string
 
 (** Analog to {!read_versioned}, reading from a string. *)
 val deserialize_versioned :
-  (Reader.String_reader.t -> 'a) array -> string -> 'a
+  ('a, 'hint, 'path) string_reader array ->
+  ?hint:'hint -> string -> 'a
 
 (** Analog to {!deserialize_versioned}, where the version is given, and the
   * string only contains the message (not the version number) *)
 val deserialize_versioned' :
-  (Reader.String_reader.t -> 'a) array -> int -> string -> 'a
+  ('a, 'hint, 'path) string_reader array ->
+  ?hint:'hint -> int -> string -> 'a
 
 (** Return frame (16-bit version plus message) *)
 val read_frame : IO.input -> int * string

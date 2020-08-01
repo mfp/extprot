@@ -78,7 +78,7 @@ type type_expr = [
 
 and 'a record_data_type = {
   record_name : string;
-  record_fields : (string * bool * 'a) list
+  record_fields : (string * bool * [`Lazy | `Eager | `Auto] * 'a) list
 }
 
 and 'a sum_data_type = {
@@ -91,7 +91,8 @@ let kind_of_type_expr = function
 | `Record -> "record"
 | `Sum -> "union"
 
-type base_message_expr = [ `Message_record of (string * bool * base_type_expr) list ]
+type base_message_expr = [ `Message_record of (string * bool * eval_regime * base_type_expr) list ]
+and eval_regime = [`Eager | `Lazy | `Auto]
 
 type message_expr_app = [ `Message_app of string * base_type_expr list * type_options ]
 
@@ -100,7 +101,7 @@ type message_expr = [
   | message_expr_app
   | `Message_alias of string list * string
   | `Message_sum of (string * [base_message_expr | message_expr_app]) list
-  | `Message_subset of string * (string * base_type_expr option) list * [`Include | `Exclude]
+  | `Message_subset of string * (string * (base_type_expr option * eval_regime option)) list * [`Include | `Exclude]
 ]
 
 let kind_of_message_expr = function
@@ -111,8 +112,10 @@ let kind_of_message_expr = function
 | `Message_subset -> "subset"
 
 type declaration =
-    Message_decl of string * message_expr * type_options
+    Message_decl of string * message_expr * export * type_options
   | Type_decl of string * type_param list * type_expr * type_options
+
+and export = Export_YES | Export_NO
 
 type origin = Extern | Local
 

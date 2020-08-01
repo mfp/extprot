@@ -15,6 +15,7 @@ sig
   val rand_int64 : Int64.t t
   val rand_float : float t
   val rand_string : int t -> string t
+  val rand_readable_string : int t -> string t
   val rand_list : int t -> 'a t -> 'a list t
   val rand_array : int t -> 'a t -> 'a array t
   val rand_choice : 'a t list -> 'a t
@@ -67,6 +68,14 @@ struct
       let rec loop = function
           n when n < 0 -> return @@ Bytes.unsafe_to_string s
         | n -> rand_integer 255 >>= fun c -> s.[n] <- Char.chr c; loop (n - 1)
+      in loop (n - 1)
+
+  let rand_readable_string len =
+    len >>= fun n ->
+      let s = Bytes.create n in
+      let rec loop = function
+          n when n < 0 -> return @@ Bytes.unsafe_to_string s
+        | n -> rand_integer (127 - 32) >>= fun c -> s.[n] <- Char.chr (32 + c); loop (n - 1)
       in loop (n - 1)
 
   let rand_int =

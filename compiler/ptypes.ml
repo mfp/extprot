@@ -2,7 +2,7 @@
 include Protocol_types
 open ExtList
 
-let declaration_name = function Message_decl (n, _, _) | Type_decl (n, _, _, _) -> n
+let declaration_name = function Message_decl (n, _, _, _) | Type_decl (n, _, _, _) -> n
 
 let declaration_arity = function
     Message_decl _ -> 0
@@ -40,7 +40,7 @@ let free_type_variables decl : string list =
   let rec type_free_vars known : type_expr -> string list = function
       #base_type_expr as x -> free_vars known x
     | `Record (record, _) ->
-        concat_map (fun (_, _, ty) -> free_vars known ty) record.record_fields
+        concat_map (fun (_, _, _, ty) -> free_vars known ty) record.record_fields
     | `Sum (sum, _) ->
         concat_map
           (fun (_, l) -> concat_map (type_free_vars known) (l :> type_expr list))
@@ -50,13 +50,13 @@ let free_type_variables decl : string list =
     | `Message_app (_, targs, _) ->
         concat_map (fun ty -> type_free_vars known (ty :> type_expr)) targs
     | `Message_record l ->
-        concat_map (fun (_, _, e) -> type_free_vars known (e :> type_expr)) l
+        concat_map (fun (_, _, _, e) -> type_free_vars known (e :> type_expr)) l
     | `Message_subset _ | `Message_alias _ -> []
     | `Message_sum l ->
         concat_map (fun (_, e) -> msg_free_vars known (e :> message_expr)) l in
 
   match decl with
-      Message_decl (name, m, _) -> msg_free_vars [name] m
+      Message_decl (name, m, _, _) -> msg_free_vars [name] m
     | Type_decl (name, tvars, e, _) ->
         type_free_vars (name :: List.map string_of_type_param tvars) e
 
@@ -66,6 +66,7 @@ let known_type_opts =
     "ocaml.pp";
     "ocaml.type";
     "ocaml.type_equals";
+    "autolazy";
   ]
 
 let unknown_type_opts decl : error list =
@@ -99,7 +100,7 @@ let unknown_type_opts decl : error list =
     | `Record (r, opts) ->
         keep_unknown_type_opts decl_name opts @
         List.concat @@
-        List.map (fun (_, _, ty) -> base_type_expr_errs decl_name ty) r.record_fields
+        List.map (fun (_, _, _, ty) -> base_type_expr_errs decl_name ty) r.record_fields
 
     | `Sum (s, opts) ->
         keep_unknown_type_opts decl_name opts @
@@ -131,7 +132,7 @@ let unknown_type_opts decl : error list =
 
     | `Message_record l ->
         List.concat @@ List.map (base_type_expr_errs decl_name) @@
-        List.map (fun (_, _, ty) -> ty) l
+        List.map (fun (_, _, _, ty) -> ty) l
 
   in
     match decl with
@@ -139,7 +140,7 @@ let unknown_type_opts decl : error list =
           keep_unknown_type_opts name opts @
           type_expr_errs name ty
 
-      | Message_decl (name, mexpr, opts) ->
+      | Message_decl (name, mexpr, _, opts) ->
           keep_unknown_type_opts name opts @
           mexpr_errs name mexpr
 
@@ -192,7 +193,7 @@ let check_declarations decls =
 
           let rec fold_msg acc : message_expr -> error list = function
             | `Message_record l ->
-                List.fold_left (fun errs (_, _, ty) -> fold_base_ty errs ty) acc l
+                List.fold_left (fun errs (_, _, _, ty) -> fold_base_ty errs ty) acc l
             | `Message_subset _ | `Message_alias _ -> acc
             | `Message_app (s, params, _) ->
                 let expected = List.length params in
@@ -210,20 +211,20 @@ let check_declarations decls =
               #base_type_expr as bty -> fold_base_ty acc bty
             | `Record (r, _) ->
                 List.fold_left
-                  (fun errs (_, _, ty) -> fold_base_ty errs ty) acc r.record_fields
+                  (fun errs (_, _, _, ty) -> fold_base_ty errs ty) acc r.record_fields
             | `Sum (sum, _) ->
                 List.fold_left
                   (fun acc (_, l) -> List.fold_left fold_base_ty acc l)
                   acc (non_constant_constructors sum)
 
           in match decl with
-              Message_decl (_, msg, _) -> loop (fold_msg errs msg) arities tl
+              Message_decl (_, msg, _, _) -> loop (fold_msg errs msg) arities tl
             | Type_decl (_, _, ty, _) -> loop (fold_ty errs ty) arities tl
     in loop [] SMap.empty l in
 
   let check_subsets decls =
     let update_bindings s = function
-      | Message_decl (name, (`Message_record _ | `Message_app _), _)
+      | Message_decl (name, (`Message_record _ | `Message_app _), _, _)
       | Type_decl (name, _, `Record _, _) ->
           SSet.add name s
       | _ -> s in
@@ -233,7 +234,7 @@ let check_declarations decls =
         (fun (bindings, es) decl ->
            let es =
              match decl with
-               | Message_decl (name, `Message_subset (src, _, _), _) ->
+               | Message_decl (name, `Message_subset (src, _, _), _, _) ->
                    if SSet.mem src bindings then es
                    else Missing_subset_source (name, src) :: es
                | _ -> es

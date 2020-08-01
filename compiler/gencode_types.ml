@@ -11,7 +11,7 @@ type low_level =
   | Record of string * field list * type_options
   | Tuple of low_level list * type_options
   | Htuple of htuple_meaning * low_level * type_options
-  | Message of string list * string * type_options
+  | Message of string list * string * low_level message option * type_options
 
 and constructor = {
   const_tag : tag;
@@ -22,22 +22,25 @@ and constructor = {
 and field = {
   field_name : string;
   field_type : low_level;
+  field_evr  : ev_regime;
 }
 
 and 'a message =
-  | Message_single of namespace option * (field_name * field_mutable * 'a) list
-  | Message_sum of (namespace option * constructor_name * (field_name * field_mutable * 'a) list) list
+  | Message_single of namespace option * (field_name * field_mutable * ev_regime * 'a) list
+  | Message_sum of (namespace option * constructor_name * (field_name * field_mutable * ev_regime * 'a) list) list
   | Message_alias of string list * string (* path * name *)
-  | Message_subset of msg_name * (field_name * field_mutable * 'a) list * 'a field_subset
+  | Message_typealias of string * (field_name * field_mutable * ev_regime * 'a) list option (* path * name * fields *)
+  | Message_subset of msg_name * (field_name * field_mutable * ev_regime * 'a) list * 'a field_subset
 
 and namespace        = string
 and constructor_name = string
 and msg_name         = string
 and field_name       = string
 and field_mutable    = bool
+and ev_regime        = [ `Eager | `Lazy | `Auto ]
 
 and 'a field_subset =
-  | Include_fields of (string * 'a option) list
+  | Include_fields of (string * ('a option * ev_regime option)) list
   | Exclude_fields of string list
 
 and vint_meaning =
@@ -57,7 +60,7 @@ type reduced_type_expr = [
     reduced_type_expr base_type_expr_core
   | `Sum of reduced_type_expr sum_data_type * type_options
   | `Record of reduced_type_expr record_data_type * type_options
-  | `Message of string * type_options
+  | `Message of string * reduced_type_expr record_data_type option * type_options
   | `Ext_message of string list * string * type_options
 ]
 

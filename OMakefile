@@ -30,6 +30,7 @@ OCAMLPACKS[] =
 	camlp4
 	extlib
 	bytes
+	str
 
 # workaround for missing dep in camlp4's META for >= 3.11
 if $(or $(gt $(OCAML_MAJOR), 3), $(and $(equal $(OCAML_MAJOR), 3), $(ge $(OCAML_MINOR), 11)))

@@ -20,6 +20,8 @@ sig
   val read_raw_i64 : t -> Int64.t
   val read_raw_float : t -> float
   val read_raw_string : t -> string
+
+  val read_serialized_data : t -> int -> string
   val offset : t -> int -> position
   val skip_to : t -> position -> unit
   val skip_value : t -> Codec.prefix -> unit
@@ -27,7 +29,9 @@ sig
 end
 
 type reader_func =
-    [ `Offset
+    [ `Get_value_reader
+    | `Get_value_reader_with_prefix
+    | `Offset
     | `Read_bool
     | `Read_float
     | `Read_i32
@@ -43,26 +47,40 @@ type reader_func =
     | `Read_raw_string
     | `Read_rel_int
     | `Read_string
+    | `Read_message
     | `Read_vint
+    | `Read_serialized_data
     | `Skip_to
     | `Skip_value ]
 
 val string_of_reader_func : reader_func -> string
 
-module IO_reader : sig
+module rec IO_reader : sig
   include S
   val from_io : IO.input -> t
   val from_string : ?offset:int -> string -> t
   val from_file : string -> t
+  val get_value_reader : t -> String_reader.t
+  val get_value_reader_with_prefix : t -> Codec.prefix -> String_reader.t
 end
 
-module String_reader : sig
+and String_reader : sig
   include S
   val make : string -> int -> int -> t
+
+  val make_sub : t -> off:position -> upto:position -> t
+
+  val unsafe_from_msgbuffer : Msg_buffer.t -> t
   val from_string : string -> t
   val from_io_reader : IO_reader.t -> t
   (** @return the reader and the message string *)
   val from_io_reader' : IO_reader.t -> t * string
   val from_io : IO.input -> t
   val close : t -> unit
+
+  val append_to_buffer : t -> Msg_buffer.t -> unit
+
+  val range_length : position -> position -> int
+  val get_value_reader : t -> t
+  val get_value_reader_with_prefix : t -> Codec.prefix -> t
 end

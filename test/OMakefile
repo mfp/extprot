@@ -12,9 +12,11 @@ TEST_MODULES[] =
     test_types
     gen_data
     test_util
+    wrapped_types
     unit_write
     test_conv
     test_extensions
+    test_lazy_fields
     test_subsets
 
 GENERATOR = $(BASE)/extprotc
@@ -22,14 +24,14 @@ GENERATOR = $(BASE)/extprotc
 #OCAMLDEP_MODULES_ENABLED = false
 LocalOCamlGeneratedFiles(test_types.ml)
 
-test_types.ml: $(GENERATOR) test_types.proto
+test_types.ml test_types.mli: $(GENERATOR) test_types.proto
     # $(GENERATOR) -g pretty_printer,reader,writer test_types.proto
-    $(GENERATOR) test_types.proto
+    $(GENERATOR) -mli test_types.proto
 
 $(CamlTargets $(removesuffix $(ls *.ml))): $(BASE)/runtime/extprot.cmxa
 
 OCamlProgram(run_tests, register_test $(TEST_MODULES) test)
-OCamlProgram(bm_01, digest_type dummy_type test_types gen_data bm_01)
+OCamlProgram(bm_01, digest_type dummy_type wrapped_types test_types gen_data bm_01)
 OCamlProgram(prettyprint, prettyprint)
 
 section

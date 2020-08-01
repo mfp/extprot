@@ -29,6 +29,8 @@ struct
   let (@.) f g x = f (g x)
   let (@..) f g x y = f x (g y)
 
+  let (@.<) f g ?hint ?level ?path x = f (g ?hint ?level ?path x)
+
   let fail () = assert false
 
   let assert_raise ~msg choose_exn f x =
@@ -39,14 +41,15 @@ struct
       if not (choose_exn exn) then raise exn
 
   let test_aux
-        rd_bool rd_string rd_long serialize_versioned deserialize_versioned =
+        rd_bool rd_string rd_long serialize_versioned
+        (deserialize_versioned : _ -> ?hint:_ -> string -> _) =
 
     let wr_bool, wr_string, wr_long =
       Simple_bool.write_simple_bool,
       Simple_string.write_simple_string,
       Simple_long.write_simple_long in
-    let fs1 = [| (fun x -> `Bool x) @. rd_bool;
-                 (fun x -> `String x) @. rd_string |] in
+    let fs1 = [| (fun x -> `Bool x) @.< rd_bool;
+                 (fun x -> `String x) @.< rd_string |] in
 
     let fs1' = [|
       wr_bool @.. (function `Bool x -> x | _ -> fail ());
@@ -54,7 +57,7 @@ struct
     |] in
 
     let fs2 =
-      Array.append fs1 [| (fun x -> `Long x) @. rd_long; |] in
+      Array.append fs1 [| (fun x -> `Long x) @.< rd_long; |] in
 
     let fs2' =
       Array.append fs1' [|
@@ -103,8 +106,8 @@ struct
         C.write_versioned fs idx io v;
         IO.close_out io in
 
-    let deserialize fs s =
-      read_versioned fs (IO.input_string s)
+    let deserialize fs ?hint s =
+      read_versioned fs ?hint (IO.input_string s)
     in
       test_aux
       Simple_bool.io_read_simple_bool
@@ -117,7 +120,7 @@ struct
 
   let test_read_write_versioned () =
     test_read_write_versioned_aux
-      (fun fs io -> C.read_versioned fs (Extprot.Reader.IO_reader.from_io io))
+      (fun fs ?hint io -> C.read_versioned fs ?hint (Extprot.Reader.IO_reader.from_io io))
 
   let () = Register_test.register "versioned serialization"
     [

@@ -203,4 +203,226 @@ message defv2b = { c : color; p : pair_int_42__43 }
 
 message defv2c = { c : color; p : tuple<int_42, int__43> }
 
+message lazy01 = {
+  a [@lazy] : bool;
+  b [@lazy] : byte;
+  c [@lazy] : int;
+  d [@lazy] : long;
+  e [@lazy] : float;
+  f [@lazy] : string
+}
+
+message lazy01b = {
+  a : bool;
+  b : byte;
+  c : int;
+  d : long;
+  e : float;
+  f : string
+}
+
+type lazyT 'a   = { v [@lazy] : 'a }
+type recT 'a    = { v : 'a }
+message lazy02  = lazyT<int>
+message lazy02b = lazyT< lazyT<int> >
+message lazy02c = recT< recT<int> >
+message lazy02d = lazyT<bool>
+message lazy03  = { v [@lazy] : int; v2 [@lazy] : int [@default 42] }
+message lazy03b = { v [@lazy] : int; }
+message lazy04  = lazyT< [ int ] >
+message lazy05  = lazyT< [| int |] >
+message lazy06  = { x : int; v [@lazy] : sum_type2<int> }
+message lazy06b = { x : int; v : sum_type2<int> }
+message lazy07  = { x : int; v [@lazy] : (int * float) }
+message lazy07b = { x : int; v : (int * float) }
+message lazy08  = { x : int; v [@lazy] : (simple_bool * simple_bool) }
+message lazy08b = { x : int; v [@lazy] : simple_bool }
+message lazy09  = { v [@lazy] : simple_bool }
+message lazy10  = { x : int; v [@lazy] : simple_bool }
+message lazy10b = { x : int; v : simple_bool }
+message lazy11  = { v [@lazy] : msg_sum }
+message lazy12  = { v [@lazy] : (simple_bool * simple_bool) }
+message lazy13  = { v [@lazy] : (msg_sum * msg_sum) }
+message lazy14  = { v [@lazy] : [ msg_sum ] }
+message lazy15  = A { v [@lazy] : bool } | B { x : int; v [@lazy] : sum_type2<int> }
+message lazy15b = A { v : bool } | B { x : int; }
+
+message lazy16  = {
+  v1 [@lazy] : simple_bool;
+  v2 [@lazy] : (int * string);
+  v3 [@lazy] : tuple<string, int>;
+  v4 [@lazy] : sum_type<int, int, int>;
+  v5 [@lazy] : sum_type<int, string, int>;
+  v6 [@lazy] : sum_type<simple_bool, int, int>;
+  v7 [@lazy] : [ string ];
+  v8 [@lazy] : [ string ];
+  v9 [@lazy] : [| int |];
+  v0 [@lazy] : [| int |];
+}
+
+message lazy16b  = {
+  v1 : simple_bool;
+  v2 : (int * string);
+  v3 : tuple<string, int>;
+  v4 : sum_type<int, int, int>;
+  v5 : sum_type<int, string, int>;
+  v6 : sum_type<simple_bool, int, int>;
+  v7 : [ string ];
+  v8 : [ string ];
+  v9 : [| int |];
+  v0 : [| int |];
+}
+
+message lazy16c = {| lazy16 | v1; v2; v5; v9; v0 |}
+message lazy16d = {| lazy16 | not v0 |}
+
+type string_hohoho = string options "default" = "hohoho"
+
+message lazy17 = {
+  v1 [@lazy] : int [@default 789];
+  v2 [@lazy] : string_hohoho;
+  v3 [@lazy] : sum_type<int, int, int>;
+  v4 [@lazy] : [ int ];
+  v5 [@lazy] : [| int |];
+  v6 [@lazy] : simple_bool;
+}
+
+message lazy17b = {
+  v1 : int;
+  v2 : string_hohoho;
+  v3 : sum_type<int, int, int>;
+  v4 : [ int ];
+  v5 : [| int |];
+}
+
+message lazy17c = {
+  v1 : int;
+  v2 : string_hohoho;
+  v3 : sum_type<int, int, int>;
+  v4 : [ int ];
+}
+
+message lazy17d = {
+  v1 : int;
+  v2 : string_hohoho;
+  v3 : sum_type<int, int, int>;
+}
+
+message lazy17e = {
+  v1 : int;
+  v2 : string_hohoho;
+}
+
+message lazy17f = {
+  v1 : int;
+}
+
+message lazy18  = { v1 [@lazy] : lazy17; v2 [@lazy] : lazy17 }
+message lazy18b = { v1 : lazy17f; }
+
+message lazy19  = { x : int; v [@lazy] : lazyT<string_hohoho> }
+message lazy19b = { x : int; v: lazyT<string_hohoho> }
+message lazy19c = { x : int }
+
+message lazy20a = { v1 : lazyT<string>; v2 : lazyT<simple_bool> }
+message lazy20b = { v1 [@lazy] : lazyT<string>; v2 [@lazy] : lazyT<simple_bool> }
+message lazy20c = { v1 [@lazy] : lazy20a; v2 [@lazy] : lazy20a }
+message lazy20d = {| lazy20c | v2 : lazy20b |}
+
+type lazy21a  = {
+  v1 [@lazy] : simple_bool;
+  v2 [@lazy] : (int * string);
+  v3 [@lazy] : tuple<string, int>;
+  v4 [@lazy] : sum_type<int, int, int>;
+  v5 [@lazy] : sum_type<int, string, int>;
+  v6 [@lazy] : sum_type<simple_bool, int, int>;
+  v7 [@lazy] : [ string ];
+  v8 [@lazy] : [ string ];
+  v9 [@lazy] : [| int |];
+  v0 [@lazy] : [| int |];
+}
+
+message lazy21b =
+    A lazy21a
+  | B lazyT<simple_string>
+
+type w0 = bool options "ocaml.type" = "Wrapped_types.Wrap_bool.t; Wrapped_types.Wrap_bool.from_x; Wrapped_types.Wrap_bool.to_x; Wrapped_types.Wrap_bool.from_x true"
+type w1 = int options "ocaml.type" = "Wrapped_types.Wrap_int.t, Wrapped_types.Wrap_int.from_x, Wrapped_types.Wrap_int.to_x"
+type w2 = byte options "ocaml.type" = "Wrapped_types.Wrap_int.t, Wrapped_types.Wrap_int.from_x, Wrapped_types.Wrap_int.to_x"
+type w3 = long options "ocaml.type" = "Wrapped_types.Wrap_i64.t, Wrapped_types.Wrap_i64.from_x, Wrapped_types.Wrap_i64.to_x"
+type w4 = float options "ocaml.type" = "Wrapped_types.Wrap_float.t, Wrapped_types.Wrap_float.from_x, Wrapped_types.Wrap_float.to_x"
+type w5 = string options "ocaml.type" = "Wrapped_types.Wrap_string.t, Wrapped_types.Wrap_string.from_x, Wrapped_types.Wrap_string.to_x"
+type w6 = (int * int * int) options "ocaml.type" = "Wrapped_types.Wrap_tuple_iii.t, Wrapped_types.Wrap_tuple_iii.from_x, Wrapped_types.Wrap_tuple_iii.to_x"
+type w7 = (int * string * int) options "ocaml.type" = "Wrapped_types.Wrap_tuple_isi.t, Wrapped_types.Wrap_tuple_isi.from_x, Wrapped_types.Wrap_tuple_isi.to_x"
+
+type wsum_ = A | B string options "ocaml.type_equals" = "Wrapped_types.Sum.t"
+type w8 = wsum_ options "ocaml.type" = "Wrapped_types.Wrap_sum.t; Wrapped_types.Wrap_sum.from_x; Wrapped_types.Wrap_sum.to_x; Wrapped_types.Wrap_sum.from_x Wsum_.A"
+
+type wrec_ = { a : int; b : string } options "ocaml.type_equals" = "Wrapped_types.Rec.t"
+type w9 = wrec_ options "ocaml.type" = "Wrapped_types.Wrap_rec.t; Wrapped_types.Wrap_rec.from_x; Wrapped_types.Wrap_rec.to_x; failwith \"missing wrec_\""
+
+type w10 = [ int ] options "ocaml.type" = "Wrapped_types.Wrap_list.t, Wrapped_types.Wrap_list.from_x, Wrapped_types.Wrap_list.to_x, Wrapped_types.Wrap_list.from_x [1; 2; 3]"
+type w11 = [| int |] options "ocaml.type" = "Wrapped_types.Wrap_array.t, Wrapped_types.Wrap_array.from_x, Wrapped_types.Wrap_array.to_x, Wrapped_types.Wrap_array.from_x [|1; 2; 3|]"
+
+type w12 = A | B w9
+
+message lazy22  = { v [@lazy] : digest }
+message lazy22b = { v : digest }
+message lazy23_0b = { v : w0 }
+message lazy23_0 = { v [@lazy] : w0 }
+message lazy23_1 = { v [@lazy] : w1 }
+message lazy23_2 = { v [@lazy] : w2 }
+message lazy23_3 = { v [@lazy] : w3 }
+message lazy23_4 = { v [@lazy] : w4 }
+message lazy23_5 = { v [@lazy] : w5 }
+message lazy23_6 = { v [@lazy] : w6 }
+message lazy23_7 = { v [@lazy] : w7 }
+message lazy23_8 = { v [@lazy] : w8 }
+message lazy23_9 = { v [@lazy] : w9 }
+message lazy23_10 = { v [@lazy] : w10 }
+message lazy23_11 = { v [@lazy] : [w9] }
+message lazy23_12 = { v [@lazy] : [w10] }
+message lazy23_13 = { v [@lazy] : w11 }
+message lazy23_14 = { v [@lazy] : [|w9|] }
+message lazy23_15 = { v [@lazy] : [|w10|] }
+message lazy23_16 = { v [@lazy] : (w0 * bool) }
+message lazy23_17 = { v [@lazy] : w12 }
+
+message lazy24 = {
+  v1 : int [@default 789];
+  v2 : string_hohoho;
+  v3 : sum_type<int, int, int>;
+  v4 : [ int ];
+  v5 : [| int |];
+  v6 : simple_bool;
+}
+
+message lazy24a = {| lazy24 | v1 [@lazy]; v2 [@lazy]; v3 [@lazy] |}
+message lazy24b = {| lazy24 | v4 [@lazy]; v5 [@lazy]; v6 [@lazy] |}
+message lazy24c = {| lazy24 | v1 [@lazy]; v2; v3 [@lazy] |}
+
+message lazy25 = {| lazy17 | v1 [@eager]; v3; v4 |}
+
+message autolazy1 [@autolazy] =
+  {
+    v1 : int;
+    v2 : lazy24;
+  }
+
+message autolazy1b [@autolazy] =
+  {
+    v1 : int;
+    v2 [@eager]: lazy24;
+    v3 : lazy24;
+    v4 [@lazy] : int;
+  }
+
+message autolazy2 [@autolazy] =
+    A { v1 : int; v2 : lazy24; }
+  | B { v1 : float; v2 : lazy24 }
+
+message autolazy2b [@autolazy] =
+    A { v1 : int; v2 : lazy24; v3 [@eager] : lazy24; v4 [@lazy] : int }
+  | B { v1 : float; v2 : lazy24; v3 [@eager] : lazy24; v4 [@lazy] : int }
+
 (* vim:set ft=ocaml: *)
