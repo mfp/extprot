@@ -68,6 +68,11 @@ let field_of_label_decl pld =
      (match pld.pld_mutable with Immutable -> false | Mutable -> true),
      `Eager, tyexpr_of_core_type pld.pld_type)
 
+let extract_type_param (ty, _) =
+  match ty.ptyp_desc with
+    | Ptyp_var s -> PT.Type_param.type_param_of_string s
+    | _ -> Location.raise_errorf ~loc:ty.ptyp_loc "Type param is not a type var."
+
 let decl_of_ty ~loc tydecl =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
@@ -77,6 +82,17 @@ let decl_of_ty ~loc tydecl =
           ptype_kind = Ptype_record fs; _ } ->
           let mexpr = `Message_record (List.map field_of_label_decl fs) in
             PT.Message_decl (name, mexpr, Export_YES, [])
+
+      | { ptype_name = { txt = name; _ };
+          ptype_params; ptype_cstrs = [];
+          ptype_kind = Ptype_record fs; _ } ->
+          let r =
+            { PT.record_name = name;
+              record_fields = List.map field_of_label_decl fs;
+            }
+          in
+            PT.Type_decl
+              (name, List.map extract_type_param ptype_params, `Record (r, []), [])
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
@@ -89,14 +105,7 @@ let decl_of_ty ~loc tydecl =
           ptype_kind = Ptype_abstract;
           ptype_manifest = Some cty; _ } ->
           PT.Type_decl
-            (name,
-             List.map
-               (fun (ty, _) -> match ty.ptyp_desc with
-                  | Ptyp_var s -> PT.Type_param.type_param_of_string s
-                  | _ ->
-                      Location.raise_errorf
-                        ~loc:ty.ptyp_loc "Type param is not a type var.")
-               ptype_params,
+            (name, List.map extract_type_param ptype_params,
              (tyexpr_of_core_type ~ptype_params cty :> PT.type_expr), [])
 
       | _ ->
