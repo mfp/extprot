@@ -1,4 +1,4 @@
-include Types
+include Lltypes
 
 type prefix = int
 

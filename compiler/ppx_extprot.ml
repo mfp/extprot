@@ -87,7 +87,9 @@ let decl_of_ty ~loc tydecl =
       | _ ->
           Location.raise_errorf ~loc "Expected a record or simple type definition"
 
-let rev_entries = ref []
+let rev_decls = ref []
+
+module G = Gencode.Make(Gen_OCaml)
 
 let expand_function ~loc ~path str =
   let module Ast_builder = (val Ast_builder.make loc) in
@@ -97,8 +99,16 @@ let expand_function ~loc ~path str =
           Location.raise_errorf ~loc "Expected a non-recursive type"
       | [ { pstr_desc = Pstr_type (Nonrecursive, [ ty ]) } ] ->
           let decl = decl_of_ty ~loc ty in
-            rev_entries := decl :: !rev_entries;
-            List.hd @@ Parse.implementation @@ Lexing.from_string source
+            rev_decls := decl :: !rev_decls;
+            let decls = List.rev !rev_decls in
+            let implem, signature =
+              G.generate_code
+                ~global_opts:[]
+                ~width:100
+                (Gencode.collect_bindings decls) [PT.Decl decl]
+            in
+              (* prerr_endline implem; *)
+              List.hd @@ Parse.implementation @@ Lexing.from_string implem
       | _ ->
           Location.raise_errorf ~loc "Expected a single type definition"
 

@@ -31,7 +31,7 @@ EXTPROT_OBJS[] =
 	pretty_print
 	ptypes
 	reader
-	types
+	lltypes
 
 CAMLP4_OBJS[] =
 	Camlp4OCamlRevisedParser
@@ -57,6 +57,31 @@ OCamlLibrary(libextprotc, $(addprefix $(PARSERS_PATH)/, $(CAMLP4_OBJS)) $(EXTPRO
 OCAML_LIBS[] = libextprotc
 
 OCamlProgram(extprotc, extprotc)
+
+section
+	OCAMLFLAGS =
+	OCAMLDEPFLAGS =
+	OCAMLPACKS[] =
+		camlp4.lib
+		extlib
+		ppxlib
+		ppxlib.metaquot
+		str
+		unix
+	CamlSources(ppx_extprot)
+
+section
+	OCAMLPACKS[] =
+		camlp4.lib
+		camlp4.quotations
+		extlib
+		ppxlib
+		ppxlib.metaquot
+		str
+		unix
+	OCAMLFLAGS =
+	OCAMLDEPFLAGS =
+	OCamlProgram(ppx_extprot, ppx_extprot)
 
 .DEFAULT: extprotc$(EXE)
 

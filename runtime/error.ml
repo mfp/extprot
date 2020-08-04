@@ -6,7 +6,7 @@ type location =
   | Message of string * string option * location
 
 type format_error =
-    Bad_wire_type of Types.low_level_type option
+    Bad_wire_type of Lltypes.low_level_type option
   | Unknown_tag of int
   | Conversion_error of exn
 
@@ -37,7 +37,7 @@ let pp_format_error pp = function
       PP.fprintf pp
         "Bad_wire_type %a"
         (PP.pp_option
-           (fun pp ty -> PP.fprintf pp "%s" (Types.string_of_low_level_type ty)))
+           (fun pp ty -> PP.fprintf pp "%s" (Lltypes.string_of_low_level_type ty)))
         ty
   | Unknown_tag n -> PP.fprintf pp "Unknown_tag %d" n
   | Conversion_error exn ->
