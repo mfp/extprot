@@ -26,7 +26,7 @@ EXTPROT_OBJS[] =
 	gen_OCaml
 	limits
 	msg_buffer
-	parser
+	proto_parser
 	protocol_types
 	pretty_print
 	ptypes
@@ -40,7 +40,7 @@ CAMLP4_OBJS[] =
 section
 	OCAMLPACKS[] += camlp4.extend
 	OCAMLFLAGS += -w e
-	CamlSources(parser)
+	CamlSources(proto_parser)
 
 section
 	OCAMLFLAGS += -w e

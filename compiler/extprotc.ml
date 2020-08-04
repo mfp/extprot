@@ -100,7 +100,7 @@ let () =
        end;
 
        let och      = open_out output in
-       let entries  = Parser.print_synerr Parser.parse_file file in
+       let entries  = Proto_parser.print_synerr Proto_parser.parse_file file in
        let decls    = List.filter_map (function (Ptypes.Decl decl, _) -> Some decl | _ -> None) entries in
        let bindings = Gencode.collect_bindings decls in
        let local    = List.filter_map (function (entry,Ptypes.Local) -> Some entry | (_,Ptypes.Extern) -> None) entries in
