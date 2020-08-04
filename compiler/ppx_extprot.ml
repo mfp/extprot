@@ -95,9 +95,7 @@ let expand_function ~loc ~path str =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
     match str with
-      | [ { pstr_desc = Pstr_type (Recursive, _) } ] ->
-          Location.raise_errorf ~loc "Expected a non-recursive type"
-      | [ { pstr_desc = Pstr_type (Nonrecursive, [ ty ]) } ] ->
+      | [ { pstr_desc = Pstr_type (_, [ ty ]) } ] ->
           let decl = decl_of_ty ~loc ty in
             rev_decls := decl :: !rev_decls;
             let decls = List.rev !rev_decls in
