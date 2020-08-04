@@ -105,8 +105,12 @@ let expand_function ~loc ~path str =
                 ~width:100
                 (Gencode.collect_bindings decls) [PT.Decl decl]
             in
-              (* prerr_endline implem; *)
-              List.hd @@ Parse.implementation @@ Lexing.from_string implem
+              begin match Parse.implementation @@ Lexing.from_string implem with
+                | _ :: str :: _ ->
+                    (* skip the first element: *)
+                    str
+                | _ -> Location.raise_errorf ~loc "Codegen error"
+              end
       | _ ->
           Location.raise_errorf ~loc "Expected a single type definition"
 
