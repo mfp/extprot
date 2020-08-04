@@ -22,12 +22,12 @@ let rec flatten_longident_path ~loc = function
   | Lident x -> [x]
   | Lapply _ -> Location.raise_errorf ~loc "Invalid longident path"
 
-let rec tyexpr_of_core_type ty =
+let rec tyexpr_of_core_type ?(ptype_params = []) ty =
   let module Ast_builder = (val Ast_builder.make ty.ptyp_loc) in
   let open Ast_builder in
     match ty.ptyp_desc with
       | Ptyp_tuple tys ->
-          `Tuple (List.map tyexpr_of_core_type tys, [])
+          `Tuple (List.map (tyexpr_of_core_type ~ptype_params) tys, [])
       | Ptyp_constr ({ txt = Lident "bool"; _ }, []) -> `Bool []
       | Ptyp_constr ({ txt = Lident "byte"; _ }, []) -> `Byte []
       | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> `Int []
@@ -35,22 +35,22 @@ let rec tyexpr_of_core_type ty =
       | Ptyp_constr ({ txt = Lident "string"; _ }, []) -> `String []
       | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) -> `Long_int []
       | Ptyp_constr ({ txt = Lident "list"; _ }, [ty]) ->
-          `List (tyexpr_of_core_type ty, [])
+          `List (tyexpr_of_core_type ~ptype_params ty, [])
       | Ptyp_constr ({ txt = Lident "array"; _ }, [ty]) ->
-          `Array (tyexpr_of_core_type ty, [])
+          `Array (tyexpr_of_core_type ~ptype_params ty, [])
       | Ptyp_constr ({ txt = Lident ("list" | "array"); _ }, ([] | _ :: _))
       | Ptyp_constr ({ txt = Lident ("bool" | "byte" | "int" | "float" | "string"); _ }, _ :: _)
       | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, _ :: _) ->
           Location.raise_errorf ~loc:ty.ptyp_loc "Polymorphic type overrides primitive type"
       | Ptyp_constr ({ txt = Lident tyn; _ }, []) -> `App (tyn, [], [])
       | Ptyp_constr ({ txt = Lident tyn; _ }, tys) ->
-          `App (tyn, List.map tyexpr_of_core_type tys, [])
+          `App (tyn, List.map (tyexpr_of_core_type ~ptype_params) tys, [])
       | Ptyp_constr ({ txt = Ldot (path, name); loc; }, []) ->
           `Ext_app (flatten_longident_path ~loc path, name, [], [])
+      | Ptyp_var s -> `Type_param (PT.Type_param.type_param_of_string s)
       | Ptyp_constr _ ->
           Location.raise_errorf ~loc:ty.ptyp_loc "Invalid type"
       | Ptyp_any
-      | Ptyp_var _
       | Ptyp_arrow _
       | Ptyp_object _
       | Ptyp_class _
@@ -83,6 +83,21 @@ let decl_of_ty ~loc tydecl =
           ptype_kind = Ptype_abstract;
           ptype_manifest = Some cty; _ } ->
           PT.Type_decl (name, [], (tyexpr_of_core_type cty :> PT.type_expr), [])
+
+      | { ptype_name = { txt = name; _ };
+          ptype_params; ptype_cstrs = [];
+          ptype_kind = Ptype_abstract;
+          ptype_manifest = Some cty; _ } ->
+          PT.Type_decl
+            (name,
+             List.map
+               (fun (ty, _) -> match ty.ptyp_desc with
+                  | Ptyp_var s -> PT.Type_param.type_param_of_string s
+                  | _ ->
+                      Location.raise_errorf
+                        ~loc:ty.ptyp_loc "Type param is not a type var.")
+               ptype_params,
+             (tyexpr_of_core_type ~ptype_params cty :> PT.type_expr), [])
 
       | _ ->
           Location.raise_errorf ~loc "Expected a record or simple type definition"
