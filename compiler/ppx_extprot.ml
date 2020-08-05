@@ -78,7 +78,7 @@ let rev_decls = ref []
 let is_record_type name =
   List.exists
     (function
-      | PT.Message_decl _ -> false
+      | PT.Message_decl (n, _, _, _) -> n = name
       | PT.Type_decl (n, _, `Record _, _) -> n = name
       | PT.Type_decl _ -> false )
     !rev_decls
