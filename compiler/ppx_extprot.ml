@@ -124,6 +124,28 @@ let decl_of_ty ~loc tydecl =
             (name, List.map extract_type_param ptype_params,
              (tyexpr_of_core_type ~ptype_params cty :> PT.type_expr), [])
 
+      | { ptype_name = { txt = name; _ };
+          ptype_params; ptype_cstrs = [];
+          ptype_kind = Ptype_variant constrs;
+          _ } ->
+          let constructors =
+            List.map
+              (fun cd ->
+                 match cd.pcd_args with
+                   | Pcstr_record _ ->
+                       Location.raise_errorf ~loc:cd.pcd_loc
+                         "Unsupported inline record"
+                   | Pcstr_tuple [] -> `Constant cd.pcd_name.txt
+                   | Pcstr_tuple tys ->
+                       `Non_constant
+                         (cd.pcd_name.txt,
+                          List.map (tyexpr_of_core_type ~ptype_params) tys))
+              constrs
+          in
+          PT.Type_decl
+            (name, List.map extract_type_param ptype_params,
+             `Sum ({ PT.type_name = name; constructors }, []), [])
+
       | _ ->
           Location.raise_errorf ~loc "Expected a record or simple type definition"
 
