@@ -83,7 +83,11 @@ let is_record_type name =
       | PT.Type_decl _ -> false )
     !rev_decls
 
-let decl_of_ty ~loc tydecl =
+(* force_message: set when using  extprot.message  to (1) reject
+ * anything that is not a monomorphic record type and (2) register the
+ * declaration as a message declaration whose (de)serialization functions
+ * are exported *)
+let decl_of_ty ~export ~force_message ~loc tydecl =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
     match tydecl with
@@ -91,42 +95,27 @@ let decl_of_ty ~loc tydecl =
           ptype_params = []; ptype_cstrs = [];
           ptype_kind = Ptype_record fs; _ } ->
           let mexpr = `Message_record (List.map field_of_label_decl fs) in
-            PT.Message_decl (name, mexpr, Export_YES, [])
-
-      | { ptype_name = { txt = name; _ };
-          ptype_params; ptype_cstrs = [];
-          ptype_kind = Ptype_record fs; _ } ->
-          let r =
-            { PT.record_name = name;
-              record_fields = List.map field_of_label_decl fs;
-            }
-          in
-            PT.Type_decl
-              (name, List.map extract_type_param ptype_params, `Record (r, []), [])
+            PT.Message_decl (name, mexpr, (if export then Export_YES else Export_NO), [])
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
           ptype_kind = Ptype_abstract;
-          ptype_manifest = Some cty; _ } -> begin
+          ptype_manifest = Some cty; ptype_loc; _ } -> begin
           match tyexpr_of_core_type cty with
             | `App (tyn, tys, opts) when is_record_type tyn ->
                 let mexpr = `Message_app (tyn, tys, opts) in
                   PT.Message_decl (name, mexpr, Export_YES, [])
-            | _ ->
+            | _ when not force_message ->
                 PT.Type_decl (name, [], (tyexpr_of_core_type cty :> PT.type_expr), [])
+            | _ ->
+                Location.raise_errorf ~loc:ptype_loc
+                  "Message declaration expected (disjoin union or record type)"
         end
 
       | { ptype_name = { txt = name; _ };
           ptype_params; ptype_cstrs = [];
-          ptype_kind = Ptype_abstract;
-          ptype_manifest = Some cty; _ } ->
-          PT.Type_decl
-            (name, List.map extract_type_param ptype_params,
-             (tyexpr_of_core_type ~ptype_params cty :> PT.type_expr), [])
-
-      | { ptype_name = { txt = name; _ };
-          ptype_params; ptype_cstrs = [];
           ptype_kind = Ptype_variant constrs;
+          ptype_loc;
           _ } -> begin
 
           (* check whether all constructors are records or tuples with
@@ -159,7 +148,10 @@ let decl_of_ty ~loc tydecl =
                                List.find_map
                                  (function
                                    | PT.Type_decl (n, _, `Record (r, _opts), _) ->
-                                       if n = name then Some r
+                                       if n = name then Some r.PT.record_name
+                                       else None
+                                   | PT.Message_decl (n, _, _, _) ->
+                                       if n = name then Some n
                                        else None
                                    | _ -> None)
                                  !rev_decls
@@ -167,10 +159,10 @@ let decl_of_ty ~loc tydecl =
                                | None ->
                                    Location.raise_errorf ~loc:cd.pcd_loc
                                      "Unknown record type"
-                               | Some r ->
+                               | Some recname ->
                                    (cd.pcd_name.txt,
                                     `Message_app
-                                      (r.PT.record_name,
+                                      (recname,
                                        List.map tyexpr_of_core_type params, []))
                            end
                          | Pcstr_tuple _ ->
@@ -180,7 +172,7 @@ let decl_of_ty ~loc tydecl =
                 let mexpr = `Message_sum branches in
                   PT.Message_decl (name, mexpr, Export_YES, [])
 
-            | _ ->
+            | _ when not force_message ->
                 (* some constructor does not correspond to a record,
                  * treat this as a regular sum type *)
                 let constructors =
@@ -200,19 +192,46 @@ let decl_of_ty ~loc tydecl =
                   PT.Type_decl
                     (name, List.map extract_type_param ptype_params,
                      `Sum ({ PT.type_name = name; constructors }, []), [])
+
+            | _ (* force_message *) ->
+                Location.raise_errorf ~loc:ptype_loc
+                  "Message declaration expected (disjoin union or record type)"
         end
+
+      | _ when force_message ->
+          Location.raise_errorf ~loc:tydecl.ptype_loc
+            "Message declaration expected (disjoin union or record type)"
+
+      | { ptype_name = { txt = name; _ };
+          ptype_params; ptype_cstrs = [];
+          ptype_kind = Ptype_record fs; _ } ->
+          let r =
+            { PT.record_name = name;
+              record_fields = List.map field_of_label_decl fs;
+            }
+          in
+            PT.Type_decl
+              (name, List.map extract_type_param ptype_params, `Record (r, []), [])
+
+      | { ptype_name = { txt = name; _ };
+          ptype_params; ptype_cstrs = [];
+          ptype_kind = Ptype_abstract;
+          ptype_manifest = Some cty; _ } ->
+          PT.Type_decl
+            (name, List.map extract_type_param ptype_params,
+             (tyexpr_of_core_type ~ptype_params cty :> PT.type_expr), [])
 
       | _ ->
           Location.raise_errorf ~loc "Expected a record or simple type definition"
 
 module G = Gencode.Make(Gen_OCaml)
 
-let expand_function ~loc ~path str =
+let expand_function ~force_message ~export ~loc ~path str =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
     match str with
       | [ { pstr_desc = Pstr_type (_, [ ty ]) } ] ->
-          let decl = decl_of_ty ~loc ty in
+          let decl = decl_of_ty ~force_message ~export ~loc ty in
             rev_decls := decl :: !rev_decls;
             let decls = List.rev !rev_decls in
             let implem, signature =
@@ -230,15 +249,23 @@ let expand_function ~loc ~path str =
       | _ ->
           Location.raise_errorf ~loc "Expected a single type definition"
 
-let extension =
+let extension1 =
   Ppxlib.Extension.declare
     "extprot"
     Ppxlib.Extension.Context.structure_item
     Ppxlib.Ast_pattern.(pstr __)
-    expand_function
+    (expand_function ~force_message:false ~export:false)
 
-let rule = Ppxlib.Context_free.Rule.extension extension
+let extension2 =
+  Ppxlib.Extension.declare
+    "extprot.message"
+    Ppxlib.Extension.Context.structure_item
+    Ppxlib.Ast_pattern.(pstr __)
+    (expand_function ~force_message:true ~export:true)
 
-let () = Ppxlib.Driver.register_transformation ~rules:[rule] "extprot"
+let rule1 = Ppxlib.Context_free.Rule.extension extension1
+let rule2 = Ppxlib.Context_free.Rule.extension extension2
+
+let () = Ppxlib.Driver.register_transformation ~rules:[rule1; rule2] "extprot"
 
 let () = Ppxlib.Driver.standalone ()
