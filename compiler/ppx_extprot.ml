@@ -5,18 +5,6 @@ open Ppxlib
 
 module PT = Protocol_types
 
-let source =
-{code|
-
-module Foo =
-struct
-  type foo = { a : int; b : bar }
-  let read b = failwith "boom"
-  let write b x = failwith "boom"
-end
-
-|code}
-
 let rec flatten_longident_path ~loc = function
   | Ldot (a, b) -> flatten_longident_path ~loc a @ [b]
   | Lident x -> [x]
