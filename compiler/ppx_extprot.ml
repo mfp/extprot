@@ -229,30 +229,33 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
 
 module G = Gencode.Make(Gen_OCaml)
 
+let register_decl_and_gencode ~loc decl =
+  rev_decls := decl :: !rev_decls;
+  let decls = List.rev !rev_decls in
+  let implem, signature =
+    try
+      G.generate_code
+        ~global_opts:[]
+        ~width:100
+        (Gencode.collect_bindings decls) [PT.Decl decl]
+    with exn ->
+      Location.raise_errorf ~loc
+        "Extprot codegen error: %s" (Printexc.to_string exn)
+  in
+    begin match Parse.implementation @@ Lexing.from_string implem with
+      | _ :: str :: _ ->
+          (* skip the first element: *)
+          str
+      | _ -> Location.raise_errorf ~loc "Codegen error"
+    end
+
 let expand_function ~force_message ~export ~loc ~path str =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
     match str with
       | [ { pstr_desc = Pstr_type (_, [ ty ]) } ] ->
-          let decl = decl_of_ty ~force_message ~export ~loc ty in
-            rev_decls := decl :: !rev_decls;
-            let decls = List.rev !rev_decls in
-            let implem, signature =
-              try
-                G.generate_code
-                  ~global_opts:[]
-                  ~width:100
-                  (Gencode.collect_bindings decls) [PT.Decl decl]
-              with exn ->
-                Location.raise_errorf ~loc
-                  "Extprot codegen error: %s" (Printexc.to_string exn)
-            in
-              begin match Parse.implementation @@ Lexing.from_string implem with
-                | _ :: str :: _ ->
-                    (* skip the first element: *)
-                    str
-                | _ -> Location.raise_errorf ~loc "Codegen error"
-              end
+          register_decl_and_gencode ~loc @@
+          decl_of_ty ~force_message ~export ~loc ty
       | _ ->
           Location.raise_errorf ~loc "Expected a single type definition"
 
@@ -322,24 +325,7 @@ let expand_subset ~loc ~path str =
                   Location.raise_errorf ~loc
                     "Only one of [@@include a,b,c] or [@@include a,b,c] allowed"
           in
-            rev_decls := decl :: !rev_decls;
-            let decls = List.rev !rev_decls in
-            let implem, signature =
-              try
-                G.generate_code
-                  ~global_opts:[]
-                  ~width:100
-                  (Gencode.collect_bindings decls) [PT.Decl decl]
-              with exn ->
-                Location.raise_errorf ~loc
-                  "Extprot codegen error: %s" (Printexc.to_string exn)
-            in
-              begin match Parse.implementation @@ Lexing.from_string implem with
-                | _ :: str :: _ ->
-                    (* skip the first element: *)
-                    str
-                | _ -> Location.raise_errorf ~loc "Codegen error"
-              end
+            register_decl_and_gencode ~loc decl
       | _ ->
           Location.raise_errorf ~loc "Expected a single type definition"
 
