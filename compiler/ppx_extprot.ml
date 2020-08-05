@@ -73,6 +73,16 @@ let extract_type_param (ty, _) =
     | Ptyp_var s -> PT.Type_param.type_param_of_string s
     | _ -> Location.raise_errorf ~loc:ty.ptyp_loc "Type param is not a type var."
 
+let rev_decls = ref []
+
+let is_record_type name =
+  List.exists
+    (function
+      | PT.Message_decl _ -> false
+      | PT.Type_decl (n, _, `Record _, _) -> n = name
+      | PT.Type_decl _ -> false )
+    !rev_decls
+
 let decl_of_ty ~loc tydecl =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
@@ -97,8 +107,14 @@ let decl_of_ty ~loc tydecl =
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
           ptype_kind = Ptype_abstract;
-          ptype_manifest = Some cty; _ } ->
-          PT.Type_decl (name, [], (tyexpr_of_core_type cty :> PT.type_expr), [])
+          ptype_manifest = Some cty; _ } -> begin
+          match tyexpr_of_core_type cty with
+            | `App (tyn, tys, opts) when is_record_type tyn ->
+                let mexpr = `Message_app (tyn, tys, opts) in
+                  PT.Message_decl (name, mexpr, Export_YES, [])
+            | _ ->
+                PT.Type_decl (name, [], (tyexpr_of_core_type cty :> PT.type_expr), [])
+        end
 
       | { ptype_name = { txt = name; _ };
           ptype_params; ptype_cstrs = [];
@@ -110,8 +126,6 @@ let decl_of_ty ~loc tydecl =
 
       | _ ->
           Location.raise_errorf ~loc "Expected a record or simple type definition"
-
-let rev_decls = ref []
 
 module G = Gencode.Make(Gen_OCaml)
 
