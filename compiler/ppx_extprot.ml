@@ -127,24 +127,80 @@ let decl_of_ty ~loc tydecl =
       | { ptype_name = { txt = name; _ };
           ptype_params; ptype_cstrs = [];
           ptype_kind = Ptype_variant constrs;
-          _ } ->
-          let constructors =
-            List.map
+          _ } -> begin
+
+          (* check whether all constructors are records or tuples with
+           * 1 type argument that is actually a record type application
+           * *)
+          match
+            List.for_all
               (fun cd ->
                  match cd.pcd_args with
-                   | Pcstr_record _ ->
-                       Location.raise_errorf ~loc:cd.pcd_loc
-                         "Unsupported inline record"
-                   | Pcstr_tuple [] -> `Constant cd.pcd_name.txt
-                   | Pcstr_tuple tys ->
-                       `Non_constant
-                         (cd.pcd_name.txt,
-                          List.map (tyexpr_of_core_type ~ptype_params) tys))
+                   | Pcstr_record _ -> true
+                   | Pcstr_tuple
+                       [{ptyp_desc = Ptyp_constr ({txt = Lident name; _ }, _)}] ->
+                       is_record_type name
+                   | Pcstr_tuple _ -> false)
               constrs
-          in
-          PT.Type_decl
-            (name, List.map extract_type_param ptype_params,
-             `Sum ({ PT.type_name = name; constructors }, []), [])
+          with
+            | true when ptype_params = [] ->
+                (* all constructors correspond to a record,
+                 * treat this as a disjoint union of messages *)
+                let branches =
+                  List.map
+                    (fun cd ->
+                       match cd.pcd_args with
+                         | Pcstr_record fs ->
+                             (cd.pcd_name.txt,
+                              `Message_record (List.map field_of_label_decl fs))
+                         | Pcstr_tuple
+                             [{ptyp_desc = Ptyp_constr ({txt = Lident name; _ }, params)}] -> begin
+                             match
+                               List.find_map
+                                 (function
+                                   | PT.Type_decl (n, _, `Record (r, _opts), _) ->
+                                       if n = name then Some r
+                                       else None
+                                   | _ -> None)
+                                 !rev_decls
+                             with
+                               | None ->
+                                   Location.raise_errorf ~loc:cd.pcd_loc
+                                     "Unknown record type"
+                               | Some r ->
+                                   (cd.pcd_name.txt,
+                                    `Message_app
+                                      (r.PT.record_name,
+                                       List.map tyexpr_of_core_type params, []))
+                           end
+                         | Pcstr_tuple _ ->
+                             Location.raise_errorf ~loc:cd.pcd_loc
+                               "Invalid type in message union branch")
+                    constrs in
+                let mexpr = `Message_sum branches in
+                  PT.Message_decl (name, mexpr, Export_YES, [])
+
+            | _ ->
+                (* some constructor does not correspond to a record,
+                 * treat this as a regular sum type *)
+                let constructors =
+                  List.map
+                    (fun cd ->
+                       match cd.pcd_args with
+                         | Pcstr_record _ ->
+                             Location.raise_errorf ~loc:cd.pcd_loc
+                               "Unsupported inline record"
+                         | Pcstr_tuple [] -> `Constant cd.pcd_name.txt
+                         | Pcstr_tuple tys ->
+                             `Non_constant
+                               (cd.pcd_name.txt,
+                                List.map (tyexpr_of_core_type ~ptype_params) tys))
+                    constrs
+                in
+                  PT.Type_decl
+                    (name, List.map extract_type_param ptype_params,
+                     `Sum ({ PT.type_name = name; constructors }, []), [])
+        end
 
       | _ ->
           Location.raise_errorf ~loc "Expected a record or simple type definition"

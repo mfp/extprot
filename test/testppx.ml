@@ -13,3 +13,4 @@ type%extprot t9 = { a : int; b : (int, bool array) t8 }
 type%extprot t10 = (int, t4) t8
 type%extprot t11 = A | B of string
 type%extprot t12 = { a : t11 }
+type%extprot t13 = A of { a : int; b : float } | B of { v : bool }
