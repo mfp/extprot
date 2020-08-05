@@ -238,10 +238,101 @@ let expand_function ~force_message ~export ~loc ~path str =
             rev_decls := decl :: !rev_decls;
             let decls = List.rev !rev_decls in
             let implem, signature =
-              G.generate_code
-                ~global_opts:[]
-                ~width:100
-                (Gencode.collect_bindings decls) [PT.Decl decl]
+              try
+                G.generate_code
+                  ~global_opts:[]
+                  ~width:100
+                  (Gencode.collect_bindings decls) [PT.Decl decl]
+              with exn ->
+                Location.raise_errorf ~loc
+                  "Extprot codegen error: %s" (Printexc.to_string exn)
+            in
+              begin match Parse.implementation @@ Lexing.from_string implem with
+                | _ :: str :: _ ->
+                    (* skip the first element: *)
+                    str
+                | _ -> Location.raise_errorf ~loc "Codegen error"
+              end
+      | _ ->
+          Location.raise_errorf ~loc "Expected a single type definition"
+
+let include_attr =
+  Attribute.declare "extprot.include"
+    Attribute.Context.type_declaration
+    Ast_pattern.(single_expr_payload __)
+    (fun x -> x)
+
+let exclude_attr =
+  Attribute.declare "extprot.exclude"
+    Attribute.Context.type_declaration
+    Ast_pattern.(single_expr_payload __)
+    (fun x -> x)
+
+let split_lid_tuple e = match e.pexp_desc with
+  | Pexp_ident { txt = (Lident s); _ } -> [s, (None, None)]
+  | Pexp_tuple l ->
+      List.map
+        (function
+          | { pexp_desc = Pexp_ident { txt = (Lident s); _ }; _ } ->
+              (s, (None, None))
+          | { pexp_loc; _ } ->
+              Location.raise_errorf ~loc:pexp_loc
+                "Expected a lowercase identifier")
+        l
+  | _ ->
+      Location.raise_errorf ~loc:e.pexp_loc
+        "Expected a tuple like   field1, field2, field3 "
+
+let subset_decl_of_includes ~name ~orig inc =
+  let fields = split_lid_tuple inc in
+    PT.Message_decl
+      (name, `Message_subset (orig, fields, `Include), PT.Export_YES, [])
+
+let subset_decl_of_excludes ~name ~orig inc =
+  let fields = split_lid_tuple inc in
+    PT.Message_decl
+      (name, `Message_subset (orig, fields, `Exclude), PT.Export_YES, [])
+
+let expand_subset ~loc ~path str =
+  let module Ast_builder = (val Ast_builder.make loc) in
+  let open Ast_builder in
+    match str with
+      | [ { pstr_desc =
+              Pstr_type
+                (_, [ { ptype_name = { txt = name; _ };
+                        ptype_params = []; ptype_cstrs = [];
+                        ptype_kind = Ptype_abstract;
+                        ptype_loc;
+                        ptype_manifest =
+                          Some { ptyp_desc = Ptyp_constr ({ txt = Lident orig; _ }, _); _ }
+                      } as tydecl ]);
+            _
+          }
+        ] ->
+          let includes = Attribute.get include_attr tydecl in
+          let excludes = Attribute.get exclude_attr tydecl in
+          let decl =
+            match includes, excludes with
+              | Some inc, None -> subset_decl_of_includes ~name ~orig inc
+              | None, Some exc -> subset_decl_of_excludes ~name ~orig exc
+              | None, None ->
+                  Location.raise_errorf ~loc
+                    "Need either [@@include a,b,c] or [@@include a,b,c] attribute"
+              | Some _, Some _ ->
+                  Location.raise_errorf ~loc
+                    "Only one of [@@include a,b,c] or [@@include a,b,c] allowed"
+          in
+            rev_decls := decl :: !rev_decls;
+            let decls = List.rev !rev_decls in
+            let implem, signature =
+              try
+                G.generate_code
+                  ~global_opts:[]
+                  ~width:100
+                  (Gencode.collect_bindings decls) [PT.Decl decl]
+              with exn ->
+                Location.raise_errorf ~loc
+                  "Extprot codegen error: %s" (Printexc.to_string exn)
             in
               begin match Parse.implementation @@ Lexing.from_string implem with
                 | _ :: str :: _ ->
@@ -266,9 +357,17 @@ let extension2 =
     Ppxlib.Ast_pattern.(pstr __)
     (expand_function ~force_message:true ~export:true)
 
+let extension3 =
+  Ppxlib.Extension.declare
+    "extprot.subset"
+    Ppxlib.Extension.Context.structure_item
+    Ppxlib.Ast_pattern.(pstr __)
+    expand_subset
+
 let rule1 = Ppxlib.Context_free.Rule.extension extension1
 let rule2 = Ppxlib.Context_free.Rule.extension extension2
+let rule3 = Ppxlib.Context_free.Rule.extension extension3
 
-let () = Ppxlib.Driver.register_transformation ~rules:[rule1; rule2] "extprot"
+let () = Ppxlib.Driver.register_transformation ~rules:[rule1; rule2; rule3] "extprot"
 
 let () = Ppxlib.Driver.standalone ()

@@ -20,3 +20,8 @@ type%extprot t16 = A of t12 | B of { v : bool } | C of t15
 type%message t17 = { v0 : int; v1 : t14 }
 type%message t18 = { v0 : int; v2 : Foo.Bar.baz }
 type%message t19 = A.B.C.foo
+
+type%message subset1 = { a : int; b : float; c : int list }
+type%subset subset1a = subset1 [@@include a, c]
+type%subset subset1b = subset1 [@@exclude a]
+(* type%subset foo = bar [@@exclude a, b, c, d] *)
