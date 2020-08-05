@@ -19,3 +19,4 @@ type%message t15 = { v0 : int }
 type%extprot t16 = A of t12 | B of { v : bool } | C of t15
 type%message t17 = { v0 : int; v1 : t14 }
 type%message t18 = { v0 : int; v2 : Foo.Bar.baz }
+type%message t19 = A.B.C.foo
