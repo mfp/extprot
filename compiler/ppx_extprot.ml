@@ -42,6 +42,13 @@ let default_opt_of_core_type ty =
         ["default", s]
     | Some e -> ["default", string_of_expr e]
 
+let default_opt_for_int64 ty =
+  match default_opt_of_core_type ty with
+    (* we remove the trailing L if present *)
+    | [ k, v ] when v <> "" && v.[String.length v - 1] = 'L' ->
+        [ k, String.sub v 0 (String.length v - 1) ]
+    | x -> x
+
 let rec tyexpr_of_core_type ?(ptype_params = []) ty =
   let module Ast_builder = (val Ast_builder.make ty.ptyp_loc) in
   let open Ast_builder in
@@ -52,13 +59,7 @@ let rec tyexpr_of_core_type ?(ptype_params = []) ty =
       | Ptyp_constr ({ txt = Lident "byte"; _ }, []) -> `Byte (default_opt_of_core_type ty)
       | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> `Int (default_opt_of_core_type ty)
       | Ptyp_constr ({ txt = Lident "float"; _ }, []) -> `Float (default_opt_of_core_type ty)
-      | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) ->
-          `Long_int
-            (match default_opt_of_core_type ty with
-              (* we remove the trailing L if present *)
-              | [ k, v ] when v <> "" && v.[String.length v - 1] = 'L' ->
-                  [ k, String.sub v 0 (String.length v - 1) ]
-              | x -> x)
+      | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) -> `Long_int (default_opt_for_int64 ty)
       | Ptyp_constr ({ txt = Lident "string"; _ }, []) -> `String (default_opt_of_core_type ty)
 
       (* complex *)
@@ -228,6 +229,18 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                  [ type_equals_opt_of_tydecl tydecl;
                    type_opt_of_tydecl tydecl;
                  ])
+
+      (* special-case Int64.t, which is NOT a message alias *)
+      | { ptype_name = { txt = name; _ };
+          ptype_params = []; ptype_cstrs = [];
+          ptype_kind = Ptype_abstract;
+          ptype_loc;
+          ptype_manifest =
+            Some ({ ptyp_desc = Ptyp_constr ({ txt = (Ldot (Lident "Int64", "t")); _ }, []); _ } as ty);
+          _ } ->
+          PT.Type_decl
+            (name, [], `Long_int (default_opt_for_int64 ty),
+             type_opt_of_tydecl tydecl)
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
