@@ -247,11 +247,11 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
             Some { ptyp_desc = Ptyp_constr ({ txt = (Ldot _ as path); _ }, []); _ };
           _ } ->
 
-          let path, name = match List.rev @@ flatten_longident_path ~loc:ptype_loc path with
+          let opath, oname = match List.rev @@ flatten_longident_path ~loc:ptype_loc path with
             | name :: rev_path -> (List.rev rev_path, name)
             | [] -> Location.raise_errorf ~loc:ptype_loc "Invalid longindent path" in
 
-          let mexpr = `Message_alias (path, name) in
+          let mexpr = `Message_alias (opath, oname) in
             PT.Message_decl (name, mexpr, (if export then Export_YES else Export_NO), [])
 
       | { ptype_name = { txt = name; _ };

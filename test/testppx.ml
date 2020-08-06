@@ -60,3 +60,4 @@ type%message t21  = { v0 : string; v1 : (string [@default "foo"]) [@lazy] }
 type%message t22  = { v0 : string; v1 : (Int64.t [@default 42L]) }
 type%extprot foo8 = Int64.t [@default 1111L]
 type%extprot t23 = { v0 : foo8; v1 : foo8 }
+type%message t24 = Foobar.foo
