@@ -8,10 +8,31 @@ module PT = Protocol_types
 let some x = Some x
 let is_some = function Some _ -> true | None -> false
 
+let formatter_output f =
+  let b   = Buffer.create 13 in
+  let fmt = Format.formatter_of_buffer b in
+    f fmt;
+    Format.pp_print_flush fmt ();
+    Buffer.contents b
+
+let string_of_type ty = formatter_output (fun fmt -> Pprintast.core_type fmt ty)
+let string_of_expr ty = formatter_output (fun fmt -> Pprintast.expression fmt ty)
+
 let rec flatten_longident_path ~loc = function
   | Ldot (a, b) -> flatten_longident_path ~loc a @ [b]
   | Lident x -> [x]
   | Lapply _ -> Location.raise_errorf ~loc "Invalid longident path"
+
+let default_attr =
+  Attribute.declare "extprot.default"
+    Attribute.Context.core_type
+    Ast_pattern.(single_expr_payload __)
+    (fun e -> e)
+
+let default_opt_of_core_type ty =
+  match Attribute.get default_attr ty with
+    | None -> []
+    | Some e -> ["default", string_of_expr e]
 
 let rec tyexpr_of_core_type ?(ptype_params = []) ty =
   let module Ast_builder = (val Ast_builder.make ty.ptyp_loc) in
@@ -19,12 +40,30 @@ let rec tyexpr_of_core_type ?(ptype_params = []) ty =
     match ty.ptyp_desc with
       | Ptyp_tuple tys ->
           `Tuple (List.map (tyexpr_of_core_type ~ptype_params) tys, [])
-      | Ptyp_constr ({ txt = Lident "bool"; _ }, []) -> `Bool []
-      | Ptyp_constr ({ txt = Lident "byte"; _ }, []) -> `Byte []
-      | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> `Int []
-      | Ptyp_constr ({ txt = Lident "float"; _ }, []) -> `Float []
-      | Ptyp_constr ({ txt = Lident "string"; _ }, []) -> `String []
-      | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) -> `Long_int []
+
+      (* primitive *)
+      | Ptyp_constr ({ txt = Lident "bool"; _ }, []) -> `Bool (default_opt_of_core_type ty)
+      | Ptyp_constr ({ txt = Lident "byte"; _ }, []) -> `Byte (default_opt_of_core_type ty)
+      | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> `Int (default_opt_of_core_type ty)
+      | Ptyp_constr ({ txt = Lident "float"; _ }, []) -> `Float (default_opt_of_core_type ty)
+      | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) -> `Long_int (default_opt_of_core_type ty)
+      | Ptyp_constr ({ txt = Lident "string"; _ }, []) ->
+
+          (* we cannot use default_opt_of_core_type because the default option
+           * works as in
+           *    type string_hohoho = string options "default" = "hohoho"
+           * and string_of_expr would turn add extra quotes, turning it into
+           *  "\"hohoho\"".
+           * *)
+          `String
+            (match Attribute.get default_attr ty with
+              | None -> []
+              | Some { pexp_desc = Pexp_constant (Pconst_string (s, _)); _ } ->
+                  ["default", s]
+              | Some { pexp_loc; _ } ->
+                  Location.raise_errorf ~loc:pexp_loc
+                    "Expected string literal")
+
       | Ptyp_constr ({ txt = Lident "list"; _ }, [ty]) ->
           `List (tyexpr_of_core_type ~ptype_params ty, [])
       | Ptyp_constr ({ txt = Lident "array"; _ }, [ty]) ->
@@ -146,16 +185,6 @@ let type_equals_opt_of_tydecl t =
         let path = flatten_longident_path ~loc:ty.ptyp_loc path in
           [ "ocaml.type_equals", String.concat "." path ]
     | Some { ptyp_loc; _ }, _ -> []
-
-let formatter_output f =
-  let b   = Buffer.create 13 in
-  let fmt = Format.formatter_of_buffer b in
-    f fmt;
-    Format.pp_print_flush fmt ();
-    Buffer.contents b
-
-let string_of_type ty = formatter_output (fun fmt -> Pprintast.core_type fmt ty)
-let string_of_expr ty = formatter_output (fun fmt -> Pprintast.expression fmt ty)
 
 let type_opt_of_tydecl t =
   match Attribute.get type_attr t with

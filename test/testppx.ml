@@ -51,3 +51,8 @@ type%message foobar = { v : foo3 [@lazy] }
 type%extprot foo4 = string
 [@@type type t = A.foo let to_t = A.from_string let from_t = A.to_string let default = `ABCD ]
 type%message foobar2 = { v : foo4 [@lazy] }
+
+type%extprot foo5 = string [@default "foobar"]
+type%extprot foo6 = int [@default 42]
+type%extprot foo7 = float [@default 42.0]
+type%message t20  = { v0 : foo5[@lazy]; v1 : foo6; v2 : foo7 }
