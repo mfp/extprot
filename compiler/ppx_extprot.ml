@@ -32,14 +32,20 @@ let default_attr =
 let default_opt_of_core_type ty =
   match Attribute.get default_attr ty with
     | None -> []
+    | Some { pexp_desc = Pexp_constant (Pconst_string (s, _)); _ } ->
+        (* we must be especially careful with string literals, because the
+         * default option works as in
+         *    type string_hohoho = string options "default" = "hohoho"
+         * and string_of_expr would turn add extra quotes, turning it into
+         *  "\"hohoho\"".
+         * *)
+        ["default", s]
     | Some e -> ["default", string_of_expr e]
 
 let rec tyexpr_of_core_type ?(ptype_params = []) ty =
   let module Ast_builder = (val Ast_builder.make ty.ptyp_loc) in
   let open Ast_builder in
     match ty.ptyp_desc with
-      | Ptyp_tuple tys ->
-          `Tuple (List.map (tyexpr_of_core_type ~ptype_params) tys, [])
 
       (* primitive *)
       | Ptyp_constr ({ txt = Lident "bool"; _ }, []) -> `Bool (default_opt_of_core_type ty)
@@ -47,39 +53,34 @@ let rec tyexpr_of_core_type ?(ptype_params = []) ty =
       | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> `Int (default_opt_of_core_type ty)
       | Ptyp_constr ({ txt = Lident "float"; _ }, []) -> `Float (default_opt_of_core_type ty)
       | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) -> `Long_int (default_opt_of_core_type ty)
-      | Ptyp_constr ({ txt = Lident "string"; _ }, []) ->
+      | Ptyp_constr ({ txt = Lident "string"; _ }, []) -> `String (default_opt_of_core_type ty)
 
-          (* we cannot use default_opt_of_core_type because the default option
-           * works as in
-           *    type string_hohoho = string options "default" = "hohoho"
-           * and string_of_expr would turn add extra quotes, turning it into
-           *  "\"hohoho\"".
-           * *)
-          `String
-            (match Attribute.get default_attr ty with
-              | None -> []
-              | Some { pexp_desc = Pexp_constant (Pconst_string (s, _)); _ } ->
-                  ["default", s]
-              | Some { pexp_loc; _ } ->
-                  Location.raise_errorf ~loc:pexp_loc
-                    "Expected string literal")
-
+      (* complex *)
+      | Ptyp_tuple tys ->
+          `Tuple (List.map (tyexpr_of_core_type ~ptype_params) tys, [])
       | Ptyp_constr ({ txt = Lident "list"; _ }, [ty]) ->
           `List (tyexpr_of_core_type ~ptype_params ty, [])
       | Ptyp_constr ({ txt = Lident "array"; _ }, [ty]) ->
           `Array (tyexpr_of_core_type ~ptype_params ty, [])
+
+      (* invalid *)
       | Ptyp_constr ({ txt = Lident ("list" | "array"); _ }, ([] | _ :: _))
       | Ptyp_constr ({ txt = Lident ("bool" | "byte" | "int" | "float" | "string"); _ }, _ :: _)
       | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, _ :: _) ->
           Location.raise_errorf ~loc:ty.ptyp_loc "Polymorphic type overrides primitive type"
+
+      (* type application *)
       | Ptyp_constr ({ txt = Lident tyn; _ }, []) -> `App (tyn, [], [])
       | Ptyp_constr ({ txt = Lident tyn; _ }, tys) ->
           `App (tyn, List.map (tyexpr_of_core_type ~ptype_params) tys, [])
       | Ptyp_constr ({ txt = Ldot (path, name); loc; }, []) ->
           `Ext_app (flatten_longident_path ~loc path, name, [], [])
+
+      (* type vars *)
       | Ptyp_var s -> `Type_param (PT.Type_param.type_param_of_string s)
-      | Ptyp_constr _ ->
-          Location.raise_errorf ~loc:ty.ptyp_loc "Invalid type"
+
+      (* other unsupported types *)
+      | Ptyp_constr _
       | Ptyp_any
       | Ptyp_arrow _
       | Ptyp_object _
