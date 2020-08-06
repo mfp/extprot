@@ -191,7 +191,7 @@ let type_equals_opt_of_tydecl t =
    * *)
   match t.ptype_manifest, t.ptype_kind with
     | None, _ -> []
-    | Some ({ ptyp_desc = Ptyp_constr ({ txt = path; _}, []); _ } as ty),
+    | Some ({ ptyp_desc = Ptyp_constr ({ txt = path; _ }, _); _ } as ty),
       (Ptype_variant _ | Ptype_record _) ->
         let path = flatten_longident_path ~loc:ty.ptyp_loc path in
           [ "ocaml.type_equals", String.concat "." path ]
