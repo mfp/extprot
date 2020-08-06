@@ -5,6 +5,7 @@ open Ppxlib
 
 module PT = Protocol_types
 
+let some x = Some x
 let is_some = function Some _ -> true | None -> false
 
 let rec flatten_longident_path ~loc = function
@@ -87,9 +88,13 @@ let type_attr =
         (value_binding ~pat:(ppat_var (string "to_t")) ~expr:__ ^:: nil) ^::
       pstr_value nonrecursive
         (value_binding ~pat:(ppat_var (string "from_t")) ~expr:__ ^:: nil) ^::
-      nil)
-    (fun _params _cstrs constr_lident _ to_t_expr from_t_expr ->
-       (constr_lident, to_t_expr, from_t_expr))
+      alt_option
+        (pstr_value nonrecursive
+           (value_binding ~pat:(ppat_var (string "default")) ~expr:__ ^:: nil) ^::
+         nil)
+        nil)
+    (fun _params _cstrs constr_lident _ to_t_expr from_t_expr default ->
+       (constr_lident, to_t_expr, from_t_expr, default))
 
 let field_of_label_decl ?(autolazy = false) pld =
   let module Ast_builder = (val Ast_builder.make pld.pld_loc) in
@@ -155,13 +160,17 @@ let string_of_expr ty = formatter_output (fun fmt -> Pprintast.expression fmt ty
 let type_opt_of_tydecl t =
   match Attribute.get type_attr t with
     | None -> []
-    | Some (constr_lident, to_t_expr, from_t_expr) ->
-        [ "ocaml._type__type",
-          String.concat "." @@ flatten_longident_path ~loc:t.ptype_loc constr_lident;
+    | Some (constr_lident, to_t_expr, from_t_expr, default) ->
+        List.filter_map (function (k, None) -> None | (k, Some v) -> Some (k, v))
+          [
+            "ocaml._type__type",
+            some @@ String.concat "." @@ flatten_longident_path ~loc:t.ptype_loc constr_lident;
 
-          "ocaml._type__to_t", string_of_expr to_t_expr;
+            "ocaml._type__to_t", some @@ string_of_expr to_t_expr;
 
-          "ocaml._type__from_t", string_of_expr from_t_expr;
+            "ocaml._type__from_t", some @@ string_of_expr from_t_expr;
+
+            "ocaml._type__default", Option.map string_of_expr default;
         ]
 
 (* force_message: set when using  extprot.message  to (1) reject

@@ -205,16 +205,17 @@ let get_type_info opts =
   match
     lookup_option "_type__type" opts,
     lookup_option "_type__to_t" opts,
-    lookup_option "_type__from_t" opts
+    lookup_option "_type__from_t" opts,
+    lookup_option "_type__default" opts
   with
-    | None, None, None -> get_type_info opts
-    | Some ty, Some to_t, Some from_t ->
+    | None, None, None, _ -> get_type_info opts
+    | Some ty, Some to_t, Some from_t, default ->
         Some {
           ty;
           ctyp  = ctyp_of_path ty;
           fromf = expr_of_string to_t;
           tof   = expr_of_string from_t;
-          default = None; (* FIXME *)
+          default = Option.map expr_of_string default;
         }
     | _ ->
         failwith
