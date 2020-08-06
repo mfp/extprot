@@ -38,3 +38,4 @@ type%subset lazy3b = lazy3 [@@include v1[@lazy], v2, v3]
 type%subset lazy1a = lazy1 [@@include v1[@eager]]
 
 type%subset subset2b = subset2 [@@include (v1 [@lazy] : subset1a), v2]
+type%subset subset2c = subset2 [@@include (v1 [@lazy] : subset1a)]
