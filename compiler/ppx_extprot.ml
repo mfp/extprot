@@ -140,6 +140,12 @@ let type_attr =
     (fun _params _cstrs constr_lident _ to_t_expr from_t_expr default ->
        (constr_lident, to_t_expr, from_t_expr, default))
 
+let pp_attr =
+  Attribute.declare "extprot.pp"
+    Attribute.Context.type_declaration
+    Ast_pattern.(single_expr_payload __)
+    (fun e -> e)
+
 let field_of_label_decl ?(autolazy = false) pld =
   let module Ast_builder = (val Ast_builder.make pld.pld_loc) in
   let open Ast_builder in
@@ -207,6 +213,11 @@ let type_opt_of_tydecl t =
             "ocaml._type__default", Option.map string_of_expr default;
         ]
 
+let pp_opt_of_tydecl t =
+  match Attribute.get pp_attr t with
+    | None -> []
+    | Some e -> [ "ocaml.pp", string_of_expr e ]
+
 (* force_message: set when using  extprot.message  to (1) reject
  * anything that is not a monomorphic record type and (2) register the
  * declaration as a message declaration whose (de)serialization functions
@@ -237,7 +248,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
           _ } ->
           PT.Type_decl
             (name, [], `Long_int (default_opt_of_core_type ty),
-             type_opt_of_tydecl tydecl)
+             List.concat [type_opt_of_tydecl tydecl; pp_opt_of_tydecl tydecl ])
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
@@ -269,6 +280,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                      [
                        type_equals_opt_of_tydecl tydecl;
                        type_opt_of_tydecl tydecl;
+                       pp_opt_of_tydecl tydecl;
                      ])
             | _ ->
                 Location.raise_errorf ~loc:ptype_loc
@@ -358,6 +370,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                      List.concat
                        [ type_equals_opt_of_tydecl tydecl;
                          type_opt_of_tydecl tydecl;
+                         pp_opt_of_tydecl tydecl;
                        ])
 
             | _ (* force_message *) ->
@@ -383,6 +396,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                List.concat
                  [ type_equals_opt_of_tydecl tydecl;
                    type_opt_of_tydecl tydecl;
+                   pp_opt_of_tydecl tydecl;
                  ])
 
       | { ptype_name = { txt = name; _ };
@@ -395,6 +409,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
              List.concat
                [ type_equals_opt_of_tydecl tydecl;
                  type_opt_of_tydecl tydecl;
+                 pp_opt_of_tydecl tydecl;
                ])
 
       | _ ->

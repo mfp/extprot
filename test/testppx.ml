@@ -61,3 +61,9 @@ type%message t22  = { v0 : string; v1 : (Int64.t [@default 42L]) }
 type%extprot foo8 = Int64.t [@default 1111L]
 type%extprot t23 = { v0 : foo8; v1 : foo8 }
 type%message t24 = Foobar.foo
+type%extprot password = string [@@pp fun fmt x -> Extprot.Pretty_print.pp_string fmt "XXXXX"]
+
+type%extprot 'a opt = 'a option = None | Some of 'a
+[@@pp fun ppa fmt x -> match x with None -> "<none>" | Some x -> Format.fprintf fmt "%a" ppa x]
+
+type%message t25 = { v : int opt }
