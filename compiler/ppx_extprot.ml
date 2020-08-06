@@ -271,13 +271,25 @@ let exclude_attr =
     Ast_pattern.(single_expr_payload __)
     (fun x -> x)
 
-let split_lid_tuple e = match e.pexp_desc with
+let split_lid_tuple ?(allow_ascription = false) e = match e.pexp_desc with
   | Pexp_ident { txt = (Lident s); _ } -> [s, (None, None)]
   | Pexp_tuple l ->
       List.map
         (function
-          | { pexp_desc = Pexp_ident { txt = (Lident s); _ }; _ } ->
-              (s, (None, None))
+          | { pexp_desc = Pexp_ident { txt = (Lident n); _ }; _ } ->
+              (n, (None, None))
+          | [%expr ([%e? e] : [%t? ty])] when allow_ascription -> begin
+              match e.pexp_desc, ty.ptyp_desc with
+                | Pexp_ident { txt = Lident n; _ },
+                  Ptyp_constr ({ txt = Lident tyn; _ }, []) ->
+                    (n, (Some (`App (tyn, [], [])), None))
+                | Pexp_ident { txt = Lident _; _ }, _ ->
+                    Location.raise_errorf
+                      ~loc:ty.ptyp_loc  "Expected a message/subset type"
+                | _ ->
+                    Location.raise_errorf
+                      ~loc:e.pexp_loc  "Expected a lowercase identifier"
+            end
           | { pexp_loc; _ } ->
               Location.raise_errorf ~loc:pexp_loc
                 "Expected a lowercase identifier")
@@ -287,7 +299,7 @@ let split_lid_tuple e = match e.pexp_desc with
         "Expected a tuple like   field1, field2, field3 "
 
 let subset_decl_of_includes ~name ~orig inc =
-  let fields = split_lid_tuple inc in
+  let fields = split_lid_tuple ~allow_ascription:true inc in
     PT.Message_decl
       (name, `Message_subset (orig, fields, `Include), PT.Export_YES, [])
 
