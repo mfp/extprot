@@ -324,37 +324,30 @@ let evr_of_exp e =
     | Some _, None -> Some `Lazy
     | None, Some _ -> Some `Eager
 
+let subset_field_with_ascription e ty =
+  match e.pexp_desc, ty.ptyp_desc with
+    | Pexp_ident { txt = Lident n; _ },
+      Ptyp_constr ({ txt = Lident tyn; _ }, []) ->
+        (n, (Some (`App (tyn, [], [])), evr_of_exp e))
+    | Pexp_ident { txt = Lident _; _ }, _ ->
+        Location.raise_errorf
+          ~loc:ty.ptyp_loc  "Expected a message/subset type"
+    | _ ->
+        Location.raise_errorf
+          ~loc:e.pexp_loc  "Expected a lowercase identifier"
+
 let split_lid_tuple ?(allow_ascription = false) = function
   | { pexp_desc = Pexp_ident { txt = (Lident s); _ }; _ } as e ->
         [s, (None, evr_of_exp e)]
-  | [%expr ([%e? e] : [%t? ty])] when allow_ascription -> begin
-      match e.pexp_desc, ty.ptyp_desc with
-        | Pexp_ident { txt = Lident n; _ },
-          Ptyp_constr ({ txt = Lident tyn; _ }, []) ->
-            [n, (Some (`App (tyn, [], [])), evr_of_exp e)]
-        | Pexp_ident { txt = Lident _; _ }, _ ->
-            Location.raise_errorf
-              ~loc:ty.ptyp_loc  "Expected a message/subset type"
-        | _ ->
-            Location.raise_errorf
-              ~loc:e.pexp_loc  "Expected a lowercase identifier"
-    end
+  | [%expr ([%e? e] : [%t? ty])] when allow_ascription ->
+      [ subset_field_with_ascription e ty ]
   | { pexp_desc = Pexp_tuple l; _ } ->
       List.map
         (function
           | { pexp_desc = Pexp_ident { txt = (Lident n); _ }; _ } as e ->
               (n, (None, evr_of_exp e))
           | [%expr ([%e? e] : [%t? ty])] when allow_ascription -> begin
-              match e.pexp_desc, ty.ptyp_desc with
-                | Pexp_ident { txt = Lident n; _ },
-                  Ptyp_constr ({ txt = Lident tyn; _ }, []) ->
-                    (n, (Some (`App (tyn, [], [])), evr_of_exp e))
-                | Pexp_ident { txt = Lident _; _ }, _ ->
-                    Location.raise_errorf
-                      ~loc:ty.ptyp_loc  "Expected a message/subset type"
-                | _ ->
-                    Location.raise_errorf
-                      ~loc:e.pexp_loc  "Expected a lowercase identifier"
+              subset_field_with_ascription e ty
             end
           | { pexp_loc; _ } ->
               Location.raise_errorf ~loc:pexp_loc
