@@ -32,3 +32,9 @@ type%subset subset2a = subset2 [@@include (v1 : subset1a), v2]
 type%message lazy1 = { v0 : int; v1 : foo [@lazy] }
 type%message lazy2 = { v0 : int list; v1 : int * int; v2 : string } [@@autolazy]
 type%message lazy3 = { v0 : int list; v1 : int list [@eager]; v2 : int * int; v3 : string } [@@autolazy]
+
+type%subset lazy3a = lazy3 [@@include v1, v2, v3]
+type%subset lazy3b = lazy3 [@@include v1[@lazy], v2, v3]
+type%subset lazy1a = lazy1 [@@include v1[@eager]]
+
+type%subset subset2b = subset2 [@@include (v1 [@lazy] : subset1a), v2]

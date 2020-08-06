@@ -76,7 +76,7 @@ let field_of_label_decl ?(autolazy = false) pld =
     match autolazy, Attribute.get lazy_attr pld, Attribute.get eager_attr pld with
       | _, Some _, Some _ ->
           Location.raise_errorf ~loc:pld.pld_loc
-            "Only one of [@@eager] pr [@@lazy] allowed"
+            "Only one of [@@eager] or [@@lazy] allowed"
       | _, Some _, None -> `Lazy
       | _, None, Some _ -> `Eager
       | true, None, None -> `Auto
@@ -303,18 +303,40 @@ let exclude_attr =
     Ast_pattern.(single_expr_payload __)
     (fun x -> x)
 
+let lazy_expr_attr =
+  Attribute.declare "extprot.lazy"
+    Attribute.Context.expression
+    Ast_pattern.(pstr nil)
+    (fun (_ : unit) -> ())
+
+let eager_expr_attr =
+  Attribute.declare "extprot.eager"
+    Attribute.Context.expression
+    Ast_pattern.(pstr nil)
+    (fun (_ : unit) -> ())
+
+let evr_of_exp e =
+  match Attribute.get lazy_expr_attr e, Attribute.get eager_expr_attr e with
+    | None, None -> None
+    | Some _, Some _ ->
+        Location.raise_errorf ~loc:e.pexp_loc
+          "Only one of [@@eager] or [@@lazy] allowed"
+    | Some _, None -> Some `Lazy
+    | None, Some _ -> Some `Eager
+
 let split_lid_tuple ?(allow_ascription = false) e = match e.pexp_desc with
-  | Pexp_ident { txt = (Lident s); _ } -> [s, (None, None)]
+  | Pexp_ident { txt = (Lident s); _ } ->
+        [s, (None, evr_of_exp e)]
   | Pexp_tuple l ->
       List.map
         (function
-          | { pexp_desc = Pexp_ident { txt = (Lident n); _ }; _ } ->
-              (n, (None, None))
+          | { pexp_desc = Pexp_ident { txt = (Lident n); _ }; _ } as e ->
+              (n, (None, evr_of_exp e))
           | [%expr ([%e? e] : [%t? ty])] when allow_ascription -> begin
               match e.pexp_desc, ty.ptyp_desc with
                 | Pexp_ident { txt = Lident n; _ },
                   Ptyp_constr ({ txt = Lident tyn; _ }, []) ->
-                    (n, (Some (`App (tyn, [], [])), None))
+                    (n, (Some (`App (tyn, [], [])), evr_of_exp e))
                 | Pexp_ident { txt = Lident _; _ }, _ ->
                     Location.raise_errorf
                       ~loc:ty.ptyp_loc  "Expected a message/subset type"
