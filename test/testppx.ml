@@ -28,3 +28,7 @@ type%subset subset1b = subset1 [@@exclude a]
 type%message subset2 = { v0 : t17; v1 : subset1; v2 : float list }
 type%subset subset2a = subset2 [@@include (v1 : subset1a), v2]
 (* type%subset foo = bar [@@exclude a, b, c, d] *)
+
+type%message lazy1 = { v0 : int; v1 : foo [@lazy] }
+type%message lazy2 = { v0 : int list; v1 : int * int; v2 : string } [@@autolazy]
+type%message lazy3 = { v0 : int list; v1 : int list [@eager]; v2 : int * int; v3 : string } [@@autolazy]

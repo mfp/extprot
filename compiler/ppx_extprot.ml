@@ -5,6 +5,8 @@ open Ppxlib
 
 module PT = Protocol_types
 
+let is_some = function Some _ -> true | None -> false
+
 let rec flatten_longident_path ~loc = function
   | Ldot (a, b) -> flatten_longident_path ~loc a @ [b]
   | Lident x -> [x]
@@ -49,12 +51,40 @@ let rec tyexpr_of_core_type ?(ptype_params = []) ty =
       | Ptyp_extension _ ->
           Location.raise_errorf ~loc:ty.ptyp_loc "Invalid type"
 
-let field_of_label_decl pld =
+let lazy_attr =
+  Attribute.declare "extprot.lazy"
+    Attribute.Context.label_declaration
+    Ast_pattern.(pstr nil)
+    (fun (_ : unit) -> ())
+
+let eager_attr =
+  Attribute.declare "extprot.eager"
+    Attribute.Context.label_declaration
+    Ast_pattern.(pstr nil)
+    (fun (_ : unit) -> ())
+
+let autolazy_attr =
+  Attribute.declare "extprot.autolazy"
+    Attribute.Context.type_declaration
+    Ast_pattern.(pstr nil)
+    (fun (_ : unit) -> ())
+
+let field_of_label_decl ?(autolazy = false) pld =
   let module Ast_builder = (val Ast_builder.make pld.pld_loc) in
   let open Ast_builder in
+  let evr =
+    match autolazy, Attribute.get lazy_attr pld, Attribute.get eager_attr pld with
+      | _, Some _, Some _ ->
+          Location.raise_errorf ~loc:pld.pld_loc
+            "Only one of [@@eager] pr [@@lazy] allowed"
+      | _, Some _, None -> `Lazy
+      | _, None, Some _ -> `Eager
+      | true, None, None -> `Auto
+      | false, None, None -> `Eager
+  in
     (pld.pld_name.txt,
      (match pld.pld_mutable with Immutable -> false | Mutable -> true),
-     `Eager, tyexpr_of_core_type pld.pld_type)
+     evr, tyexpr_of_core_type pld.pld_type)
 
 let extract_type_param (ty, _) =
   match ty.ptyp_desc with
@@ -82,7 +112,8 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
           ptype_kind = Ptype_record fs; _ } ->
-          let mexpr = `Message_record (List.map field_of_label_decl fs) in
+          let autolazy = is_some @@ Attribute.get autolazy_attr tydecl in
+          let mexpr = `Message_record (List.map (field_of_label_decl ~autolazy) fs) in
             PT.Message_decl (name, mexpr, (if export then Export_YES else Export_NO), [])
 
       | { ptype_name = { txt = name; _ };
@@ -208,9 +239,10 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
       | { ptype_name = { txt = name; _ };
           ptype_params; ptype_cstrs = [];
           ptype_kind = Ptype_record fs; _ } ->
+          let autolazy = is_some @@ Attribute.get autolazy_attr tydecl in
           let r =
             { PT.record_name = name;
-              record_fields = List.map field_of_label_decl fs;
+              record_fields = List.map (field_of_label_decl ~autolazy) fs;
             }
           in
             PT.Type_decl
