@@ -101,6 +101,15 @@ let is_record_type name =
       | PT.Type_decl _ -> false )
     !rev_decls
 
+let type_equals_opt_of_tydecl t =
+  match t.ptype_manifest with
+    | None -> []
+    | Some ({ ptyp_desc = Ptyp_constr ({ txt = path; _}, []); _ } as ty) ->
+        let path = flatten_longident_path ~loc:ty.ptyp_loc path in
+          [ "ocaml.type_equals", String.concat "." path ]
+    | Some { ptyp_loc; _ } ->
+        Location.raise_errorf ~loc:ptyp_loc "Invalid type equality"
+
 (* force_message: set when using  extprot.message  to (1) reject
  * anything that is not a monomorphic record type and (2) register the
  * declaration as a message declaration whose (de)serialization functions
@@ -114,7 +123,9 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
           ptype_kind = Ptype_record fs; _ } ->
           let autolazy = is_some @@ Attribute.get autolazy_attr tydecl in
           let mexpr = `Message_record (List.map (field_of_label_decl ~autolazy) fs) in
-            PT.Message_decl (name, mexpr, (if export then Export_YES else Export_NO), [])
+            PT.Message_decl
+              (name, mexpr, (if export then Export_YES else Export_NO),
+               type_equals_opt_of_tydecl tydecl)
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
@@ -225,7 +236,8 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                 in
                   PT.Type_decl
                     (name, List.map extract_type_param ptype_params,
-                     `Sum ({ PT.type_name = name; constructors }, []), [])
+                     `Sum ({ PT.type_name = name; constructors }, []),
+                     type_equals_opt_of_tydecl tydecl)
 
             | _ (* force_message *) ->
                 Location.raise_errorf ~loc:ptype_loc
@@ -246,7 +258,8 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
             }
           in
             PT.Type_decl
-              (name, List.map extract_type_param ptype_params, `Record (r, []), [])
+              (name, List.map extract_type_param ptype_params, `Record (r, []),
+               type_equals_opt_of_tydecl tydecl)
 
       | { ptype_name = { txt = name; _ };
           ptype_params; ptype_cstrs = [];
