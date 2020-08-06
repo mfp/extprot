@@ -43,3 +43,7 @@ type%subset subset2c = subset2 [@@include (v1 [@lazy] : subset1a)]
 type%extprot foo1 = A.B.foo = { a : int; b : float }
 type%extprot foo2 = A.B.foo2 = A of int | B
 type%message bar2 = A.B.bar = { a : int; b : float; c : int }
+
+type%extprot foo = string
+[@@type type t = A.foo let to_t = A.from_string let from_t = A.to_string]
+type%message foobar = { v : foo [@lazy] }

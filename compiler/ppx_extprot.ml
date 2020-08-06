@@ -69,6 +69,28 @@ let autolazy_attr =
     Ast_pattern.(pstr nil)
     (fun (_ : unit) -> ())
 
+let type_attr =
+  Attribute.declare "extprot.type"
+    Attribute.Context.type_declaration
+    Ast_pattern.(
+      pstr @@
+      pstr_type recursive
+        (type_declaration
+           ~name:(string "t")
+           ~params:__
+           ~cstrs:__
+           ~kind:ptype_abstract
+           ~private_:public
+           ~manifest:(some (ptyp_constr __ __)) ^::
+         nil) ^::
+      pstr_value nonrecursive
+        (value_binding ~pat:(ppat_var (string "to_t")) ~expr:__ ^:: nil) ^::
+      pstr_value nonrecursive
+        (value_binding ~pat:(ppat_var (string "from_t")) ~expr:__ ^:: nil) ^::
+      nil)
+    (fun _params _cstrs constr_lident _ to_t_expr from_t_expr ->
+       (constr_lident, to_t_expr, from_t_expr))
+
 let field_of_label_decl ?(autolazy = false) pld =
   let module Ast_builder = (val Ast_builder.make pld.pld_loc) in
   let open Ast_builder in
@@ -102,13 +124,45 @@ let is_record_type name =
     !rev_decls
 
 let type_equals_opt_of_tydecl t =
-  match t.ptype_manifest with
-    | None -> []
-    | Some ({ ptyp_desc = Ptyp_constr ({ txt = path; _}, []); _ } as ty) ->
+  (* quick reminder:
+   *
+     type t                     (abstract, no manifest)
+     type t = T0                (abstract, manifest=T0)
+     type t = C of T | ...      (variant,  no manifest)
+     type t = T0 = C of T | ... (variant,  manifest=T0)
+     type t = {l: T; ...}       (record,   no manifest)
+     type t = T0 = {l : T; ...} (record,   manifest=T0)
+     type t = ..                (open,     no manifest)
+   * *)
+  match t.ptype_manifest, t.ptype_kind with
+    | None, _ -> []
+    | Some ({ ptyp_desc = Ptyp_constr ({ txt = path; _}, []); _ } as ty),
+      (Ptype_variant _ | Ptype_record _) ->
         let path = flatten_longident_path ~loc:ty.ptyp_loc path in
           [ "ocaml.type_equals", String.concat "." path ]
-    | Some { ptyp_loc; _ } ->
-        Location.raise_errorf ~loc:ptyp_loc "Invalid type equality"
+    | Some { ptyp_loc; _ }, _ -> []
+
+let formatter_output f =
+  let b   = Buffer.create 13 in
+  let fmt = Format.formatter_of_buffer b in
+    f fmt;
+    Format.pp_print_flush fmt ();
+    Buffer.contents b
+
+let string_of_type ty = formatter_output (fun fmt -> Pprintast.core_type fmt ty)
+let string_of_expr ty = formatter_output (fun fmt -> Pprintast.expression fmt ty)
+
+let type_opt_of_tydecl t =
+  match Attribute.get type_attr t with
+    | None -> []
+    | Some (constr_lident, to_t_expr, from_t_expr) ->
+        [ "ocaml._type__type",
+          String.concat "." @@ flatten_longident_path ~loc:t.ptype_loc constr_lident;
+
+          "ocaml._type__to_t", string_of_expr to_t_expr;
+
+          "ocaml._type__from_t", string_of_expr from_t_expr;
+        ]
 
 (* force_message: set when using  extprot.message  to (1) reject
  * anything that is not a monomorphic record type and (2) register the
@@ -125,7 +179,10 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
           let mexpr = `Message_record (List.map (field_of_label_decl ~autolazy) fs) in
             PT.Message_decl
               (name, mexpr, (if export then Export_YES else Export_NO),
-               type_equals_opt_of_tydecl tydecl)
+               List.concat
+                 [ type_equals_opt_of_tydecl tydecl;
+                   type_opt_of_tydecl tydecl;
+                 ])
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
@@ -151,7 +208,13 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                 let mexpr = `Message_app (tyn, tys, opts) in
                   PT.Message_decl (name, mexpr, Export_YES, [])
             | _ when not force_message ->
-                PT.Type_decl (name, [], (tyexpr_of_core_type cty :> PT.type_expr), [])
+                PT.Type_decl
+                  (name, [], (tyexpr_of_core_type cty :> PT.type_expr),
+                   List.concat
+                     [
+                       type_equals_opt_of_tydecl tydecl;
+                       type_opt_of_tydecl tydecl;
+                     ])
             | _ ->
                 Location.raise_errorf ~loc:ptype_loc
                   "Message declaration expected (disjoin union or record type)"
@@ -237,7 +300,10 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                   PT.Type_decl
                     (name, List.map extract_type_param ptype_params,
                      `Sum ({ PT.type_name = name; constructors }, []),
-                     type_equals_opt_of_tydecl tydecl)
+                     List.concat
+                       [ type_equals_opt_of_tydecl tydecl;
+                         type_opt_of_tydecl tydecl;
+                       ])
 
             | _ (* force_message *) ->
                 Location.raise_errorf ~loc:ptype_loc
@@ -259,7 +325,10 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
           in
             PT.Type_decl
               (name, List.map extract_type_param ptype_params, `Record (r, []),
-               type_equals_opt_of_tydecl tydecl)
+               List.concat
+                 [ type_equals_opt_of_tydecl tydecl;
+                   type_opt_of_tydecl tydecl;
+                 ])
 
       | { ptype_name = { txt = name; _ };
           ptype_params; ptype_cstrs = [];
@@ -267,7 +336,11 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
           ptype_manifest = Some cty; _ } ->
           PT.Type_decl
             (name, List.map extract_type_param ptype_params,
-             (tyexpr_of_core_type ~ptype_params cty :> PT.type_expr), [])
+             (tyexpr_of_core_type ~ptype_params cty :> PT.type_expr),
+             List.concat
+               [ type_equals_opt_of_tydecl tydecl;
+                 type_opt_of_tydecl tydecl;
+               ])
 
       | _ ->
           Location.raise_errorf ~loc "Expected a record or simple type definition"

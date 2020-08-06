@@ -201,6 +201,26 @@ let get_type_info opts = match lookup_option "type" opts with
           }
         with exn -> bad_option ~msg:(Printexc.to_string exn) "type" v
 
+let get_type_info opts =
+  match
+    lookup_option "_type__type" opts,
+    lookup_option "_type__to_t" opts,
+    lookup_option "_type__from_t" opts
+  with
+    | None, None, None -> get_type_info opts
+    | Some ty, Some to_t, Some from_t ->
+        Some {
+          ty;
+          ctyp  = ctyp_of_path ty;
+          fromf = expr_of_string to_t;
+          tof   = expr_of_string from_t;
+          default = None; (* FIXME *)
+        }
+    | _ ->
+        failwith
+          "All of ocaml._type__type, ocaml._type__to_t and \
+           ocaml._type_from_t options should be set"
+
 let get_type default opts =
   Option.map_default (fun { ctyp; _ } -> ctyp) default (get_type_info opts)
 
