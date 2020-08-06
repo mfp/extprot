@@ -57,3 +57,4 @@ type%extprot foo6 = int [@default 42]
 type%extprot foo7 = float [@default 42.0]
 type%message t20  = { v0 : foo5[@lazy]; v1 : foo6; v2 : foo7 }
 type%message t21  = { v0 : string; v1 : (string [@default "foo"]) [@lazy] }
+type%message t22  = { v0 : string; v1 : (Int64.t [@default 42L]) }

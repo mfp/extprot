@@ -52,7 +52,13 @@ let rec tyexpr_of_core_type ?(ptype_params = []) ty =
       | Ptyp_constr ({ txt = Lident "byte"; _ }, []) -> `Byte (default_opt_of_core_type ty)
       | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> `Int (default_opt_of_core_type ty)
       | Ptyp_constr ({ txt = Lident "float"; _ }, []) -> `Float (default_opt_of_core_type ty)
-      | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) -> `Long_int (default_opt_of_core_type ty)
+      | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) ->
+          `Long_int
+            (match default_opt_of_core_type ty with
+              (* we remove the trailing L if present *)
+              | [ k, v ] when v <> "" && v.[String.length v - 1] = 'L' ->
+                  [ k, String.sub v 0 (String.length v - 1) ]
+              | x -> x)
       | Ptyp_constr ({ txt = Lident "string"; _ }, []) -> `String (default_opt_of_core_type ty)
 
       (* complex *)
