@@ -40,14 +40,11 @@ let default_opt_of_core_type ty =
          *  "\"hohoho\"".
          * *)
         ["default", s]
+    | Some { pexp_desc = Pexp_constant (Pconst_integer (s, _)); _ } ->
+        (* We drop the letter suffix, which must not be passed to the
+         * camlp4-based code generator. *)
+        ["default", s]
     | Some e -> ["default", string_of_expr e]
-
-let default_opt_for_int64 ty =
-  match default_opt_of_core_type ty with
-    (* we remove the trailing L if present *)
-    | [ k, v ] when v <> "" && v.[String.length v - 1] = 'L' ->
-        [ k, String.sub v 0 (String.length v - 1) ]
-    | x -> x
 
 let rec tyexpr_of_core_type ?(ptype_params = []) ty =
   let module Ast_builder = (val Ast_builder.make ty.ptyp_loc) in
@@ -59,7 +56,7 @@ let rec tyexpr_of_core_type ?(ptype_params = []) ty =
       | Ptyp_constr ({ txt = Lident "byte"; _ }, []) -> `Byte (default_opt_of_core_type ty)
       | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> `Int (default_opt_of_core_type ty)
       | Ptyp_constr ({ txt = Lident "float"; _ }, []) -> `Float (default_opt_of_core_type ty)
-      | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) -> `Long_int (default_opt_for_int64 ty)
+      | Ptyp_constr ({ txt = Ldot (Lident "Int64", "t"); _ }, []) -> `Long_int (default_opt_of_core_type ty)
       | Ptyp_constr ({ txt = Lident "string"; _ }, []) -> `String (default_opt_of_core_type ty)
 
       (* complex *)
@@ -239,7 +236,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
             Some ({ ptyp_desc = Ptyp_constr ({ txt = (Ldot (Lident "Int64", "t")); _ }, []); _ } as ty);
           _ } ->
           PT.Type_decl
-            (name, [], `Long_int (default_opt_for_int64 ty),
+            (name, [], `Long_int (default_opt_of_core_type ty),
              type_opt_of_tydecl tydecl)
 
       | { ptype_name = { txt = name; _ };
