@@ -532,22 +532,18 @@ let subset_decl_of_excludes ~name ~orig inc =
     PT.Message_decl
       (name, `Message_subset (orig, fields, `Exclude), PT.Export_YES, [])
 
-let expand_subset which ~loc ~path str =
+let expand_subset which ~loc ~path tydecl =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
-    match str with
-      | [ { pstr_desc =
-              Pstr_type
-                (_, [ { ptype_name = { txt = name; _ };
-                        ptype_params = []; ptype_cstrs = [];
-                        ptype_kind = Ptype_abstract;
-                        ptype_loc;
-                        ptype_manifest =
-                          Some { ptyp_desc = Ptyp_constr ({ txt = Lident orig; _ }, _); _ }
-                      } as tydecl ]);
-            _
-          }
-        ] ->
+    match tydecl with
+      | { ptype_name = { txt = name; _ };
+          ptype_params = []; ptype_cstrs = [];
+          ptype_kind = Ptype_abstract;
+          ptype_loc;
+          ptype_manifest =
+            Some { ptyp_desc = Ptyp_constr ({ txt = Lident orig; _ }, _); _ };
+          _
+        } ->
           let includes = Attribute.get include_attr tydecl in
           let excludes = Attribute.get exclude_attr tydecl in
           let decl =
@@ -563,7 +559,8 @@ let expand_subset which ~loc ~path str =
           in
             register_decl_and_gencode Gen_impl ~loc decl
       | _ ->
-          Location.raise_errorf ~loc "Expected a single type definition"
+          Location.raise_errorf ~loc:tydecl.ptype_loc
+            "Expected a monomorphic type definition of the form  type%%subset foo = bar"
 
 let extension1 =
   Ppxlib.Extension.declare
@@ -591,8 +588,11 @@ let extension3 =
   Ppxlib.Extension.declare
     "extprot.subset"
     Ppxlib.Extension.Context.structure_item
-    Ppxlib.Ast_pattern.(pstr __)
-    (expand_subset Gen_impl)
+    Ppxlib.Ast_pattern.(
+      pstr @@
+      pstr_type __ (__ ^:: nil) ^::
+      nil)
+    (fun ~loc ~path _ ty -> expand_subset Gen_impl ~loc ~path ty)
 
 let rule1 = Ppxlib.Context_free.Rule.extension extension1
 let rule2 = Ppxlib.Context_free.Rule.extension extension2
