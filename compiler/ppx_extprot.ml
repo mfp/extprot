@@ -555,7 +555,7 @@ let expand_subset which ~loc ~path tydecl =
                   Location.raise_errorf ~loc
                     "Only one of [@@include a,b,c] or [@@include a,b,c] allowed"
           in
-            register_decl_and_gencode Gen_impl ~loc decl
+            register_decl_and_gencode which ~loc decl
       | _ ->
           Location.raise_errorf ~loc:tydecl.ptype_loc
             "Expected a monomorphic type definition of the form  type%%subset foo = bar"
@@ -614,14 +614,25 @@ let subset_ext =
       nil)
     (fun ~loc ~path _ ty -> expand_subset Gen_impl ~loc ~path ty)
 
+let subset_ext' =
+  Ppxlib.Extension.declare
+    "extprot.subset"
+    Ppxlib.Extension.Context.signature_item
+    Ppxlib.Ast_pattern.(
+      psig @@
+      psig_type __ (__ ^:: nil) ^::
+      nil)
+    (fun ~loc ~path _ ty -> expand_subset Gen_sig ~loc ~path ty)
+
 let rule1 = Ppxlib.Context_free.Rule.extension extprot_ext
 let rule1' = Ppxlib.Context_free.Rule.extension extprot_ext'
 let rule2 = Ppxlib.Context_free.Rule.extension message_ext
 let rule2' = Ppxlib.Context_free.Rule.extension message_ext'
 let rule3 = Ppxlib.Context_free.Rule.extension subset_ext
+let rule3' = Ppxlib.Context_free.Rule.extension subset_ext'
 
 let () =
   Ppxlib.Driver.register_transformation
-    ~rules:[rule1; rule1'; rule2; rule2'; rule3] "extprot"
+    ~rules:[rule1; rule1'; rule2; rule2'; rule3; rule3'] "extprot"
 
 let () = Ppxlib.Driver.standalone ()
