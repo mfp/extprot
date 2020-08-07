@@ -637,13 +637,13 @@ let fieldmod_ext =
          [%stri module EXTPROT_FIELD____ = [%m m]])
 
 let fieldmod_ext' =
-  Ppxlib.Extension.declare
+  Ppxlib.Extension.declare_inline
     "extprot.fieldmod"
     Ppxlib.Extension.Context.signature_item
     Ppxlib.Ast_pattern.(single_expr_payload @@ pexp_construct __ none)
     (fun ~loc ~path longident ->
        fieldmod := String.concat "." @@ flatten_longident_path ~loc longident;
-       [%sigi: module EXTPROT_FIELD____ : Extprot.Field.S])
+       [])
 
 let rule1  = Ppxlib.Context_free.Rule.extension extprot_ext
 let rule1' = Ppxlib.Context_free.Rule.extension extprot_ext'
