@@ -417,7 +417,11 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
 
 module G = Gencode.Make(Gen_OCaml)
 
-let register_decl_and_gencode ~loc decl =
+type 'a gencode =
+  | Gen_impl : Parsetree.structure_item gencode
+  | Gen_sig : Parsetree.signature_item gencode
+
+let register_decl_and_gencode (type a) (which : a gencode) ~loc decl : a =
   rev_decls := decl :: !rev_decls;
   let decls = List.rev !rev_decls in
   let implem, signature =
@@ -430,22 +434,27 @@ let register_decl_and_gencode ~loc decl =
       Location.raise_errorf ~loc
         "Extprot codegen error: %s" (Printexc.to_string exn)
   in
-    begin match Parse.implementation @@ Lexing.from_string implem with
-      | _ :: str :: _ ->
-          (* skip the first element: *)
-          str
-      | _ -> Location.raise_errorf ~loc "Codegen error"
-    end
+    match which with
+      | Gen_impl ->
+          begin match Parse.implementation @@ Lexing.from_string implem with
+            | _ :: str :: _ ->
+                (* skip the first element: EXTPROT_FIELD____ def *)
+                str
+            | _ -> Location.raise_errorf ~loc "Codegen error"
+          end
+      | Gen_sig ->
+          begin match Parse.interface @@ Lexing.from_string signature with
+            | _ :: str :: _ ->
+                (* skip the first element: EXTPROT_FIELD____ def *)
+                str
+            | _ -> Location.raise_errorf ~loc "Codegen error"
+          end
 
-let expand_function ~force_message ~export ~loc ~path str =
+let expand_function which ~force_message ~export ~loc ~path ty =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
-    match str with
-      | [ { pstr_desc = Pstr_type (_, [ ty ]) } ] ->
-          register_decl_and_gencode ~loc @@
-          decl_of_ty ~force_message ~export ~loc ty
-      | _ ->
-          Location.raise_errorf ~loc "Expected a single type definition"
+    register_decl_and_gencode which ~loc @@
+    decl_of_ty ~force_message ~export ~loc ty
 
 let include_attr =
   Attribute.declare "extprot.include"
@@ -523,7 +532,7 @@ let subset_decl_of_excludes ~name ~orig inc =
     PT.Message_decl
       (name, `Message_subset (orig, fields, `Exclude), PT.Export_YES, [])
 
-let expand_subset ~loc ~path str =
+let expand_subset which ~loc ~path str =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
     match str with
@@ -552,7 +561,7 @@ let expand_subset ~loc ~path str =
                   Location.raise_errorf ~loc
                     "Only one of [@@include a,b,c] or [@@include a,b,c] allowed"
           in
-            register_decl_and_gencode ~loc decl
+            register_decl_and_gencode Gen_impl ~loc decl
       | _ ->
           Location.raise_errorf ~loc "Expected a single type definition"
 
@@ -560,22 +569,30 @@ let extension1 =
   Ppxlib.Extension.declare
     "extprot"
     Ppxlib.Extension.Context.structure_item
-    Ppxlib.Ast_pattern.(pstr __)
-    (expand_function ~force_message:false ~export:false)
+    Ppxlib.Ast_pattern.(
+      pstr @@
+      pstr_type __ (__ ^:: nil) ^::
+      nil)
+    (fun ~loc ~path _ ty ->
+       expand_function Gen_impl ~force_message:false ~export:false ~loc ~path ty)
 
 let extension2 =
   Ppxlib.Extension.declare
     "extprot.message"
     Ppxlib.Extension.Context.structure_item
-    Ppxlib.Ast_pattern.(pstr __)
-    (expand_function ~force_message:true ~export:true)
+    Ppxlib.Ast_pattern.(
+      pstr @@
+      pstr_type __ (__ ^:: nil) ^::
+      nil)
+    (fun ~loc ~path _ ty ->
+       expand_function Gen_impl ~force_message:true ~export:true ~loc ~path ty)
 
 let extension3 =
   Ppxlib.Extension.declare
     "extprot.subset"
     Ppxlib.Extension.Context.structure_item
     Ppxlib.Ast_pattern.(pstr __)
-    expand_subset
+    (expand_subset Gen_impl)
 
 let rule1 = Ppxlib.Context_free.Rule.extension extension1
 let rule2 = Ppxlib.Context_free.Rule.extension extension2
