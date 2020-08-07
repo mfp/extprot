@@ -1,3 +1,6 @@
+
+[%%extprot.fieldmod My.Custom.Field]
+
 type%extprot foo = { a : int; b : float }
 type%extprot bar = int
 type%extprot baz = { a : bar; b : int * int }

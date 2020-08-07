@@ -169,6 +169,7 @@ let extract_type_param (ty, _) =
     | _ -> Location.raise_errorf ~loc:ty.ptyp_loc "Type param is not a type var."
 
 let rev_decls = ref []
+let fieldmod = ref "Extprot.Field"
 
 let is_record_type name =
   List.exists
@@ -427,7 +428,7 @@ let register_decl_and_gencode (type a) (which : a gencode) ~loc decl : a =
   let implem, signature =
     try
       G.generate_code
-        ~global_opts:[]
+        ~global_opts:["field-module", !fieldmod]
         ~width:100
         (Gencode.collect_bindings decls) [PT.Decl decl]
     with exn ->
@@ -624,15 +625,39 @@ let subset_ext' =
       nil)
     (fun ~loc ~path _ ty -> expand_subset Gen_sig ~loc ~path ty)
 
-let rule1 = Ppxlib.Context_free.Rule.extension extprot_ext
+let fieldmod_ext =
+  Ppxlib.Extension.declare
+    "extprot.fieldmod"
+    Ppxlib.Extension.Context.structure_item
+    Ppxlib.Ast_pattern.(single_expr_payload @@ pexp_construct __ none)
+    (fun ~loc ~path longident ->
+       let module Ast_builder = (val Ast_builder.make loc) in
+       let open Ast_builder in
+       let m = pmod_ident { txt = longident; loc } in
+         [%stri module EXTPROT_FIELD____ = [%m m]])
+
+let fieldmod_ext' =
+  Ppxlib.Extension.declare
+    "extprot.fieldmod"
+    Ppxlib.Extension.Context.signature_item
+    Ppxlib.Ast_pattern.(single_expr_payload @@ pexp_construct __ none)
+    (fun ~loc ~path longident ->
+       fieldmod := String.concat "." @@ flatten_longident_path ~loc longident;
+       [%sigi: module EXTPROT_FIELD____ : Extprot.Field.S])
+
+let rule1  = Ppxlib.Context_free.Rule.extension extprot_ext
 let rule1' = Ppxlib.Context_free.Rule.extension extprot_ext'
-let rule2 = Ppxlib.Context_free.Rule.extension message_ext
+let rule2  = Ppxlib.Context_free.Rule.extension message_ext
 let rule2' = Ppxlib.Context_free.Rule.extension message_ext'
-let rule3 = Ppxlib.Context_free.Rule.extension subset_ext
+let rule3  = Ppxlib.Context_free.Rule.extension subset_ext
 let rule3' = Ppxlib.Context_free.Rule.extension subset_ext'
+let rule4  = Ppxlib.Context_free.Rule.extension fieldmod_ext
+let rule4' = Ppxlib.Context_free.Rule.extension fieldmod_ext'
 
 let () =
   Ppxlib.Driver.register_transformation
-    ~rules:[rule1; rule1'; rule2; rule2'; rule3; rule3'] "extprot"
+    ~rules:[rule1; rule1'; rule2; rule2'; rule3; rule3';
+            rule4; rule4' ]
+    "extprot"
 
 let () = Ppxlib.Driver.standalone ()
