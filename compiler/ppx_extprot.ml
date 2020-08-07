@@ -1,6 +1,4 @@
 
-(* ocamlfind ocamlopt -o ppx_extprot -package ppxlib,ppxlib.metaquot,extlib protocol_types.cmx ppx_extprot.ml -linkpkg *)
-
 open Ppxlib
 
 module PT = Protocol_types
