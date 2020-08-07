@@ -444,10 +444,8 @@ let register_decl_and_gencode (type a) (which : a gencode) ~loc decl : a =
           end
       | Gen_sig ->
           begin match Parse.interface @@ Lexing.from_string signature with
-            | _ :: str :: _ ->
-                (* skip the first element: EXTPROT_FIELD____ def *)
-                str
-            | _ -> Location.raise_errorf ~loc "Codegen error"
+            | str :: _ -> str
+            | [] -> Location.raise_errorf ~loc "Codegen error"
           end
 
 let expand_function which ~force_message ~export ~loc ~path ty =
@@ -562,7 +560,7 @@ let expand_subset which ~loc ~path tydecl =
           Location.raise_errorf ~loc:tydecl.ptype_loc
             "Expected a monomorphic type definition of the form  type%%subset foo = bar"
 
-let extension1 =
+let extprot_ext =
   Ppxlib.Extension.declare
     "extprot"
     Ppxlib.Extension.Context.structure_item
@@ -573,7 +571,18 @@ let extension1 =
     (fun ~loc ~path _ ty ->
        expand_function Gen_impl ~force_message:false ~export:false ~loc ~path ty)
 
-let extension2 =
+let extprot_ext' =
+  Ppxlib.Extension.declare_inline
+    "extprot"
+    Ppxlib.Extension.Context.signature_item
+    Ppxlib.Ast_pattern.(
+      psig @@
+      psig_type __ (__ ^:: nil) ^::
+      nil)
+    (fun ~loc ~path _ ty ->
+       [expand_function Gen_sig ~force_message:false ~export:false ~loc ~path ty])
+
+let message_ext =
   Ppxlib.Extension.declare
     "extprot.message"
     Ppxlib.Extension.Context.structure_item
@@ -584,7 +593,18 @@ let extension2 =
     (fun ~loc ~path _ ty ->
        expand_function Gen_impl ~force_message:true ~export:true ~loc ~path ty)
 
-let extension3 =
+let message_ext' =
+  Ppxlib.Extension.declare
+    "extprot.message"
+    Ppxlib.Extension.Context.signature_item
+    Ppxlib.Ast_pattern.(
+      psig @@
+      psig_type __ (__ ^:: nil) ^::
+      nil)
+    (fun ~loc ~path _ ty ->
+       expand_function Gen_sig ~force_message:true ~export:true ~loc ~path ty)
+
+let subset_ext =
   Ppxlib.Extension.declare
     "extprot.subset"
     Ppxlib.Extension.Context.structure_item
@@ -594,10 +614,14 @@ let extension3 =
       nil)
     (fun ~loc ~path _ ty -> expand_subset Gen_impl ~loc ~path ty)
 
-let rule1 = Ppxlib.Context_free.Rule.extension extension1
-let rule2 = Ppxlib.Context_free.Rule.extension extension2
-let rule3 = Ppxlib.Context_free.Rule.extension extension3
+let rule1 = Ppxlib.Context_free.Rule.extension extprot_ext
+let rule1' = Ppxlib.Context_free.Rule.extension extprot_ext'
+let rule2 = Ppxlib.Context_free.Rule.extension message_ext
+let rule2' = Ppxlib.Context_free.Rule.extension message_ext'
+let rule3 = Ppxlib.Context_free.Rule.extension subset_ext
 
-let () = Ppxlib.Driver.register_transformation ~rules:[rule1; rule2; rule3] "extprot"
+let () =
+  Ppxlib.Driver.register_transformation
+    ~rules:[rule1; rule1'; rule2; rule2'; rule3] "extprot"
 
 let () = Ppxlib.Driver.standalone ()
