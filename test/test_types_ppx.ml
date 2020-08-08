@@ -1,3 +1,4 @@
+[%%extprot.fieldmod Extprot.Field]
 
 type%message simple_bool = { v : bool }
 type%message simple_byte = { v : byte }
