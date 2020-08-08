@@ -124,7 +124,7 @@ let type_attr =
            ~cstrs:__
            ~kind:ptype_abstract
            ~private_:public
-           ~manifest:(some (ptyp_constr __ __)) ^::
+           ~manifest:(some __) ^::
          nil) ^::
       pstr_value nonrecursive
         (value_binding ~pat:(ppat_var (string "to_t")) ~expr:__ ^:: nil) ^::
@@ -135,8 +135,8 @@ let type_attr =
            (value_binding ~pat:(ppat_var (string "default")) ~expr:__ ^:: nil) ^::
          nil)
         nil)
-    (fun _params _cstrs constr_lident _ to_t_expr from_t_expr default ->
-       (constr_lident, to_t_expr, from_t_expr, default))
+    (fun _params _cstrs manifest to_t_expr from_t_expr default ->
+       (manifest, to_t_expr, from_t_expr, default))
 
 let pp_attr =
   Attribute.declare "extprot.pp"
@@ -199,11 +199,10 @@ let type_equals_opt_of_tydecl t =
 let type_opt_of_tydecl t =
   match Attribute.get type_attr t with
     | None -> []
-    | Some (constr_lident, to_t_expr, from_t_expr, default) ->
+    | Some (manifest, to_t_expr, from_t_expr, default) ->
         List.filter_map (function (k, None) -> None | (k, Some v) -> Some (k, v))
           [
-            "ocaml._type__type",
-            some @@ String.concat "." @@ flatten_longident_path ~loc:t.ptype_loc constr_lident;
+            "ocaml._type__type", some @@ string_of_type manifest;
 
             "ocaml._type__to_t", some @@ string_of_expr to_t_expr;
 
