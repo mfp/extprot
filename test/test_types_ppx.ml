@@ -1,4 +1,11 @@
+
 [%%extprot.fieldmod Extprot.Field]
+
+(* Either uncomment the following line, equivalent to  -assume-subsets all
+ * for extprotc *)
+(* [%%extprot.assume_subsets] *)
+(* or add the [@@assume_subset] to each message which has got subsets
+ * (equivalent to giving the module name to -assume-subsets). *)
 
 type%message simple_bool = { v : bool }
 type%message simple_byte = { v : byte }
@@ -127,13 +134,13 @@ type%extprot sum_ext2 = A of int * (int, string, Int64.t) sum_type * bool | B
 type%message se_1 = { x : sum_ext1; y : string; z : sum_ext1; }
 type%message se_2 = { x : sum_ext2; y : string; z : sum_ext2; }
 
-type%message subset__a    = { a : int; b : bool; c : string; d : Int64.t }
+type%message subset__a    = { a : int; b : bool; c : string; d : Int64.t } [@@assume_subset]
 type%subset subset__a_1  = subset__a [@@include b, d]
 type%subset subset__a_1b = subset__a [@@exclude a, c]
 type%subset subset__a_2  = subset__a [@@include a, c]
 type%subset subset__a_2b = subset__a [@@exclude b, d]
 
-type%extprot subset__b_0     = { a : int; b : bool; c : string; d : Int64.t }
+type%extprot subset__b_0     = { a : int; b : bool; c : string; d : Int64.t } [@@assume_subset]
 type%extprot subset__b    = subset__b_0
 type%subset subset__b_1  = subset__b [@@include b, d]
 type%subset subset__b_1b = subset__b [@@exclude a, c]
@@ -141,13 +148,13 @@ type%subset subset__b_2  = subset__b [@@include a, c]
 type%subset subset__b_2b = subset__b [@@exclude b, d]
 
 type%extprot ('a, 'b, 'c) subset__c_0 = { a : 'a; b : 'b; c : 'c; d : Int64.t }
-type%extprot subset__c    = (int, bool, string) subset__c_0
+type%extprot subset__c    = (int, bool, string) subset__c_0 [@@assume_subset]
 type%subset subset__c_1  = subset__c [@@include b, d]
 type%subset subset__c_1b = subset__c [@@exclude a, c]
 type%subset subset__c_2  = subset__c [@@include a, c]
 type%subset subset__c_2b = subset__c [@@exclude b, d]
 
-type%message subset__d    = { a : int; b : bool; c : int list }
+type%message subset__d    = { a : int; b : bool; c : int list } [@@assume_subset]
 type%message subset__d_1  = { a : int }
 type%subset subset__d_2  = subset__d [@@include b, c]
 
@@ -156,19 +163,19 @@ type%message subset__e_1  = { a : int }
 type%subset subset__e_2  = subset__d [@@include a, c]
 
 type%extprot ('a, 'b, 'c) subset__f_0 = { a : 'a; b : 'b; c : 'c; d : string }
-type%message subset__f    = (int, bool, bool) subset__f_0
+type%message subset__f    = (int, bool, bool) subset__f_0 [@@assume_subset]
 type%message subset__f_1  = { a : int }
 type%subset subset__f_2  = subset__f [@@include c]
 
-type%message subset__g    = { a : int; b : bool }
+type%message subset__g    = { a : int; b : bool } [@@assume_subset]
 type%subset subset__g1   = subset__g [@@include b]
 type%message subset__g2   = { m1 : subset__g; m2 : subset__g }
 type%subset subset__g3   = subset__g2 [@@include (m2 : subset__g1)]
 
 type%extprot ('a, 'b, 'c) subset__h0 = { a : 'a; b : 'b; c : 'c }
-type%extprot subset__h    = (int, bool, string) subset__h0
-type%subset subset__h1   = subset__f [@@include c]
-type%extprot subset__h2   = (subset__h, subset__h, string) subset__h0
+type%extprot subset__h    = (int, bool, string) subset__h0 [@@assume_subset]
+type%subset subset__h1   = subset__h [@@include c]
+type%extprot subset__h2   = (subset__h, subset__h, string) subset__h0 [@@assume_subset]
 type%subset subset__h3   = subset__h2 [@@include (b : subset__h1)]
 
 type%message subset__i    = { a : string; b : int }
@@ -279,7 +286,7 @@ type%message lazy16  = {
   v8 : string list [@lazy];
   v9 : int array [@lazy];
   v0 : int array [@lazy];
-}
+} [@@assume_subset]
 
 type%message lazy16b  = {
   v1 : simple_bool;
@@ -347,7 +354,7 @@ type%message lazy19c = { x : int }
 
 type%message lazy20a = { v1 : string lazyT; v2 : simple_bool lazyT }
 type%message lazy20b = { v1 : string lazyT [@lazy]; v2 : simple_bool lazyT [@lazy] }
-type%message lazy20c = { v1 : lazy20a [@lazy]; v2 : lazy20a [@lazy] }
+type%message lazy20c = { v1 : lazy20a [@lazy]; v2 : lazy20a [@lazy] } [@@assume_subset]
 type%subset lazy20d = lazy20c [@@include (v2 : lazy20b)]
 
 type%extprot lazy21a  = {

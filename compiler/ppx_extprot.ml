@@ -112,6 +112,12 @@ let autolazy_attr =
     Ast_pattern.(pstr nil)
     (fun (_ : unit) -> ())
 
+let assume_subset_attr =
+  Attribute.declare "extprot.assume_subset"
+    Attribute.Context.type_declaration
+    Ast_pattern.(pstr nil)
+    (fun () -> ())
+
 let type_attr =
   Attribute.declare "extprot.type"
     Attribute.Context.type_declaration
@@ -168,6 +174,7 @@ let extract_type_param (ty, _) =
 
 let rev_decls = ref []
 let fieldmod = ref "Extprot.Field"
+let assume_subsets = ref ""
 
 let is_record_type name =
   List.exists
@@ -419,13 +426,26 @@ type 'a gencode =
   | Gen_impl : Parsetree.structure_item gencode
   | Gen_sig : Parsetree.signature_item gencode
 
-let register_decl_and_gencode (type a) (which : a gencode) ~loc decl : a =
+let register_decl_and_gencode (type a) (which : a gencode) ?(assume_subset = false) ~loc decl : a =
   rev_decls := decl :: !rev_decls;
   let decls = List.rev !rev_decls in
   let implem, signature =
     try
       G.generate_code
-        ~global_opts:["field-module", !fieldmod]
+        ~global_opts:begin
+          List.concat @@
+          [
+            ["field-module", !fieldmod];
+            begin match !assume_subsets, assume_subset, decl with
+              | "", false, _ -> []
+              | s, false, _ -> ["assume_subsets", s]
+              | "", true, (PT.Message_decl (n, _, _, _) | PT.Type_decl (n, _, _, _)) ->
+                  ["assume_subsets", String.capitalize_ascii n]
+              | s, true, (PT.Message_decl (n, _, _, _) | PT.Type_decl (n, _, _, _)) ->
+                  ["assume_subsets", s ^ "," ^ String.capitalize_ascii n]
+            end
+          ]
+        end
         ~width:100
         (Gencode.collect_bindings decls) [PT.Decl decl]
     with exn ->
@@ -446,10 +466,12 @@ let register_decl_and_gencode (type a) (which : a gencode) ~loc decl : a =
             | [] -> Location.raise_errorf ~loc "Codegen error"
           end
 
+let must_assume_subset ty = is_some @@ Attribute.get assume_subset_attr ty
+
 let expand_function which ~force_message ~export ~loc ~path ty =
   let module Ast_builder = (val Ast_builder.make loc) in
   let open Ast_builder in
-    register_decl_and_gencode which ~loc @@
+    register_decl_and_gencode ~assume_subset:(must_assume_subset ty) which ~loc @@
     decl_of_ty ~force_message ~export ~loc ty
 
 let include_attr =
@@ -629,6 +651,13 @@ let fieldmod_ext =
        let m = pmod_ident { txt = longident; loc } in
          [%stri module EXTPROT_FIELD____ = [%m m]])
 
+let assume_subsets_ext =
+  Ppxlib.Extension.declare_inline
+    "extprot.assume_subsets"
+    Ppxlib.Extension.Context.structure_item
+    Ppxlib.Ast_pattern.(pstr nil)
+    (fun ~loc ~path -> assume_subsets := "all"; [])
+
 let fieldmod_ext' =
   Ppxlib.Extension.declare_inline
     "extprot.fieldmod"
@@ -646,11 +675,12 @@ let rule3  = Ppxlib.Context_free.Rule.extension subset_ext
 let rule3' = Ppxlib.Context_free.Rule.extension subset_ext'
 let rule4  = Ppxlib.Context_free.Rule.extension fieldmod_ext
 let rule4' = Ppxlib.Context_free.Rule.extension fieldmod_ext'
+let rule5  = Ppxlib.Context_free.Rule.extension assume_subsets_ext
 
 let () =
   Ppxlib.Driver.register_transformation
     ~rules:[rule1; rule1'; rule2; rule2'; rule3; rule3';
-            rule4; rule4' ]
+            rule4; rule4'; rule5 ]
     "extprot"
 
 let () = Ppxlib.Driver.standalone ()

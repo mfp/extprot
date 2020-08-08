@@ -2583,9 +2583,11 @@ let messages_with_subsets opts bindings =
                find_base_msgname name :: l
            end
          | Message_decl
-             (_, (`Message_record _ | `Message_alias _ |
+             (n, (`Message_record _ | `Message_alias _ |
                   `Message_sum _ | `Message_app _), _, _)
-         | Type_decl _ -> l)
+         | Type_decl (n, _, _, _) ->
+             if assume_all || List.mem (String.capitalize n) assume_subsets
+             then n :: l else l)
       bindings []
 
 let field_reader_func_uses bindings =
