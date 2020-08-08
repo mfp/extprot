@@ -487,13 +487,9 @@ let evr_of_exp e =
     | None, Some _ -> Some `Eager
 
 let subset_field_with_ascription e ty =
-  match e.pexp_desc, ty.ptyp_desc with
-    | Pexp_ident { txt = Lident n; _ },
-      Ptyp_constr ({ txt = Lident tyn; _ }, []) ->
-        (n, (Some (`App (tyn, [], [])), evr_of_exp e))
-    | Pexp_ident { txt = Lident _; _ }, _ ->
-        Location.raise_errorf
-          ~loc:ty.ptyp_loc  "Expected a message/subset type"
+  match e.pexp_desc, ty with
+    | Pexp_ident { txt = Lident n; _ }, ty ->
+        (n, (Some (tyexpr_of_core_type ty), evr_of_exp e))
     | _ ->
         Location.raise_errorf
           ~loc:e.pexp_loc  "Expected a lowercase identifier"
