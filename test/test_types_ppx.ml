@@ -429,7 +429,7 @@ type%extprot w8 = wsum_
   type t = Wrapped_types.Wrap_sum.t
   let to_t = Wrapped_types.Wrap_sum.from_x
   let from_t = Wrapped_types.Wrap_sum.to_x
-  let default = Wrapped_types.Wrap_sum.from_x WSum_.A ]
+  let default = Wrapped_types.Wrap_sum.from_x Wsum_.A ]
 
 type%extprot wrec_ = Wrapped_types.Rec.t = { a : int; b : string }
 type%extprot w9 = wrec_
