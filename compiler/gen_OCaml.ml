@@ -478,12 +478,16 @@ let generate_include file =
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
 
-  let typedecl name ?(params = []) ctyp =
-    Ast.TyDcl (_loc, name, params, ctyp, []) in
+  let typedecl name ~opts ?(params = []) ctyp =
+    let name = match List.assoc "_ppx.mangled_name" opts with
+      | exception Not_found -> name
+      | s -> s
+    in
+      Ast.TyDcl (_loc, name, params, ctyp, []) in
 
   let typedef name ~opts ?(params = []) ctyp =
     let ctyp = get_type ctyp opts in
-    <:str_item< type $typedecl name ~params ctyp $ >> in
+    <:str_item< type $typedecl name ~opts ~params ctyp $ >> in
 
   let type_equals ~params ty tyname =
     let applied =

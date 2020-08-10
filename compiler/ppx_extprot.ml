@@ -223,6 +223,67 @@ let pp_opt_of_tydecl t =
     | None -> []
     | Some e -> [ "ocaml.pp", string_of_expr e ]
 
+type mangled_name_with_attrs = { name  : string; attrs : attributes; }
+
+let hex_alphabet = "0123456789abcdef"
+
+let to_hex s =
+  let b = Buffer.create (2 * String.length s) in
+    for i = 0 to String.length s - 1 do
+      Buffer.add_char b hex_alphabet.[Char.code s.[i] lsr 4];
+      Buffer.add_char b hex_alphabet.[Char.code s.[i] land 0xF];
+    done;
+    Buffer.contents b
+
+let hex_decode_char = function
+  | '0' .. '9' as c -> Char.code c - Char.code '0'
+  | 'a' .. 'f' as c -> Char.code c - Char.code 'a' + 10
+  | _   -> failwith "bad hex char"
+
+let from_hex s =
+  if String.length s land 1 <> 0 then failwith "bad hex string"
+  else
+    let b = Buffer.create (String.length s / 2) in
+    let i = ref 0 in
+      while !i < String.length s do
+        Buffer.add_char b
+          (Char.chr (hex_decode_char s.[!i] lsl 4 + hex_decode_char s.[!i+1]));
+        i := !i + 2
+      done;
+      Buffer.contents b
+
+let mangle_name_with_tydecl_attr_info t =
+  match t.ptype_attributes with
+    | [] -> t.ptype_name.txt
+    | attrs ->
+        "__EXTPROT_" ^
+        (to_hex @@ Marshal.to_string { name = t.ptype_name.txt; attrs; } [])
+
+let unmangle_name s =
+  if String.length s < 10 then None
+  else
+    some @@
+    Marshal.from_string
+      (from_hex @@ String.sub s 10 (String.length s - 10)) 0
+
+class unmangle_type_names =
+  object
+    inherit Ast_traverse.map
+
+    method! type_declaration t =
+      match unmangle_name t.ptype_name.txt with
+        | None -> t
+        | Some { name; attrs } ->
+            { t with
+                ptype_name = { t.ptype_name with txt = name };
+                ptype_attributes = attrs;
+            }
+  end
+
+let type_mangled_name_opt_of_tydecl t = match t.ptype_attributes with
+  | [] -> []
+  | _ -> [ "_ppx.mangled_name", mangle_name_with_tydecl_attr_info t ]
+
 (* force_message: set when using  extprot.message  to (1) reject
  * anything that is not a monomorphic record type and (2) register the
  * declaration as a message declaration whose (de)serialization functions
@@ -241,6 +302,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                List.concat
                  [ type_equals_opt_of_tydecl tydecl;
                    type_opt_of_tydecl tydecl;
+                   type_mangled_name_opt_of_tydecl tydecl;
                  ])
 
       (* special-case Int64.t, which is NOT a message alias *)
@@ -253,7 +315,11 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
           _ } ->
           PT.Type_decl
             (name, [], `Long_int (default_opt_of_core_type ty),
-             List.concat [type_opt_of_tydecl tydecl; pp_opt_of_tydecl tydecl ])
+             List.concat
+               [type_opt_of_tydecl tydecl;
+                pp_opt_of_tydecl tydecl;
+                type_mangled_name_opt_of_tydecl tydecl;
+               ])
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
@@ -268,7 +334,9 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
             | [] -> Location.raise_errorf ~loc:ptype_loc "Invalid longindent path" in
 
           let mexpr = `Message_alias (opath, oname) in
-            PT.Message_decl (name, mexpr, (if export then Export_YES else Export_NO), [])
+            PT.Message_decl
+              (name, mexpr, (if export then Export_YES else Export_NO),
+               (type_mangled_name_opt_of_tydecl tydecl;))
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
@@ -277,7 +345,9 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
           match tyexpr_of_core_type cty with
             | `App (tyn, tys, opts) when is_record_type tyn ->
                 let mexpr = `Message_app (tyn, tys, opts) in
-                  PT.Message_decl (name, mexpr, Export_YES, [])
+                  PT.Message_decl
+                    (name, mexpr, Export_YES,
+                     (type_mangled_name_opt_of_tydecl tydecl;))
             | _ when not force_message ->
                 PT.Type_decl
                   (name, [], (tyexpr_of_core_type cty :> PT.type_expr),
@@ -286,6 +356,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                        type_equals_opt_of_tydecl tydecl;
                        type_opt_of_tydecl tydecl;
                        pp_opt_of_tydecl tydecl;
+                       type_mangled_name_opt_of_tydecl tydecl;
                      ])
             | _ ->
                 Location.raise_errorf ~loc:ptype_loc
@@ -350,7 +421,9 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                                "Invalid type in message union branch")
                     constrs in
                 let mexpr = `Message_sum branches in
-                  PT.Message_decl (name, mexpr, Export_YES, [])
+                  PT.Message_decl
+                    (name, mexpr, Export_YES,
+                     (type_mangled_name_opt_of_tydecl tydecl))
 
             | _ when not force_message ->
                 (* some constructor does not correspond to a record,
@@ -376,6 +449,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                        [ type_equals_opt_of_tydecl tydecl;
                          type_opt_of_tydecl tydecl;
                          pp_opt_of_tydecl tydecl;
+                         type_mangled_name_opt_of_tydecl tydecl;
                        ])
 
             | _ (* force_message *) ->
@@ -402,6 +476,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                  [ type_equals_opt_of_tydecl tydecl;
                    type_opt_of_tydecl tydecl;
                    pp_opt_of_tydecl tydecl;
+                   type_mangled_name_opt_of_tydecl tydecl;
                  ])
 
       | { ptype_name = { txt = name; _ };
@@ -415,6 +490,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                [ type_equals_opt_of_tydecl tydecl;
                  type_opt_of_tydecl tydecl;
                  pp_opt_of_tydecl tydecl;
+                 type_mangled_name_opt_of_tydecl tydecl;
                ])
 
       | _ ->
@@ -457,12 +533,13 @@ let register_decl_and_gencode (type a) (which : a gencode) ?(assume_subset = fal
           begin match Parse.implementation @@ Lexing.from_string implem with
             | _ :: str :: _ ->
                 (* skip the first element: EXTPROT_FIELD____ def *)
-                str
+                (new unmangle_type_names)#structure_item str
             | _ -> Location.raise_errorf ~loc "Codegen error"
           end
       | Gen_sig ->
           begin match Parse.interface @@ Lexing.from_string signature with
-            | str :: _ -> str
+            | str :: _ ->
+                (new unmangle_type_names)#signature_item str
             | [] -> Location.raise_errorf ~loc "Codegen error"
           end
 
