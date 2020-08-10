@@ -180,6 +180,89 @@ let () =
   Hashtbl.add extprot_attrs "extprot.pp" ();
   Hashtbl.add extprot_attrs "pp" ()
 
+type mangled_name_with_attrs = { name  : string; attrs : attributes; }
+
+let hex_alphabet = "0123456789abcdef"
+
+let to_hex s =
+  let b = Buffer.create (2 * String.length s) in
+    for i = 0 to String.length s - 1 do
+      Buffer.add_char b hex_alphabet.[Char.code s.[i] lsr 4];
+      Buffer.add_char b hex_alphabet.[Char.code s.[i] land 0xF];
+    done;
+    Buffer.contents b
+
+let hex_decode_char = function
+  | '0' .. '9' as c -> Char.code c - Char.code '0'
+  | 'a' .. 'f' as c -> Char.code c - Char.code 'a' + 10
+  | _   -> failwith "bad hex char"
+
+let from_hex s =
+  if String.length s land 1 <> 0 then failwith "bad hex string"
+  else
+    let b = Buffer.create (String.length s / 2) in
+    let i = ref 0 in
+      while !i < String.length s do
+        Buffer.add_char b
+          (Char.chr (hex_decode_char s.[!i] lsl 4 + hex_decode_char s.[!i+1]));
+        i := !i + 2
+      done;
+      Buffer.contents b
+
+let filter_out_extprot_attrs l =
+  List.filter
+    (fun { attr_name; _ } -> not @@ Hashtbl.mem extprot_attrs attr_name.txt) l
+
+let mangle_name_with_tydecl_attr_info t =
+  match filter_out_extprot_attrs @@ t.ptype_attributes with
+    | [] -> t.ptype_name.txt
+    | attrs ->
+        "__EXTPROT_" ^
+        (to_hex @@ Marshal.to_string { name = t.ptype_name.txt; attrs; } [])
+
+let unmangle_name s =
+  if String.length s < 10 then None
+  else
+    some @@
+    Marshal.from_string
+      (from_hex @@ String.sub s 10 (String.length s - 10)) 0
+
+class unmangle_names =
+  object(self)
+    inherit Ast_traverse.map
+
+    method! type_declaration t =
+      match unmangle_name t.ptype_name.txt with
+        | None ->
+            { t with ptype_kind = self#type_kind t.ptype_kind }
+        | Some { name; attrs } ->
+            { t with
+                ptype_name = { t.ptype_name with txt = name };
+                ptype_kind = self#type_kind t.ptype_kind;
+                ptype_attributes = attrs;
+            }
+
+    method! label_declaration t =
+      match unmangle_name t.pld_name.txt with
+        | None -> t
+        | Some { name; attrs } ->
+            { t with
+                pld_name = { t.pld_name with txt = name };
+                pld_attributes = attrs;
+            }
+  end
+
+let type_mangled_name_opt_of_tydecl t = match t.ptype_attributes with
+  | [] -> []
+  | _ -> [ "_ppx.mangled_name", mangle_name_with_tydecl_attr_info t ]
+
+let mangle_name_with_label_info t =
+  match filter_out_extprot_attrs @@ t.pld_attributes with
+    | [] -> t.pld_name.txt
+    | attrs ->
+        "__EXTPROT_" ^
+        (to_hex @@ Marshal.to_string { name = t.pld_name.txt; attrs; } [])
+
 let field_of_label_decl ?(autolazy = false) pld =
   let module Ast_builder = (val Ast_builder.make pld.pld_loc) in
   let open Ast_builder in
@@ -191,11 +274,15 @@ let field_of_label_decl ?(autolazy = false) pld =
       | _, Some _, None -> `Lazy
       | _, None, Some _ -> `Eager
       | true, None, None -> `Auto
-      | false, None, None -> `Eager
+      | false, None, None -> `Eager in
+
+  let fopts = match pld.pld_attributes with
+    | [] -> []
+    | _ -> [ "_ppx.mangled_name", mangle_name_with_label_info pld ]
   in
     (pld.pld_name.txt,
      (match pld.pld_mutable with Immutable -> false | Mutable -> true),
-     evr, [], tyexpr_of_core_type pld.pld_type)
+     evr, fopts, tyexpr_of_core_type pld.pld_type)
 
 let extract_type_param (ty, _) =
   match ty.ptyp_desc with
@@ -252,71 +339,6 @@ let pp_opt_of_tydecl t =
   match Attribute.get pp_attr t with
     | None -> []
     | Some e -> [ "ocaml.pp", string_of_expr e ]
-
-type mangled_name_with_attrs = { name  : string; attrs : attributes; }
-
-let hex_alphabet = "0123456789abcdef"
-
-let to_hex s =
-  let b = Buffer.create (2 * String.length s) in
-    for i = 0 to String.length s - 1 do
-      Buffer.add_char b hex_alphabet.[Char.code s.[i] lsr 4];
-      Buffer.add_char b hex_alphabet.[Char.code s.[i] land 0xF];
-    done;
-    Buffer.contents b
-
-let hex_decode_char = function
-  | '0' .. '9' as c -> Char.code c - Char.code '0'
-  | 'a' .. 'f' as c -> Char.code c - Char.code 'a' + 10
-  | _   -> failwith "bad hex char"
-
-let from_hex s =
-  if String.length s land 1 <> 0 then failwith "bad hex string"
-  else
-    let b = Buffer.create (String.length s / 2) in
-    let i = ref 0 in
-      while !i < String.length s do
-        Buffer.add_char b
-          (Char.chr (hex_decode_char s.[!i] lsl 4 + hex_decode_char s.[!i+1]));
-        i := !i + 2
-      done;
-      Buffer.contents b
-
-let filter_out_extprot_attrs l =
-  List.filter
-    (fun { attr_name; _ } -> not @@ Hashtbl.mem extprot_attrs attr_name.txt) l
-
-let mangle_name_with_tydecl_attr_info t =
-  match filter_out_extprot_attrs @@ t.ptype_attributes with
-    | [] -> t.ptype_name.txt
-    | attrs ->
-        "__EXTPROT_" ^
-        (to_hex @@ Marshal.to_string { name = t.ptype_name.txt; attrs; } [])
-
-let unmangle_name s =
-  if String.length s < 10 then None
-  else
-    some @@
-    Marshal.from_string
-      (from_hex @@ String.sub s 10 (String.length s - 10)) 0
-
-class unmangle_type_names =
-  object
-    inherit Ast_traverse.map
-
-    method! type_declaration t =
-      match unmangle_name t.ptype_name.txt with
-        | None -> t
-        | Some { name; attrs } ->
-            { t with
-                ptype_name = { t.ptype_name with txt = name };
-                ptype_attributes = attrs;
-            }
-  end
-
-let type_mangled_name_opt_of_tydecl t = match t.ptype_attributes with
-  | [] -> []
-  | _ -> [ "_ppx.mangled_name", mangle_name_with_tydecl_attr_info t ]
 
 (* force_message: set when using  extprot.message  to (1) reject
  * anything that is not a monomorphic record type and (2) register the
@@ -567,13 +589,13 @@ let register_decl_and_gencode (type a) (which : a gencode) ?(assume_subset = fal
           begin match Parse.implementation @@ Lexing.from_string implem with
             | _ :: str :: _ ->
                 (* skip the first element: EXTPROT_FIELD____ def *)
-                (new unmangle_type_names)#structure_item str
+                (new unmangle_names)#structure_item str
             | _ -> Location.raise_errorf ~loc "Codegen error"
           end
       | Gen_sig ->
           begin match Parse.interface @@ Lexing.from_string signature with
             | str :: _ ->
-                (new unmangle_type_names)#signature_item str
+                (new unmangle_names)#signature_item str
             | [] -> Location.raise_errorf ~loc "Codegen error"
           end
 

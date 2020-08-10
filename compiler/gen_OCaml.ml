@@ -505,8 +505,11 @@ let generate_container bindings =
             type_equals ~params ty (String.strip tyname)
           with exn -> bad_option ~msg:(Printexc.to_string exn) "type_equals" tyname in
 
+  let keep_ppx_mangled_name l =
+    List.filter (fun (k, v) -> k = "_ppx.mangled_name") l in
+
   let message_typedefs ~opts name ctyp =
-    let internal = typedef ~opts:[] ("_" ^ name) @@ maybe_type_equals opts ~params:[] ctyp in
+    let internal = typedef ~opts:(keep_ppx_mangled_name opts) ("_" ^ name) @@ maybe_type_equals opts ~params:[] ctyp in
     let ext      = typedef ~opts name @@ maybe_type_equals opts ~params:[] <:ctyp< $ctyp$ >> in
       <:str_item< $internal$; $ext$ >> in
 
@@ -520,11 +523,15 @@ let generate_container bindings =
             | _ -> failwith "low level msg def for `Message_record is not Message_single"
         in
 
-        let ctyp ((name, mutabl, ev_regime, _, texpr), llty) =
+        let ctyp ((name, mutabl, ev_regime, fopts, texpr), llty) =
           let ty = ctyp_of_texpr bindings texpr in
           let ty = match compute_ev_regime_with_llty llty ev_regime with
             | `Eager -> ty
-            | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >>
+            | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >> in
+
+          let name = match List.assoc "_ppx.mangled_name" fopts with
+            | exception Not_found -> name
+            | s -> s
           in
             match mutabl with
                 true -> <:ctyp< $lid:name$ : mutable $ty$ >>
@@ -795,11 +802,15 @@ let generate_container bindings =
     | Type_decl (name, params, texpr, opts) ->
         let ty = match poly_beta_reduce_texpr bindings texpr with
           | `Record (r, _) -> begin
-              let ctyp (name, mutabl, ev_regime, _opts, texpr) =
+              let ctyp (name, mutabl, ev_regime, fopts, texpr) =
                 let ty = ctyp_of_poly_texpr_core bindings texpr in
                 let ty = match ev_regime with
                   | `Eager | `Auto -> ty
-                  | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >>
+                  | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >> in
+
+                let name = match List.assoc "_ppx.mangled_name" fopts with
+                  | exception Not_found -> name
+                  | s -> s
                 in
                   match mutabl with
                     true -> <:ctyp< $lid:name$ : mutable $ty$ >>
