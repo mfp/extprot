@@ -21,11 +21,17 @@ let rec flatten_longident_path ~loc = function
   | Lident x -> [x]
   | Lapply _ -> Location.raise_errorf ~loc "Invalid longident path"
 
+let extprot_attrs = Hashtbl.create 13
+
 let default_attr =
   Attribute.declare "extprot.default"
     Attribute.Context.core_type
     Ast_pattern.(single_expr_payload __)
     (fun e -> e)
+
+let () =
+  Hashtbl.add extprot_attrs "extprot.default" ();
+  Hashtbl.add extprot_attrs "default" ()
 
 let default_opt_of_core_type ty =
   match Attribute.get default_attr ty with
@@ -100,11 +106,19 @@ let lazy_attr =
     Ast_pattern.(pstr nil)
     (fun (_ : unit) -> ())
 
+let () =
+  Hashtbl.add extprot_attrs "extprot.lazy" ();
+  Hashtbl.add extprot_attrs "lazy" ()
+
 let eager_attr =
   Attribute.declare "extprot.eager"
     Attribute.Context.label_declaration
     Ast_pattern.(pstr nil)
     (fun (_ : unit) -> ())
+
+let () =
+  Hashtbl.add extprot_attrs "extprot.eager" ();
+  Hashtbl.add extprot_attrs "eager" ()
 
 let autolazy_attr =
   Attribute.declare "extprot.autolazy"
@@ -112,11 +126,19 @@ let autolazy_attr =
     Ast_pattern.(pstr nil)
     (fun (_ : unit) -> ())
 
+let () =
+  Hashtbl.add extprot_attrs "extprot.autolazy" ();
+  Hashtbl.add extprot_attrs "autolazy" ()
+
 let assume_subset_attr =
   Attribute.declare "extprot.assume_subset"
     Attribute.Context.type_declaration
     Ast_pattern.(pstr nil)
     (fun () -> ())
+
+let () =
+  Hashtbl.add extprot_attrs "extprot.assume_subset" ();
+  Hashtbl.add extprot_attrs "assume_subset" ()
 
 let type_attr =
   Attribute.declare "extprot.type"
@@ -144,11 +166,19 @@ let type_attr =
     (fun _params _cstrs manifest to_t_expr from_t_expr default ->
        (manifest, to_t_expr, from_t_expr, default))
 
+let () =
+  Hashtbl.add extprot_attrs "extprot.type" ();
+  Hashtbl.add extprot_attrs "type" ()
+
 let pp_attr =
   Attribute.declare "extprot.pp"
     Attribute.Context.type_declaration
     Ast_pattern.(single_expr_payload __)
     (fun e -> e)
+
+let () =
+  Hashtbl.add extprot_attrs "extprot.pp" ();
+  Hashtbl.add extprot_attrs "pp" ()
 
 let field_of_label_decl ?(autolazy = false) pld =
   let module Ast_builder = (val Ast_builder.make pld.pld_loc) in
@@ -252,8 +282,12 @@ let from_hex s =
       done;
       Buffer.contents b
 
+let filter_out_extprot_attrs l =
+  List.filter
+    (fun { attr_name; _ } -> not @@ Hashtbl.mem extprot_attrs attr_name.txt) l
+
 let mangle_name_with_tydecl_attr_info t =
-  match t.ptype_attributes with
+  match filter_out_extprot_attrs @@ t.ptype_attributes with
     | [] -> t.ptype_name.txt
     | attrs ->
         "__EXTPROT_" ^
@@ -557,11 +591,19 @@ let include_attr =
     Ast_pattern.(single_expr_payload __)
     (fun x -> x)
 
+let () =
+  Hashtbl.add extprot_attrs "extprot.include" ();
+  Hashtbl.add extprot_attrs "include" ()
+
 let exclude_attr =
   Attribute.declare "extprot.exclude"
     Attribute.Context.type_declaration
     Ast_pattern.(single_expr_payload __)
     (fun x -> x)
+
+let () =
+  Hashtbl.add extprot_attrs "extprot.exclude" ();
+  Hashtbl.add extprot_attrs "exclude" ()
 
 let lazy_expr_attr =
   Attribute.declare "extprot.lazy"
