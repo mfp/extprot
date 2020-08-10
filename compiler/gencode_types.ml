@@ -23,14 +23,15 @@ and field = {
   field_name : string;
   field_type : low_level;
   field_evr  : ev_regime;
+  field_opts : field_opts;
 }
 
 and 'a message =
-  | Message_single of namespace option * (field_name * field_mutable * ev_regime * 'a) list
-  | Message_sum of (namespace option * constructor_name * (field_name * field_mutable * ev_regime * 'a) list) list
+  | Message_single of namespace option * (field_name * field_mutable * ev_regime * field_opts * 'a) list
+  | Message_sum of (namespace option * constructor_name * (field_name * field_mutable * ev_regime * field_opts * 'a) list) list
   | Message_alias of string list * string (* path * name *)
-  | Message_typealias of string * (field_name * field_mutable * ev_regime * 'a) list option (* path * name * fields *)
-  | Message_subset of msg_name * (field_name * field_mutable * ev_regime * 'a) list * 'a field_subset
+  | Message_typealias of string * (field_name * field_mutable * ev_regime * field_opts * 'a) list option (* path * name * fields *)
+  | Message_subset of msg_name * (field_name * field_mutable * ev_regime * field_opts * 'a) list * 'a field_subset
 
 and namespace        = string
 and constructor_name = string
@@ -38,6 +39,7 @@ and msg_name         = string
 and field_name       = string
 and field_mutable    = bool
 and ev_regime        = [ `Eager | `Lazy | `Auto ]
+and field_opts       = (string * string) list
 
 and 'a field_subset =
   | Include_fields of (string * ('a option * ev_regime option)) list

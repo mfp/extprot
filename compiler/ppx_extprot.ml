@@ -195,7 +195,7 @@ let field_of_label_decl ?(autolazy = false) pld =
   in
     (pld.pld_name.txt,
      (match pld.pld_mutable with Immutable -> false | Mutable -> true),
-     evr, tyexpr_of_core_type pld.pld_type)
+     evr, [], tyexpr_of_core_type pld.pld_type)
 
 let extract_type_param (ty, _) =
   match ty.ptyp_desc with

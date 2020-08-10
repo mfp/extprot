@@ -21,7 +21,7 @@ let make_complex_msg_expr n = function
   | `Sum (x, l) -> `Message_sum ((n, x) :: l)
 
 let replace_auto_with_eager = function
-  | (n, mut, `Auto, ty) -> (n, mut, `Eager, ty)
+  | (n, mut, `Auto, opts, ty) -> (n, mut, `Eager, opts, ty)
   | x -> x
 
 let mexpr_replace_auto_with_eager = function
@@ -159,12 +159,12 @@ EXTEND Gram
       | t1 = field -> [t1] ] ];
 
   field :
-    [ [ n = a_LIDENT; ":"; ty = type_expr_simple -> (n, false, `Auto, ty)
-      | "mutable"; n = a_LIDENT; ":"; ty = type_expr_simple -> (n, true, `Auto, ty)
-      | n = a_LIDENT; "[@"; "eager"; "]"; ":"; ty = type_expr_simple -> (n, false, `Eager, ty)
-      | "mutable"; n = a_LIDENT; "[@"; "eager"; "]"; ":"; ty = type_expr_simple -> (n, true, `Eager, ty)
-      | n = a_LIDENT; "[@"; "lazy"; "]"; ":"; ty = type_expr_simple -> (n, false, `Lazy, ty)
-      | "mutable"; n = a_LIDENT; "[@"; "lazy"; "]"; ":"; ty = type_expr_simple -> (n, true, `Lazy, ty) ]
+    [ [ n = a_LIDENT; ":"; ty = type_expr_simple -> (n, false, `Auto, [], ty)
+      | "mutable"; n = a_LIDENT; ":"; ty = type_expr_simple -> (n, true, `Auto, [], ty)
+      | n = a_LIDENT; "[@"; "eager"; "]"; ":"; ty = type_expr_simple -> (n, false, `Eager, [], ty)
+      | "mutable"; n = a_LIDENT; "[@"; "eager"; "]"; ":"; ty = type_expr_simple -> (n, true, `Eager, [], ty)
+      | n = a_LIDENT; "[@"; "lazy"; "]"; ":"; ty = type_expr_simple -> (n, false, `Lazy, [], ty)
+      | "mutable"; n = a_LIDENT; "[@"; "lazy"; "]"; ":"; ty = type_expr_simple -> (n, true, `Lazy, [], ty) ]
     ];
 
   record_app :
