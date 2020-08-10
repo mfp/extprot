@@ -160,7 +160,6 @@ let parse_string ?(verbose=true) kind entry s =
 
 let ctyp_of_path ?verbose s = parse_string ?verbose "type" Syntax.ctyp s
 let expr_of_string ?verbose s = parse_string ?verbose "expression" Syntax.expr s
-let str_item_of_string ?verbose s = parse_string ?verbose "str_item" Syntax.str_item s
 
 type type_info = { ty : string; ctyp : Ast.ctyp; fromf : Ast.expr; tof : Ast.expr; default : Ast.expr option; }
 
@@ -482,23 +481,9 @@ let generate_container bindings =
   let typedecl name ?(params = []) ctyp =
     Ast.TyDcl (_loc, name, params, ctyp, []) in
 
-  let rec add_ctyp_attrs opts ctyp = match opts with
-    | [] -> ctyp
-    | ("", _) :: opts -> add_ctyp_attrs opts ctyp
-    | (k, v) :: opts when k.[0] = '@' ->
-        let attrname = String.sub k 1 (String.length k - 1) in
-        let attrval  = match v with  "" -> Ast.StNil _loc | s -> str_item_of_string v in
-          add_ctyp_attrs opts @@ Ast.TyAtt (_loc, attrname, attrval, ctyp)
-    | _ :: opts -> add_ctyp_attrs opts ctyp in
-
-  let add_ctyp_attrs opts ctyp =
-    (* reverse the opts to preserve original order *)
-    add_ctyp_attrs (List.rev opts) ctyp in
-
   let typedef name ~opts ?(params = []) ctyp =
     let ctyp = get_type ctyp opts in
-    let ctyp = add_ctyp_attrs opts ctyp in
-      <:str_item< type $typedecl name ~params ctyp $ >> in
+    <:str_item< type $typedecl name ~params ctyp $ >> in
 
   let type_equals ~params ty tyname =
     let applied =

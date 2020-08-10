@@ -15,17 +15,6 @@ let formatter_output f =
 
 let string_of_type ty = formatter_output (fun fmt -> Pprintast.core_type fmt ty)
 let string_of_expr ty = formatter_output (fun fmt -> Pprintast.expression fmt ty)
-let string_of_pattern ty = formatter_output (fun fmt -> Pprintast.pattern fmt ty)
-let string_of_signature ty = formatter_output (fun fmt -> Pprintast.signature fmt ty)
-
-let rec remove_leading_char c = function
-  | "" -> ""
-  | s when s.[0] = c -> remove_leading_char c (String.sub s 1 (String.length s - 1))
-  | s -> s
-
-let string_of_structure ty =
-  remove_leading_char ';' @@
-  formatter_output (fun fmt -> Pprintast.structure fmt ty)
 
 let rec flatten_longident_path ~loc = function
   | Ldot (a, b) -> flatten_longident_path ~loc a @ [b]
@@ -229,20 +218,6 @@ let type_opt_of_tydecl t =
             "ocaml._type__default", Option.map string_of_expr default;
         ]
 
-let string_of_payload = function
-  | PStr s -> string_of_structure s
-  | PSig s -> string_of_signature s
-  | PTyp t -> string_of_type t
-  | PPat (pat, _when) -> string_of_pattern pat
-
-let opt_of_attribute ?(prefix = "@") a =
-  let name = prefix ^ a.attr_name.txt in
-  let payload = string_of_payload a.attr_payload in
-    (name, payload)
-
-let attribute_opts_of_tydecl t =
-  List.map opt_of_attribute t.ptype_attributes
-
 let pp_opt_of_tydecl t =
   match Attribute.get pp_attr t with
     | None -> []
@@ -266,7 +241,6 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                List.concat
                  [ type_equals_opt_of_tydecl tydecl;
                    type_opt_of_tydecl tydecl;
-                   attribute_opts_of_tydecl tydecl;
                  ])
 
       (* special-case Int64.t, which is NOT a message alias *)
@@ -279,11 +253,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
           _ } ->
           PT.Type_decl
             (name, [], `Long_int (default_opt_of_core_type ty),
-             List.concat
-               [type_opt_of_tydecl tydecl;
-                pp_opt_of_tydecl tydecl;
-                attribute_opts_of_tydecl tydecl;
-               ])
+             List.concat [type_opt_of_tydecl tydecl; pp_opt_of_tydecl tydecl ])
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
@@ -298,9 +268,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
             | [] -> Location.raise_errorf ~loc:ptype_loc "Invalid longindent path" in
 
           let mexpr = `Message_alias (opath, oname) in
-            PT.Message_decl
-              (name, mexpr, (if export then Export_YES else Export_NO),
-               attribute_opts_of_tydecl tydecl)
+            PT.Message_decl (name, mexpr, (if export then Export_YES else Export_NO), [])
 
       | { ptype_name = { txt = name; _ };
           ptype_params = []; ptype_cstrs = [];
@@ -309,8 +277,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
           match tyexpr_of_core_type cty with
             | `App (tyn, tys, opts) when is_record_type tyn ->
                 let mexpr = `Message_app (tyn, tys, opts) in
-                  PT.Message_decl
-                    (name, mexpr, Export_YES, attribute_opts_of_tydecl tydecl)
+                  PT.Message_decl (name, mexpr, Export_YES, [])
             | _ when not force_message ->
                 PT.Type_decl
                   (name, [], (tyexpr_of_core_type cty :> PT.type_expr),
@@ -319,7 +286,6 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                        type_equals_opt_of_tydecl tydecl;
                        type_opt_of_tydecl tydecl;
                        pp_opt_of_tydecl tydecl;
-                       attribute_opts_of_tydecl tydecl;
                      ])
             | _ ->
                 Location.raise_errorf ~loc:ptype_loc
@@ -384,9 +350,7 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                                "Invalid type in message union branch")
                     constrs in
                 let mexpr = `Message_sum branches in
-                  PT.Message_decl
-                    (name, mexpr, Export_YES,
-                     attribute_opts_of_tydecl tydecl)
+                  PT.Message_decl (name, mexpr, Export_YES, [])
 
             | _ when not force_message ->
                 (* some constructor does not correspond to a record,
@@ -412,7 +376,6 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                        [ type_equals_opt_of_tydecl tydecl;
                          type_opt_of_tydecl tydecl;
                          pp_opt_of_tydecl tydecl;
-                         attribute_opts_of_tydecl tydecl;
                        ])
 
             | _ (* force_message *) ->
@@ -439,7 +402,6 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                  [ type_equals_opt_of_tydecl tydecl;
                    type_opt_of_tydecl tydecl;
                    pp_opt_of_tydecl tydecl;
-                   attribute_opts_of_tydecl tydecl;
                  ])
 
       | { ptype_name = { txt = name; _ };
@@ -453,7 +415,6 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                [ type_equals_opt_of_tydecl tydecl;
                  type_opt_of_tydecl tydecl;
                  pp_opt_of_tydecl tydecl;
-                 attribute_opts_of_tydecl tydecl;
                ])
 
       | _ ->
