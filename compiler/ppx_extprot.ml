@@ -456,8 +456,9 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                     (fun cd ->
                        match cd.pcd_args with
                          | Pcstr_record fs ->
-                             (cd.pcd_name.txt,
-                              `Message_record (List.map field_of_label_decl fs))
+                             let autolazy = is_some @@ Attribute.get autolazy_attr tydecl in
+                               (cd.pcd_name.txt,
+                                `Message_record (List.map (field_of_label_decl ~autolazy) fs))
                          | Pcstr_tuple
                              [{ptyp_desc = Ptyp_constr ({txt = Lident name; _ }, params)}] -> begin
                              match
