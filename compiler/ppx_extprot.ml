@@ -302,11 +302,12 @@ let rev_decls = ref []
 let fieldmod = ref "Extprot.Field"
 let assume_subsets = ref ""
 
-let is_record_type name =
+let rec is_record_type name =
   List.exists
     (function
       | PT.Message_decl (n, _, _, _) -> n = name
       | PT.Type_decl (n, _, `Record _, _) -> n = name
+      | PT.Type_decl (n, _, `App (ty, _, _), _) -> n = name && is_record_type ty
       | PT.Type_decl _ -> false )
     !rev_decls
 
@@ -466,6 +467,9 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                                  (function
                                    | PT.Type_decl (n, _, `Record (r, _opts), _) ->
                                        if n = name then Some r.PT.record_name
+                                       else None
+                                   | PT.Type_decl (n, _, `App _, _)  ->
+                                       if n = name then Some n
                                        else None
                                    | PT.Message_decl (n, _, _, _) ->
                                        if n = name then Some n

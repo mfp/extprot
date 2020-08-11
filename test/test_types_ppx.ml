@@ -84,8 +84,8 @@ type%message msg3a = { v0 : int; v1 : silly_tuple; v2 : int list  }
 type%extprot ('a, 'b) record = { a : 'a; b : 'b }
 type%extprot 'a irecord = (int, 'a) record
 
-type%extprot rec_message = string irecord
-type%extprot rec_message_sum = A of string irecord | B of int irecord
+type%message rec_message = string irecord
+type%message rec_message_sum = A of string irecord | B of int irecord
 type%message rec_fields = { a : string irecord; b : int }
 
 type%extprot ('a, 'b, 'c, 'd) widen = { a : 'a; b : 'b; c : 'c; d : 'd }
@@ -432,7 +432,7 @@ type%extprot w8 = wsum_
   let default = Wrapped_types.Wrap_sum.from_x Wsum_.A ]
 
 type%extprot wrec_ = Wrapped_types.Rec.t = { a : int; b : string }
-type%extprot w9 = wrec_
+type%message w9 = wrec_
 [@@type
   type t = Wrapped_types.Wrap_rec.t
   let to_t = Wrapped_types.Wrap_rec.from_x
