@@ -491,10 +491,10 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                          | Pcstr_record _ ->
                              Location.raise_errorf ~loc:cd.pcd_loc
                                "Unsupported inline record"
-                         | Pcstr_tuple [] -> `Constant cd.pcd_name.txt
+                         | Pcstr_tuple [] -> `Constant (cd.pcd_name.txt, [])
                          | Pcstr_tuple tys ->
                              `Non_constant
-                               (cd.pcd_name.txt,
+                               (cd.pcd_name.txt, [],
                                 List.map (tyexpr_of_core_type ~ptype_params) tys))
                     constrs
                 in

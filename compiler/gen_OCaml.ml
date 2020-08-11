@@ -821,7 +821,7 @@ let generate_container bindings =
               in <:ctyp< { $fields$ } >>
             end
           | `Sum (s, _) -> begin
-              let ty_of_const_texprs (const, ptexprs) =
+              let ty_of_const_texprs (const, _, ptexprs) =
                 (* eprintf "type %S, const %S, %d ptexprs\n" name const (List.length ptexprs); *)
                 let tys = List.map (ctyp_of_poly_texpr_core bindings) ptexprs in
                   <:ctyp< $uid:const$ of $Ast.tyAnd_of_list tys$>>
@@ -829,10 +829,10 @@ let generate_container bindings =
               in let sum_ty =
                 foldl1 "generate_container Type_decl `Sum"
                   (function
-                     | `Constant tyn -> <:ctyp< $uid:tyn$ >>
+                     | `Constant (tyn, _) -> <:ctyp< $uid:tyn$ >>
                      | `Non_constant l -> ty_of_const_texprs l)
                   (fun ctyp c -> match c with
-                     | `Constant tyn -> <:ctyp< $ctyp$ | $uid:tyn$ >>
+                     | `Constant (tyn, _) -> <:ctyp< $ctyp$ | $uid:tyn$ >>
                      | `Non_constant c -> <:ctyp< $ctyp$ | $ty_of_const_texprs c$>>)
                   s.constructors
                 (*
@@ -1157,8 +1157,8 @@ struct
             >> in
           let cases = List.map
                         (function
-                           | `Constant c -> constr_case c
-                           | `Non_constant (n, l) -> constr_ptexprs_case (n, l))
+                           | `Constant (c, _) -> constr_case c
+                           | `Non_constant (n, _, l) -> constr_ptexprs_case (n, l))
                         s.constructors
           in
           <:expr< fun pp -> fun x -> match ($wrap_value opts <:expr<x>>$) with [ $Ast.mcOr_of_list cases$ ] >>

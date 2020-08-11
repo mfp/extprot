@@ -43,7 +43,7 @@ let free_type_variables decl : string list =
         concat_map (fun (_, _, _, _, ty) -> free_vars known ty) record.record_fields
     | `Sum (sum, _) ->
         concat_map
-          (fun (_, l) -> concat_map (type_free_vars known) (l :> type_expr list))
+          (fun (_, _, l) -> concat_map (type_free_vars known) (l :> type_expr list))
           (non_constant_constructors sum) in
 
   let rec msg_free_vars known = function
@@ -108,7 +108,7 @@ let unknown_type_opts decl : error list =
         List.map
           (function
             | `Constant _ -> []
-            | `Non_constant (_, l) ->
+            | `Non_constant (_, _, l) ->
                 List.concat @@ List.map (base_type_expr_errs decl_name) l)
           s.constructors
 
@@ -214,7 +214,7 @@ let check_declarations decls =
                   (fun errs (_, _, _, _, ty) -> fold_base_ty errs ty) acc r.record_fields
             | `Sum (sum, _) ->
                 List.fold_left
-                  (fun acc (_, l) -> List.fold_left fold_base_ty acc l)
+                  (fun acc (_, _, l) -> List.fold_left fold_base_ty acc l)
                   acc (non_constant_constructors sum)
 
           in match decl with

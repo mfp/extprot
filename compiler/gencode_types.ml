@@ -17,6 +17,7 @@ and constructor = {
   const_tag : tag;
   const_name : string;
   const_type : string;
+  const_opts : const_opts;
 }
 
 and field = {
@@ -40,6 +41,7 @@ and field_name       = string
 and field_mutable    = bool
 and ev_regime        = [ `Eager | `Lazy | `Auto ]
 and field_opts       = (string * string) list
+and const_opts       = field_opts
 
 and 'a field_subset =
   | Include_fields of (string * ('a option * ev_regime option)) list

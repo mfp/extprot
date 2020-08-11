@@ -82,10 +82,11 @@ and 'a record_data_type = {
 }
 
 and field_options = (string * string) list
+and const_options = (string * string) list
 
 and 'a sum_data_type = {
   type_name : string;
-  constructors : [`Constant of string | `Non_constant of string * 'a list] list
+  constructors : ([`Constant of string * const_options | `Non_constant of string * const_options * 'a list]) list
 }
 
 let kind_of_type_expr = function
@@ -135,5 +136,5 @@ let constant_constructors sum =
 
 let non_constant_constructors sum =
   List.filter_map
-    (function `Constant _ -> None | `Non_constant (n, l) -> Some (n, l))
+    (function `Constant _ -> None | `Non_constant x -> Some x)
     sum.constructors

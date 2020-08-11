@@ -48,8 +48,8 @@ let beta_reduce_sum self bindings s opts =
     List.map
       (function
          | `Constant _ as x -> x
-         | `Non_constant (const, tys) ->
-           `Non_constant (const, List.map (self bindings) tys))
+         | `Non_constant (const, copts, tys) ->
+           `Non_constant (const, copts, List.map (self bindings) tys))
       s.constructors
   in `Sum ({ s with constructors }, opts)
 
@@ -184,12 +184,12 @@ and alpha_convert =
               (fun constructor (bs, l) ->
                  match constructor with
                    | `Constant _ as x -> (bs, x :: l)
-                   | `Non_constant (cons, tys) ->
+                   | `Non_constant (cons, copts, tys) ->
                        let bs, tys =
                          List.fold_right
                            (fun ty (bs, l) -> let bs, ty = do_convert bs ty in (bs, ty :: l))
                            tys (bs, [])
-                       in (bs, `Non_constant (cons, tys) :: l))
+                       in (bs, `Non_constant (cons, copts, tys) :: l))
               s.constructors
               (bindings, [])
           in (bs, `Sum ({ s with constructors }, opts))
@@ -404,15 +404,18 @@ let rec low_level_msg_def bindings msgname (msg : message_expr) =
         let constructors =
           List.map
             (function
-               | `Constant const_name ->
+               | `Constant (const_name, const_opts) ->
                    let const_tag = !const_idx in
                      incr const_idx;
-                     `Constant { const_tag; const_name; const_type = sum.type_name }
-               | `Non_constant (const_name, tys) ->
+                     `Constant
+                       { const_tag; const_name; const_opts;
+                         const_type = sum.type_name;
+                       }
+               | `Non_constant (const_name, const_opts, tys) ->
                    let const_tag = !nonconst_idx in
                      incr nonconst_idx;
                      `Non_constant
-                       ({ const_tag; const_name; const_type = sum.type_name},
+                       ({ const_tag; const_name; const_opts; const_type = sum.type_name},
                         List.map low_level_of_rtexp tys))
             sum.constructors
         in Sum (constructors, opts) in
@@ -581,16 +584,19 @@ struct
   let rec pp_reduced_type_expr ppf : reduced_type_expr -> unit = function
       `Sum (s, _) -> begin match (Protocol_types.non_constant_constructors s) with
           [] -> pp ppf "@[<1>%a@]" (list (pp' "%s") "@ | ")
-                  (Protocol_types.constant_constructors s)
+                  (List.map fst @@ Protocol_types.constant_constructors s)
         | non_const ->
             let pp_non_constant ppf cases =
               let elt ppf (const, l) =
                 pp ppf "%s @[<1>(%a)@]" const (list pp_reduced_type_expr "@ ") l
               in list elt "@ | " ppf cases
             in match Protocol_types.constant_constructors s with
-                [] -> pp ppf "@[<1>%a@]" pp_non_constant non_const
-              | l -> pp ppf "@[<1>%a@ | %a@]" (list (pp' "%s") "@ | ") l
-                       pp_non_constant non_const
+                [] -> pp ppf "@[<1>%a@]" pp_non_constant
+                        (List.map (fun (c, _, ty) -> (c, ty)) non_const)
+              | l -> pp ppf "@[<1>%a@ | %a@]" (list (pp' "%s") "@ | ")
+                       (List.map fst l)
+                       pp_non_constant
+                       (List.map (fun (c, _, ty) -> (c, ty)) non_const)
       end
     | `Record (r, _) ->
         let pp_field ppf (name, ismutable, ev_regime, _opts, expr) =
@@ -624,8 +630,10 @@ struct
   let inspect_sum_dtype f ppf s =
     pp ppf "{@[<1>@ type_name = %S;@ constant = [@[<1>@ %a ]@];@ non_constant = [@[<1> %a ]@] }@]"
       s.type_name
-      (list (pp' "%S") ",@ ") (Protocol_types.constant_constructors s)
-      (pp_non_constant f) (Protocol_types.non_constant_constructors s)
+      (list (pp' "%S") ",@ ")
+      (List.map fst @@ Protocol_types.constant_constructors s)
+      (pp_non_constant f)
+      (List.map (fun (c, _, ty) -> (c, ty)) (Protocol_types.non_constant_constructors s))
 
   let string_of_eval_regime = function
     | `Eager -> "eager"
