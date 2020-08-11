@@ -213,19 +213,25 @@ let filter_out_extprot_attrs l =
   List.filter
     (fun { attr_name; _ } -> not @@ Hashtbl.mem extprot_attrs attr_name.txt) l
 
-let mangle_name_with_tydecl_attr_info t =
-  match filter_out_extprot_attrs @@ t.ptype_attributes with
-    | [] -> t.ptype_name.txt
+type mangle_kind = UID | LID
+
+let mangle_name_with_attrs kind name attrs =
+  match filter_out_extprot_attrs @@ attrs with
+    | [] -> name.txt
     | attrs ->
-        "__EXTPROT_" ^
-        (to_hex @@ Marshal.to_string { name = t.ptype_name.txt; attrs; } [])
+        (match kind with LID -> "__EXTPROT'__" | UID -> "EXTPROT'____") ^
+        (to_hex @@ Marshal.to_string { name = name.txt; attrs; } [])
 
 let unmangle_name s =
-  if String.length s < 10 then None
+  if String.length s < 12 then None
   else
-    some @@
-    Marshal.from_string
-      (from_hex @@ String.sub s 10 (String.length s - 10)) 0
+    match String.sub s 0 12 with
+      (* must only unmangle if we find the magic prefix! *)
+      | "__EXTPROT'__" | "EXTPROT'____" ->
+          some @@
+          Marshal.from_string
+            (from_hex @@ String.sub s 12 (String.length s - 12)) 0
+      | _ -> None
 
 class unmangle_names =
   object(self)
@@ -250,18 +256,20 @@ class unmangle_names =
                 pld_name = { t.pld_name with txt = name };
                 pld_attributes = attrs;
             }
+
+    method! constructor_declaration t =
+      match unmangle_name t.pcd_name.txt with
+        | None -> t
+        | Some { name; attrs } ->
+            { t with
+                pcd_name       = { t.pcd_name with txt = name };
+                pcd_attributes = attrs;
+            }
   end
 
 let type_mangled_name_opt_of_tydecl t = match t.ptype_attributes with
   | [] -> []
-  | _ -> [ "_ppx.mangled_name", mangle_name_with_tydecl_attr_info t ]
-
-let mangle_name_with_label_info t =
-  match filter_out_extprot_attrs @@ t.pld_attributes with
-    | [] -> t.pld_name.txt
-    | attrs ->
-        "__EXTPROT_" ^
-        (to_hex @@ Marshal.to_string { name = t.pld_name.txt; attrs; } [])
+  | attrs -> [ "_ppx.mangled_name", mangle_name_with_attrs LID t.ptype_name attrs ]
 
 let field_of_label_decl ?(autolazy = false) pld =
   let module Ast_builder = (val Ast_builder.make pld.pld_loc) in
@@ -278,11 +286,15 @@ let field_of_label_decl ?(autolazy = false) pld =
 
   let fopts = match pld.pld_attributes with
     | [] -> []
-    | _ -> [ "_ppx.mangled_name", mangle_name_with_label_info pld ]
+    | attrs -> [ "_ppx.mangled_name", mangle_name_with_attrs LID pld.pld_name attrs ]
   in
     (pld.pld_name.txt,
      (match pld.pld_mutable with Immutable -> false | Mutable -> true),
      evr, fopts, tyexpr_of_core_type pld.pld_type)
+
+let const_mangled_name_opt t = match t.pcd_attributes with
+  | [] -> []
+  | attrs -> [ "_ppx.mangled_name", mangle_name_with_attrs UID t.pcd_name attrs ]
 
 let extract_type_param (ty, _) =
   match ty.ptyp_desc with
@@ -491,10 +503,11 @@ let decl_of_ty ~export ~force_message ~loc tydecl =
                          | Pcstr_record _ ->
                              Location.raise_errorf ~loc:cd.pcd_loc
                                "Unsupported inline record"
-                         | Pcstr_tuple [] -> `Constant (cd.pcd_name.txt, [])
+                         | Pcstr_tuple [] ->
+                             `Constant (cd.pcd_name.txt, const_mangled_name_opt cd)
                          | Pcstr_tuple tys ->
                              `Non_constant
-                               (cd.pcd_name.txt, [],
+                               (cd.pcd_name.txt, const_mangled_name_opt cd,
                                 List.map (tyexpr_of_core_type ~ptype_params) tys))
                     constrs
                 in

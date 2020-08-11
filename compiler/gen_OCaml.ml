@@ -817,18 +817,23 @@ let generate_container bindings =
               in <:ctyp< { $fields$ } >>
             end
           | `Sum (s, _) -> begin
-              let ty_of_const_texprs (const, _, ptexprs) =
+              let ty_of_const_texprs (const, copts, ptexprs) =
                 (* eprintf "type %S, const %S, %d ptexprs\n" name const (List.length ptexprs); *)
-                let tys = List.map (ctyp_of_poly_texpr_core bindings) ptexprs in
+                let const = get_mangled_name ~default:const copts in
+                let tys   = List.map (ctyp_of_poly_texpr_core bindings) ptexprs in
                   <:ctyp< $uid:const$ of $Ast.tyAnd_of_list tys$>>
 
               in let sum_ty =
                 foldl1 "generate_container Type_decl `Sum"
                   (function
-                     | `Constant (tyn, _) -> <:ctyp< $uid:tyn$ >>
+                     | `Constant (tyn, copts) ->
+                         let tyn = get_mangled_name ~default:tyn copts in
+                           <:ctyp< $uid:tyn$ >>
                      | `Non_constant l -> ty_of_const_texprs l)
                   (fun ctyp c -> match c with
-                     | `Constant (tyn, _) -> <:ctyp< $ctyp$ | $uid:tyn$ >>
+                     | `Constant (tyn, copts) ->
+                         let tyn = get_mangled_name ~default:tyn copts in
+                           <:ctyp< $ctyp$ | $uid:tyn$ >>
                      | `Non_constant c -> <:ctyp< $ctyp$ | $ty_of_const_texprs c$>>)
                   s.constructors
                 (*
