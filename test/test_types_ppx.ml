@@ -313,7 +313,7 @@ type%message lazy17 = {
   v4 : int list [@lazy];
   v5 : int array [@lazy];
   v6 : simple_bool [@lazy];
-}
+} [@@assume_subset]
 
 type%message lazy17b = {
   v1 : int;
@@ -484,13 +484,13 @@ type%message lazy24 = {
   v4 : int list;
   v5 : int array;
   v6 : simple_bool;
-}
+} [@@assume_subset]
 
-type%message lazy24a = lazy24 [@@include v1 [@lazy], v2 [@lazy], v3 [@lazy]]
-type%message lazy24b = lazy24 [@@include v4 [@lazy], v5 [@lazy], v6 [@lazy]]
-type%message lazy24c = lazy24 [@@include v1 [@lazy], v2, v3 [@lazy] ]
+type%subset lazy24a = lazy24 [@@include v1 [@lazy], v2 [@lazy], v3 [@lazy]]
+type%subset lazy24b = lazy24 [@@include v4 [@lazy], v5 [@lazy], v6 [@lazy]]
+type%subset lazy24c = lazy24 [@@include v1 [@lazy], v2, v3 [@lazy] ]
 
-type%message lazy25 = lazy17 [@@include v1 [@eager], v3, v4 ]
+type%subset lazy25 = lazy17 [@@include v1 [@eager], v3, v4 ]
 
 type%message autolazy1 =
   {
