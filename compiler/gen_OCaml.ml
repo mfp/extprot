@@ -475,14 +475,16 @@ let generate_include file =
   let modul = String.capitalize @@ Filename.chop_extension file in
     (<:str_item< open $uid:modul$ >>, modul)
 
+let get_mangled_name ~default opts =
+  match List.assoc "_ppx.mangled_name" opts with
+    | exception Not_found -> default
+    | s -> s
+
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
 
   let typedecl name ~opts ?(params = []) ctyp =
-    let name = match List.assoc "_ppx.mangled_name" opts with
-      | exception Not_found -> name
-      | s -> s
-    in
+    let name = get_mangled_name ~default:name opts in
       Ast.TyDcl (_loc, name, params, ctyp, []) in
 
   let typedef name ~opts ?(params = []) ctyp =
@@ -529,10 +531,7 @@ let generate_container bindings =
             | `Eager -> ty
             | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >> in
 
-          let name = match List.assoc "_ppx.mangled_name" fopts with
-            | exception Not_found -> name
-            | s -> s
-          in
+          let name = get_mangled_name ~default:name fopts in
             match mutabl with
                 true -> <:ctyp< $lid:name$ : mutable $ty$ >>
               | false -> <:ctyp< $lid:name$ : $ty$ >> in
@@ -808,10 +807,7 @@ let generate_container bindings =
                   | `Eager | `Auto -> ty
                   | `Lazy -> <:ctyp< EXTPROT_FIELD____.t $ty$ >> in
 
-                let name = match List.assoc "_ppx.mangled_name" fopts with
-                  | exception Not_found -> name
-                  | s -> s
-                in
+                let name = get_mangled_name ~default:name fopts in
                   match mutabl with
                     true -> <:ctyp< $lid:name$ : mutable $ty$ >>
                   | false -> <:ctyp< $lid:name$ : $ty$ >> in
