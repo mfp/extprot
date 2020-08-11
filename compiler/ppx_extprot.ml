@@ -215,12 +215,13 @@ let filter_out_extprot_attrs l =
 
 type mangle_kind = UID | LID
 
-let mangle_name_with_attrs kind name attrs =
+let mangle_name_opts kind name attrs =
   match filter_out_extprot_attrs @@ attrs with
-    | [] -> name.txt
+    | [] -> []
     | attrs ->
-        (match kind with LID -> "__EXTPROT'__" | UID -> "EXTPROT'____") ^
-        (to_hex @@ Marshal.to_string { name = name.txt; attrs; } [])
+        [ "_ppx.mangled_name",
+          (match kind with LID -> "__EXTPROT'__" | UID -> "EXTPROT'____") ^
+          (to_hex @@ Marshal.to_string { name = name.txt; attrs; } []) ]
 
 let unmangle_name s =
   if String.length s < 12 then None
@@ -268,9 +269,8 @@ class unmangle_names =
               }
   end
 
-let type_mangled_name_opt_of_tydecl t = match t.ptype_attributes with
-  | [] -> []
-  | attrs -> [ "_ppx.mangled_name", mangle_name_with_attrs LID t.ptype_name attrs ]
+let type_mangled_name_opt_of_tydecl t =
+  mangle_name_opts LID t.ptype_name t.ptype_attributes
 
 let field_of_label_decl ?(autolazy = false) pld =
   let module Ast_builder = (val Ast_builder.make pld.pld_loc) in
@@ -285,17 +285,13 @@ let field_of_label_decl ?(autolazy = false) pld =
       | true, None, None -> `Auto
       | false, None, None -> `Eager in
 
-  let fopts = match pld.pld_attributes with
-    | [] -> []
-    | attrs -> [ "_ppx.mangled_name", mangle_name_with_attrs LID pld.pld_name attrs ]
-  in
+  let fopts = mangle_name_opts LID pld.pld_name pld.pld_attributes in
     (pld.pld_name.txt,
      (match pld.pld_mutable with Immutable -> false | Mutable -> true),
      evr, fopts, tyexpr_of_core_type pld.pld_type)
 
-let const_mangled_name_opt t = match t.pcd_attributes with
-  | [] -> []
-  | attrs -> [ "_ppx.mangled_name", mangle_name_with_attrs UID t.pcd_name attrs ]
+let const_mangled_name_opt t =
+  mangle_name_opts UID t.pcd_name t.pcd_attributes
 
 let extract_type_param (ty, _) =
   match ty.ptyp_desc with
