@@ -235,36 +235,37 @@ let unmangle_name s =
 
 class unmangle_names =
   object(self)
-    inherit Ast_traverse.map
+    inherit Ast_traverse.map as super
 
     method! type_declaration t =
+      super#type_declaration @@
       match unmangle_name t.ptype_name.txt with
-        | None ->
-            { t with ptype_kind = self#type_kind t.ptype_kind }
+        | None -> { t with ptype_kind = self#type_kind t.ptype_kind }
         | Some { name; attrs } ->
-            { t with
-                ptype_name = { t.ptype_name with txt = name };
-                ptype_kind = self#type_kind t.ptype_kind;
-                ptype_attributes = attrs;
-            }
+              { t with
+                  ptype_name       = { t.ptype_name with txt = name };
+                  ptype_attributes = attrs;
+              }
 
     method! label_declaration t =
+      super#label_declaration @@
       match unmangle_name t.pld_name.txt with
         | None -> t
         | Some { name; attrs } ->
-            { t with
-                pld_name = { t.pld_name with txt = name };
-                pld_attributes = attrs;
-            }
+              { t with
+                  pld_name       = { t.pld_name with txt = name };
+                  pld_attributes = attrs;
+              }
 
     method! constructor_declaration t =
+      super#constructor_declaration @@
       match unmangle_name t.pcd_name.txt with
         | None -> t
         | Some { name; attrs } ->
-            { t with
-                pcd_name       = { t.pcd_name with txt = name };
-                pcd_attributes = attrs;
-            }
+              { t with
+                  pcd_name       = { t.pcd_name with txt = name };
+                  pcd_attributes = attrs;
+              }
   end
 
 let type_mangled_name_opt_of_tydecl t = match t.ptype_attributes with
