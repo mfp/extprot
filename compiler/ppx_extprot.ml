@@ -232,6 +232,14 @@ let unmangle_name s =
           some @@
           Marshal.from_string
             (from_hex @@ String.sub s 12 (String.length s - 12)) 0
+      | "___EXTPROT'_" when String.length s > 13 ->
+          (* for type names emitted with "_" prefix, the magic is
+           * "___EXTPROT'__" and we prepend the "_" prefix again *)
+          let name, attrs =
+            Marshal.from_string
+              (from_hex @@ String.sub s 13 (String.length s - 13)) 0
+          in
+            some { name = "_" ^ name; attrs; }
       | _ -> None
 
 class unmangle_names =

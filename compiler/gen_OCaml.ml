@@ -483,13 +483,13 @@ let get_mangled_name ~default opts =
 let generate_container bindings =
   let _loc = Loc.mk "gen_OCaml" in
 
-  let typedecl name ~opts ?(params = []) ctyp =
-    let name = get_mangled_name ~default:name opts in
+  let typedecl name ~prefix ~opts ?(params = []) ctyp =
+    let name = prefix ^ get_mangled_name ~default:name opts in
       Ast.TyDcl (_loc, name, params, ctyp, []) in
 
-  let typedef name ~opts ?(params = []) ctyp =
+  let typedef name ?(prefix="") ~opts ?(params = []) ctyp =
     let ctyp = get_type ctyp opts in
-    <:str_item< type $typedecl name ~opts ~params ctyp $ >> in
+    <:str_item< type $typedecl name ~prefix ~opts ~params ctyp $ >> in
 
   let type_equals ~params ty tyname =
     let applied =
@@ -511,7 +511,7 @@ let generate_container bindings =
     List.filter (fun (k, v) -> k = "_ppx.mangled_name") l in
 
   let message_typedefs ~opts name ctyp =
-    let internal = typedef ~opts:(keep_ppx_mangled_name opts) ("_" ^ name) @@ maybe_type_equals opts ~params:[] ctyp in
+    let internal = typedef ~prefix:"_" ~opts:(keep_ppx_mangled_name opts) name @@ maybe_type_equals opts ~params:[] ctyp in
     let ext      = typedef ~opts name @@ maybe_type_equals opts ~params:[] <:ctyp< $ctyp$ >> in
       <:str_item< $internal$; $ext$ >> in
 
