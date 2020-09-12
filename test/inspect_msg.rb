@@ -7,11 +7,11 @@ class BadWireType < ExtprotError; end
 class UnknownTag < ExtprotError; end
 
 module Codec
-  @@types = [ 
-    :vint, :tuple, :bits8, :bytes, 
+  @@types = [
+    :vint, :tuple, :bits8, :bytes,
     :bits32, :htuple, :bits64_long, :assoc,
     :bits64_float, :invalid, :enum, :invalid,
-    :invalid, :invalid, :invalid, :invalid 
+    :invalid, :invalid, :invalid, :invalid
   ]
 
   def ll_type(n); @@types[n & 0xf] end
@@ -20,7 +20,7 @@ module Codec
   module_function :ll_type, :ll_tag
 end
 
-class Reader 
+class Reader
   include Codec
 
   def initialize(io)
@@ -33,7 +33,7 @@ class Reader
     raise EOFError unless b
     return b if b < 128
     x = e = 0
-    while b >= 128 
+    while b >= 128
       x += (b - 128) << e
       e += 7
       b = read_byte
@@ -44,18 +44,18 @@ class Reader
 
   alias_method :read_prefix, :read_vint
 
-  def read_bytes(n); 
-    r = @io.read(n) 
+  def read_bytes(n);
+    r = @io.read(n)
     @off += r.size
     r
   end
 
-  def read_byte; 
+  def read_byte;
     @off += 1
-    @io.getc 
+    @io.getc
   end
 
-  def check_prim_type(ty, t) 
+  def check_prim_type(ty, t)
     p = read_prefix
     if ll_tag(p) != 0 then
       skip_value(p)
@@ -71,7 +71,7 @@ class Reader
     p = read_prefix
     llty = ll_type(p)
     puts "prefix #{p} type #{llty}"
-    if ll_tag(p) == 0 && llty == ty 
+    if ll_tag(p) == 0 && llty == ty
       b.call
     elsif ll_tag(p) != 0
       skip_value p
@@ -109,7 +109,7 @@ class Reader
     when :bits8; read_byte
     when :bits32; read_bytes(4)
     when :bits64_float, :bits64_long; read_bytes(8)
-    when :enum; 
+    when :enum;
     when :tuple, :htuple, :bytes, :assoc; @rd.read(read_vint)
     when :invalid; raise BadWireType
     end
@@ -154,7 +154,7 @@ class Reader
 end
 
 class Inspect
-  include Codec 
+  include Codec
 
   def initialize(reader, out, verbose = true, maxwidth = 79)
     @rd = reader
@@ -172,12 +172,12 @@ class Inspect
 
   def doinspect(prefix)
     tag = ll_tag(prefix)
-    case ll_type(prefix) 
+    case ll_type(prefix)
     when :tuple; inspect_tuple("{ ", " }", prefix)
     when :htuple; inspect_tuple("[ ", " ]", prefix)
     when :assoc; inspect_assoc(prefix)
     when :vint
-      if @verbose || tag != 0 
+      if @verbose || tag != 0
         @out.text("Vint_%d %d" % [tag, @rd.read_raw_rel_int])
       else
         @out.text("%d" % @rd.read_raw_rel_int)

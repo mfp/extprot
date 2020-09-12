@@ -4,14 +4,14 @@ type meta 'a = Unset | Set source 'a
 
 type dim = (int * int)
 
-message metadata = 
+message metadata =
       Text {
 	author: meta<string>;
 	pages : meta<int>
       }
   | Image {
       dims : meta<dim>;
-      colors : meta<int> 
+      colors : meta<int>
   }
 
 type tup 'a 'b = ('a * 'b)
