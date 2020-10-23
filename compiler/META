@@ -1,0 +1,4 @@
+name="ppx_extprot"
+description="ppx extension to define extprot protocols"
+requires="extprot"
+ppx="ppx_extprot"
