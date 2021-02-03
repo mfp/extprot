@@ -18,7 +18,7 @@ case $"\([0-9]\)\.\([0-9]+\)\."
        OCAML_MINOR = $2
        export
 
-OCAMLFLAGS    = -w +a-3-4-32-44-48 -warn-error +a-3-4-6-7-9-18-27..29-32..99
+OCAMLFLAGS    = -w +a-4-32-44-48 -warn-error +a-3-4-6-7-9-18-27..29-32..99
 OCAMLOPTFLAGS = -g -inline 100
 OCAMLCFLAGS  += -g
 
