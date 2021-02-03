@@ -33,6 +33,8 @@ type toplevel = Ast.str_item
 
 type entry = Toplevel of (toplevel * string) | Container of container
 
+let capitalize = String.capitalize_ascii
+
 let assumed_subsets opts =
   try
     List.filter ((<>) "") @@
@@ -333,7 +335,7 @@ let rec default_value (ev_regime : Gencode.ev_regime) t =
     match t with
     | Vint (Bool, opts) ->
         default_value_or
-          (fun s -> match String.lowercase s with
+          (fun s -> match String.lowercase_ascii s with
              | "true" -> <:expr< True >>
              | "false" -> <:expr< False >>
              | _ -> bad_default_value "boolean" s)
@@ -368,7 +370,7 @@ let rec default_value (ev_regime : Gencode.ev_regime) t =
         with
           | None -> None
           | Some c ->
-              Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
+              Some <:expr< $uid:capitalize c.const_type$.$lid:c.const_name$ >>
       end
     | Record (name, fields, _) -> begin
         Some
@@ -384,7 +386,7 @@ let rec default_value (ev_regime : Gencode.ev_regime) t =
     | Htuple (List, _, _) -> Some <:expr< [] >>
     | Htuple (Array, _, _) -> Some <:expr< [| |] >>
     | Message (path, name, _, _) ->
-        let full_path = path @ [String.capitalize name] in
+        let full_path = path @ [capitalize name] in
         let id = ident_with_path _loc full_path (name ^ "_default") in
         let e1 = <:expr< ! $id:id$ >> in
           Some <:expr< $e1$ () >>
@@ -418,7 +420,7 @@ and default_record ~msgname ?namespace fields =
             (fun (name, v) -> match namespace with
                  None -> <:rec_binding< $lid:name$ = $v$ >>
                | Some ns ->
-                   <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $v$ >>)
+                   <:rec_binding< $uid:capitalize ns$.$lid:name$ = $v$ >>)
             l
         in <:expr< { $Ast.rbSem_of_list assigns$ } >>
 
@@ -449,7 +451,7 @@ let indent n s =
 
 let generate_include file =
   let _loc = Loc.mk "gen_OCaml" in
-  let modul = String.capitalize @@ Filename.chop_extension file in
+  let modul = capitalize @@ Filename.chop_extension file in
     (<:str_item< open $uid:modul$ >>, modul)
 
 let generate_container bindings =
@@ -512,7 +514,7 @@ let generate_container bindings =
           (message_typedefs ~opts msgname <:ctyp< { $fields$ } >>, None)
 
    | `Message_app (name, args, opts) ->
-       let tyname = String.capitalize name ^ "." ^ String.uncapitalize name in
+       let tyname = capitalize name ^ "." ^ String.uncapitalize_ascii name in
        let applied =
          ident_of_ctyp @@
          List.fold_left
@@ -522,15 +524,15 @@ let generate_container bindings =
          (message_typedefs ~opts msgname <:ctyp< $applied$ >>, None)
 
    | `Message_alias (path, name) ->
-       let full_path = path @ [String.capitalize name; name ] in
+       let full_path = path @ [capitalize name; name ] in
        let uid       = String.concat "." full_path in
         (message_typedefs ~opts msgname (ctyp_of_path uid), None)
 
    | `Message_sum l ->
        let tydef_of_msg_branch (const, mexpr) =
          <:str_item<
-           module $String.capitalize const$ = struct
-             $fst @@ message_types (String.lowercase const) (mexpr :> message_expr)$
+           module $capitalize const$ = struct
+             $fst @@ message_types (String.lowercase_ascii const) (mexpr :> message_expr)$
            end; >> in
 
        let sig_of_msg_branch (const, mexpr) =
@@ -538,11 +540,11 @@ let generate_container bindings =
            indent 2 @@
            string_of_ast (fun o -> o#implem)
              <:str_item<
-               $fst @@ message_types (String.lowercase const) (mexpr :> message_expr)$
+               $fst @@ message_types (String.lowercase_ascii const) (mexpr :> message_expr)$
              >>
          in
            sprintf "module %s : sig\n%s\nend\n\n"
-             (String.capitalize const)
+             (capitalize const)
              sig_body
        in
 
@@ -551,7 +553,7 @@ let generate_container bindings =
            (fun s b -> <:str_item< $s$; $tydef_of_msg_branch b$ >>) l in
 
        let variant (const, _) =
-         <:ctyp< $uid:const$ of ($uid:const$.$lid:String.lowercase const$) >> in
+         <:ctyp< $uid:const$ of ($uid:const$.$lid:String.lowercase_ascii const$) >> in
        let consts = foldl1 "message_types `Message_sum" variant
                       (fun vars c -> <:ctyp< $vars$ | $variant c$ >>) l in
        let signature =
@@ -639,7 +641,7 @@ let generate_container bindings =
 
   and modules_to_include_of_texpr = function
      | `App (name, _, _) ->
-         let n = String.capitalize name in
+         let n = capitalize name in
            Some (<:str_item< include $uid:n$ >>, n)
      | #type_expr -> None
 
@@ -672,7 +674,7 @@ let generate_container bindings =
                  opts
       end
     | `Ext_type (path, name, args, opts) ->
-        let full_path = path @ [String.capitalize name] in
+        let full_path = path @ [capitalize name] in
         let id = ident_with_path _loc full_path name in
         let t = List.fold_left (* apply *)
                   (fun ty ptexpr -> <:ctyp< $ty$ $ctyp_of_poly_texpr_core bindings ptexpr$ >>)
@@ -685,7 +687,7 @@ let generate_container bindings =
         let args = List.map (ctyp_of_poly_texpr_core bindings) args in
         let t = List.fold_left (* apply *)
                   (fun ty ty_arg -> <:ctyp< $ty$ $ty_arg$ >>)
-                  <:ctyp< $uid:String.capitalize name$.$lid:name$ >>
+                  <:ctyp< $uid:capitalize name$.$lid:name$ >>
                   args
         in
         begin match get_type_info opts with
@@ -727,7 +729,7 @@ let generate_container bindings =
               >>
 
           | Message_alias (path, name) ->
-              let full_path = path @ [String.capitalize name] in
+              let full_path = path @ [capitalize name] in
               let v = <:expr< $id:ident_with_path _loc full_path (name ^ "_default") $ >> in
               let v = <:expr< $v$.val () >> in
                 <:str_item<
@@ -735,7 +737,7 @@ let generate_container bindings =
                 >>
 
           | Message_typealias (name, _) ->
-              let full_path = [String.capitalize name] in
+              let full_path = [capitalize name] in
               let v = <:expr< $id:ident_with_path _loc full_path (name ^ "_default") $ >> in
               let v = <:expr< $v$.val () >> in
                 <:str_item<
@@ -745,7 +747,7 @@ let generate_container bindings =
           | Message_sum ((namespace, constr, fields) :: _) ->
               let namespace = Option.default constr namespace in
               let v =
-                <:expr< $uid:String.capitalize constr$
+                <:expr< $uid:capitalize constr$
                            $ default_record ~msgname ~namespace fields $ >>
               in
                 <:str_item<
@@ -845,7 +847,7 @@ let generate_code ?(global_opts=[]) ?width containers =
   let _loc = loc "<generated code>" in
   let container_of_str_item c =
     <:str_item<
-       module $String.capitalize c.c_name$ = struct
+       module $capitalize c.c_name$ = struct
          $maybe_str_item c.c_import_modules$;
          $maybe_str_item c.c_types$;
          $maybe_str_item c.c_default_func$;
@@ -927,7 +929,7 @@ let generate_code ?(global_opts=[]) ?width containers =
                 "module %s : sig\n\
                  %s\n\
                  end"
-                (String.capitalize c.c_name)
+                (capitalize c.c_name)
                 sig_body)
       containers;
   in
@@ -1012,11 +1014,11 @@ struct
         let pp_func =
           List.fold_left
             (fun e ptexpr -> <:expr< $e$ $pp_texpr bindings ptexpr$ >>)
-            (pp_name [String.capitalize name] name)
+            (pp_name [capitalize name] name)
             args
         in <:expr< $pp_func$ pp >>
     | `Message_alias (path, name) ->
-        let full_path = path @ [String.capitalize name] in
+        let full_path = path @ [capitalize name] in
         <:expr< $pp_name full_path name$ pp >>
     | `Message_sum l ->
         let match_case (const, mexpr) =
@@ -1029,14 +1031,14 @@ struct
     let pp_field i (name, _, _, tyexpr) =
       let selector = match namespace, SMap.find name ev_regimes with
         | None, `Eager -> <:expr< (fun t -> t.$lid:name$) >>
-        | Some ns, `Eager -> <:expr< (fun t -> t.$uid:String.capitalize ns$.$lid:name$) >>
+        | Some ns, `Eager -> <:expr< (fun t -> t.$uid:capitalize ns$.$lid:name$) >>
         | None, `Lazy -> <:expr< (fun t -> EXTPROT_FIELD____.force t.$lid:name$) >>
-        | Some ns, `Lazy -> <:expr< (fun t -> EXTPROT_FIELD____.force t.$uid:String.capitalize ns$.$lid:name$) >>
+        | Some ns, `Lazy -> <:expr< (fun t -> EXTPROT_FIELD____.force t.$uid:capitalize ns$.$lid:name$) >>
       in
       let prefix = match namespace with
-          None -> String.capitalize msgname
+          None -> capitalize msgname
         | Some ns -> sprintf "%s.%s"
-                       (String.capitalize msgname) (String.capitalize ns) in
+                       (capitalize msgname) (capitalize ns) in
       let label =
         if i = 0 then prefix ^ "." ^ name
         else name
@@ -1051,7 +1053,7 @@ struct
     reduce_to_poly_texpr_core bindings texpr |> pp_poly_texpr_core bindings
 
   and pp_poly_type bindings path name args =
-    let path = path @ [String.capitalize name] in
+    let path = path @ [capitalize name] in
     List.fold_left
       (fun e ptexpr -> <:expr< $e$ $pp_poly_texpr_core bindings ptexpr$ >>)
       (pp_name path name)
@@ -1109,13 +1111,13 @@ struct
               <:match_case<
                 $uid:const$ $paCom_of_lidlist _loc params$ ->
                   $pp_func "fprintf"$ pp
-                  $str:String.capitalize tyname ^ "." ^ const ^ " %a"$
+                  $str:capitalize tyname ^ "." ^ const ^ " %a"$
                   $pp_poly_texpr_core bindings (`Tuple (ptexprs, opts))$ ($exTup_of_lidlist _loc params$)
               >> in
           let constr_case constr =
             <:match_case<
                 $uid:constr$ -> $pp_func "fprintf"$ pp
-                                  $str:String.capitalize tyname ^ "." ^ constr$
+                                  $str:capitalize tyname ^ "." ^ constr$
             >> in
           let cases = List.map
                         (function
@@ -1128,7 +1130,7 @@ struct
       | `Record (r, opts) -> begin
           let pp_field i (name, _, ev_regime, tyexpr) =
             let field_name =
-              if i = 0 then String.capitalize r.record_name ^ "." ^ name
+              if i = 0 then capitalize r.record_name ^ "." ^ name
               else name in
 
             let selector = match ev_regime with
@@ -1385,7 +1387,7 @@ struct
     let mk_expr vars =
       List.fold_left
         (fun e var -> <:expr< $e$ $lid:var$ >>)
-        <:expr< $uid:String.capitalize c.const_type$.$uid:c.const_name$ >>
+        <:expr< $uid:capitalize c.const_type$.$uid:c.const_name$ >>
         vars
     in read_constructor_elms msgname constr_name name mk_expr lltys
 
@@ -1565,7 +1567,7 @@ struct
                 (fun c ->
                    <:match_case<
                      $int:string_of_int c.const_tag$ ->
-                       $uid:String.capitalize c.const_type$.$lid:c.const_name$
+                       $uid:capitalize c.const_type$.$lid:c.const_name$
                    >>)
                 constant
               @ [ <:match_case<
@@ -1615,7 +1617,7 @@ struct
                 (c, [ty]) :: _ -> begin match f__raw_rd_func ty with
                     Some (mc, reader_expr) ->
                       <:match_case<
-                          $mc$ -> $uid:String.capitalize c.const_type$.$uid:c.const_name$ ($reader_expr$ s)
+                          $mc$ -> $uid:capitalize c.const_type$.$uid:c.const_name$ ($reader_expr$ s)
                         | $bad_type_case$
                       >>
                   | None -> bad_type_case
@@ -1626,7 +1628,7 @@ struct
                       | Some defs ->
                           <:match_case<
                               $mc$ ->
-                                 $uid:String.capitalize c.const_type$.$uid:c.const_name$
+                                 $uid:capitalize c.const_type$.$uid:c.const_name$
                                    ($reader_expr$ s, $Ast.exCom_of_list defs$)
                             | $bad_type_case$
                           >>
@@ -1725,7 +1727,7 @@ struct
                 >>
 
         | `Eager, (Message (path, name, _, _) as llty) ->
-            let full_path = path @ [String.capitalize name] in
+            let full_path = path @ [capitalize name] in
             let id = ident_with_path _loc full_path (RD.read_msg_func name) in
               update_path_if_needed ~name ~fieldno llty @@
               wrap @@
@@ -1735,7 +1737,7 @@ struct
                 <:expr< $id:id$ s >>
 
         | `Lazy, (Message (path, name, _, _) as llty) when deserialize_eagerly llty ->
-            let full_path = path @ [String.capitalize name] in
+            let full_path = path @ [capitalize name] in
             let id = ident_with_path _loc full_path (RD.read_msg_func name) in
               update_path_if_needed ~name ~fieldno llty @@
               wrap @@
@@ -1745,7 +1747,7 @@ struct
                 <:expr< EXTPROT_FIELD____.from_val ($id:id$ s) >>
 
         | `Lazy, (Message (path, name, _, _) as llty) ->
-            let full_path = path @ [String.capitalize name] in
+            let full_path = path @ [capitalize name] in
             (* We hardcode use of read_ because it's the String_reader version
              * we want (since it will be operating on the string_reader passed
              * to the thunk. *)
@@ -1992,7 +1994,7 @@ struct
 
   and is_field_reader_func_used opts field_reader_func_uses msgname name evr llty =
     let assumed = assumed_subsets opts in
-      (List.mem "all" assumed || List.mem (String.capitalize msgname) assumed) ||
+      (List.mem "all" assumed || List.mem (capitalize msgname) assumed) ||
       List.exists (fun (_, evr') -> compute_ev_regime_with_llty llty evr = compute_ev_regime_with_llty llty evr') @@
       smap_find_default name [] @@
       smap_find_default msgname SMap.empty field_reader_func_uses
@@ -2057,13 +2059,13 @@ struct
       List.map
         (fun (name, _, _ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
-           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
+           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ = $lid:name$ >>)
         fields in
     (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
     let record =
       let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
           None -> r
-        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+        | Some c -> <:expr< $uid:capitalize c$ $r$ >> in
     let e =
       List.fold_right
         (fun (i, fieldinfo) e -> read_field_with_locs i fieldinfo e)
@@ -2130,13 +2132,13 @@ struct
       List.map
         (fun (name, _, _ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
-           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>)
+           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ = $lid:name$ >>)
         fields in
     (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
     let record =
       let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
           None -> r
-        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+        | Some c -> <:expr< $uid:capitalize c$ $r$ >> in
     let e =
       List.fold_right
         (fun (i, fieldinfo) e -> read_field_using_func i fieldinfo e)
@@ -2197,7 +2199,7 @@ struct
             let funcname = field_reader_funcname ~msgname:orig ~constr ~name () in
               <:expr<
                 let $lid:name$ =
-                  $uid:String.capitalize orig$.$lid:funcname$ s nelms
+                  $uid:capitalize orig$.$lid:funcname$ s nelms
                 in
                   $expr$
               >>
@@ -2207,7 +2209,7 @@ struct
                 let $lid:name$ =
                   let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                   let _    = path in
-                    $uid:String.capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
+                    $uid:capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
                 in
                   $expr$
               >>
@@ -2218,13 +2220,13 @@ struct
                   let $lid:name$ =
                     let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                     let _    = path in
-                      $uid:String.capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
+                      $uid:capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
                   in
                     $expr$
                 >>
               else
                 <:expr<
-                  let $lid:name$ = $uid:String.capitalize orig$.$lid:funcname$ s nelms
+                  let $lid:name$ = $uid:capitalize orig$.$lid:funcname$ s nelms
                   in
                     $expr$
                 >>
@@ -2294,7 +2296,7 @@ struct
       List.map
         (fun (name, _, _ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:name$ >>
-           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ = $lid:name$ >>) @@
+           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ = $lid:name$ >>) @@
       List.map subset_field @@
       List.filter_map (must_keep_field subset) fields in
 
@@ -2302,7 +2304,7 @@ struct
     let record =
       let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
           None -> r
-        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+        | Some c -> <:expr< $uid:capitalize c$ $r$ >> in
     let e =
       List.fold_right
         (fun (i, fieldinfo) e -> read_field_with_locs_if_kept i fieldinfo e)
@@ -2415,14 +2417,14 @@ struct
       List.mapi
         (fun i (name, _, _ev_regime, _) -> match namespace with
              None -> <:rec_binding< $lid:name$ = $lid:sprintf "v%d" i$ >>
-           | Some ns -> <:rec_binding< $uid:String.capitalize ns$.$lid:name$ =
+           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ =
                                           $lid:sprintf "v%d" i$ >>)
         fields in
     (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
     let record =
       let r = <:expr< { $Ast.rbSem_of_list field_assigns$ } >> in match constr with
           None -> r
-        | Some c -> <:expr< $uid:String.capitalize c$ $r$ >> in
+        | Some c -> <:expr< $uid:capitalize c$ $r$ >> in
 
     let read_others_and_assign =
       List.fold_right
@@ -2475,7 +2477,7 @@ struct
             (<:str_item< >>, main_expr)
 
       | Message_alias (path, name) ->
-          let full_path = path @ [String.capitalize name] in
+          let full_path = path @ [capitalize name] in
           let _loc = Loc.mk "<generated code @ read_message>" in
           let reader_func = RD.read_msg_func name in
           let main_expr =
@@ -2485,7 +2487,7 @@ struct
             (<:str_item< >>, main_expr)
 
       | Message_typealias (name, _) ->
-          let full_path = [String.capitalize name] in
+          let full_path = [capitalize name] in
           let _loc = Loc.mk "<generated code @ read_message>" in
           let reader_func = RD.read_msg_func name in
           let main_expr =
@@ -2548,7 +2550,7 @@ let messages_with_subsets opts bindings =
     SMap.fold
       (fun _ decl l -> match decl with
          | Message_decl (_, `Message_subset (name, _, _), _, _) when
-             assume_all || List.mem (String.capitalize name) assume_subsets ->
+             assume_all || List.mem (capitalize name) assume_subsets ->
              name :: l
          | Message_decl (_, `Message_subset (name, _, _), _, _) -> begin
              let rec find_base_msgname name =
@@ -2825,7 +2827,7 @@ let rec write_field ~ev_regime ?namespace fname llty =
         <:expr< Extprot.Msg_buffer.$lid:simple_write_func llty$
                   aux $wrap_value opts v$ >>
     | Message (path, name, _, _) ->
-        let full_path = path @ [String.capitalize name] in
+        let full_path = path @ [capitalize name] in
         let id = ident_with_path _loc full_path ("write_" ^ name) in
           <:expr< $id:id$ aux $v$ >>
     | Tuple (lltys, opts) -> write_tuple 0 (wrap_value opts v) lltys
@@ -2855,7 +2857,7 @@ let rec write_field ~ev_regime ?namespace fname llty =
           List.map
             (fun c ->
                <:match_case<
-                 $uid:String.capitalize c.const_type$.$lid:c.const_name$ ->
+                 $uid:capitalize c.const_type$.$lid:c.const_name$ ->
                    Extprot.Msg_buffer.add_const_prefix aux $int:string_of_int c.const_tag$
                >>)
             constant in
@@ -2868,7 +2870,7 @@ let rec write_field ~ev_regime ?namespace fname llty =
                  Ast.paCom_of_list
                in
                  <:match_case<
-                   $uid:String.capitalize c.const_type$.$uid:c.const_name$
+                   $uid:capitalize c.const_type$.$uid:c.const_name$
                      $patt$ -> $write_tuple_values c.const_tag var_tys$
                  >>)
             non_constant in
@@ -2895,7 +2897,7 @@ let rec write_field ~ev_regime ?namespace fname llty =
 
   let v = match namespace with
       | None -> <:expr< msg.$lid:fname$ >>
-      | Some ns -> <:expr< msg.$uid:String.capitalize ns$.$lid:fname$ >>
+      | Some ns -> <:expr< msg.$uid:capitalize ns$.$lid:fname$ >>
   in
     match ev_regime with
       | `Eager -> write v llty
@@ -2938,10 +2940,10 @@ and write_message msgname msg =
     match msg with
       | Message_single (namespace, fields) -> Some (dump_fields ?namespace 0 fields)
       | Message_alias (path, name) ->
-          let full_path = path @ [String.capitalize name] in
+          let full_path = path @ [capitalize name] in
             Some <:expr< $id:ident_with_path _loc full_path ("write_" ^ name)$ b msg >>
       | Message_typealias (name, _) ->
-          let full_path = [String.capitalize name] in
+          let full_path = [capitalize name] in
             Some <:expr< $id:ident_with_path _loc full_path ("write_" ^ name)$ b msg >>
       | Message_sum l ->
           let match_case (tag, ns, constr, fields) =

@@ -108,7 +108,7 @@ let () =
        let global_opts = if !nolocs then ["locs", "false"] else [] in
        let global_opts = match !fieldmod with
          | "" -> global_opts
-         | s -> ("field-module", String.capitalize s) :: global_opts in
+         | s -> ("field-module", String.capitalize_ascii s) :: global_opts in
        let global_opts = if !export_tys then ("export_tys", "") :: global_opts else global_opts in
        let global_opts = ("assume_subsets", !assume_subsets) :: global_opts in
        let () =
