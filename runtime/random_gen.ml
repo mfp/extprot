@@ -67,7 +67,7 @@ struct
       let s = Bytes.create n in
       let rec loop = function
           n when n < 0 -> return @@ Bytes.unsafe_to_string s
-        | n -> rand_integer 255 >>= fun c -> s.[n] <- Char.chr c; loop (n - 1)
+        | n -> rand_integer 255 >>= fun c -> Bytes.set s n (Char.chr c); loop (n - 1)
       in loop (n - 1)
 
   let rand_readable_string len =
@@ -75,7 +75,7 @@ struct
       let s = Bytes.create n in
       let rec loop = function
           n when n < 0 -> return @@ Bytes.unsafe_to_string s
-        | n -> rand_integer (127 - 32) >>= fun c -> s.[n] <- Char.chr (32 + c); loop (n - 1)
+        | n -> rand_integer (127 - 32) >>= fun c -> Bytes.set s n (Char.chr (32 + c)); loop (n - 1)
       in loop (n - 1)
 
   let rand_int =

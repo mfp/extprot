@@ -364,9 +364,7 @@ let rec default_value (ev_regime : Gencode.ev_regime) t =
     | Bitstring32 _ -> None
     | Sum (l, _) -> begin (* first constant constructor = default*)
         match
-          try
-            Some (List.find_map (function `Constant x -> Some x | _ -> None) l)
-          with Not_found -> None
+          List.find_map_opt (function `Constant x -> Some x | _ -> None) l
         with
           | None -> None
           | Some c ->

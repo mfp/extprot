@@ -24,6 +24,6 @@ depends: [
   "ocamlfind" {build}
   "ounit" {test}
   "camlp4" {build}
-  ("extlib" | "extlib-compat")
+  ("extlib" {>= "1.7.7"} | "extlib-compat" {>="1.7.7"})
   "base-bytes"
 ]
