@@ -3,6 +3,7 @@ maintainer: "ygrek@autistici.org"
 homepage: "https://github.com/mfp/extprot"
 license: "MIT"
 authors: ["Mauricio Fernandez <mfp@acm.org>"]
+synopsis: "Extensible binary protocols"
 doc: ["https://github.com/mfp/extprot/blob/master/README.md"]
 dev-repo: "git://github.com/mfp/extprot.git"
 bug-reports: "https://github.com/mfp/extprot/issues"
