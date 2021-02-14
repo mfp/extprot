@@ -22,6 +22,7 @@ depends: [
   "omake" {build}
   "ocamlfind" {build}
   "ounit" {with-test}
+  "base64" {with-test}
   "camlp4" {build}
   ("extlib" | "extlib-compat")
   "base-bytes"
