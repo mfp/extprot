@@ -1,3 +1,17 @@
+1.7.0 (2021-02-14)
+==================
+* lazy deserialization regime for message fields and associated
+  option -fieldmod
+  Refer to "Evaluation regime" section in doc/language-mapping.md
+* improved codegen for monomorphic record types
+* -mli option to generate .mli signatures
+* -export-type-io option to export monomorphic record type
+  (de)serialization functions and allow to reference the type in other
+  protocols
+* -assume-subsets option to enable cross-protocol subsets of messages
+  (use in proto for whose messages subsets will be created)
+* support for extlib 1.7.8
+
 1.6.0 (2018-10-16)
 ==================
 * compatibility with safe-string (and thus default 4.06 OCaml)
