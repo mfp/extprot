@@ -108,7 +108,7 @@ let resize b more =
 let add_char b c =
   let pos = b.position in
   if pos >= b.length then resize b 1;
-  b.buffer.[pos] <- c;
+  Bytes.set b.buffer pos c;
   b.position <- pos + 1
 
 let add_substring b s offset len =

@@ -28,9 +28,9 @@ let rec pp_location pp = function
   | Field (field, loc) ->
       PP.fprintf pp "@[<1>%s.@,%a@]" field pp_location loc
   | Message (msg, constr, loc) -> match constr with
-        None -> PP.fprintf pp "@[<1>%s.@,%a@]" (String.capitalize msg) pp_location loc
+        None -> PP.fprintf pp "@[<1>%s.@,%a@]" (String.capitalize_ascii msg) pp_location loc
       | Some c -> PP.fprintf pp "@[<1>%s_%s.@,%a@]"
-                    (String.capitalize msg) (String.capitalize c) pp_location loc
+                    (String.capitalize_ascii msg) (String.capitalize_ascii c) pp_location loc
 
 let pp_format_error pp = function
   | Bad_wire_type ty ->
