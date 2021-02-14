@@ -363,11 +363,7 @@ let rec default_value (ev_regime : Gencode.ev_regime) t =
         default_value_or (fun s -> <:expr< $flo:s$ >>) None opts
     | Bitstring32 _ -> None
     | Sum (l, _) -> begin (* first constant constructor = default*)
-        match
-          try
-            Some (List.find_map (function `Constant x -> Some x | _ -> None) l)
-          with Not_found -> None
-        with
+        match List.find_map_opt (function `Constant x -> Some x | _ -> None) l with
           | None -> None
           | Some c ->
               Some <:expr< $uid:String.capitalize c.const_type$.$lid:c.const_name$ >>
