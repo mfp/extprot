@@ -164,6 +164,16 @@ let () = Register_test.register "extensions"
           { Msg1d.a = (123, Color.Red, tup) }
     end;
 
+    "htuple to tuple" >:: begin fun () ->
+      check_roundtrip Msg4a.pp_msg4a Msg4.write_msg4 Msg4a.read_msg4a
+        { Msg4.x = [ 123 ] } { Msg4a.x = ([123], Sum_type.D) };
+    end;
+
+    "htuple to non-constant variant" >:: begin fun () ->
+      check_roundtrip Msg4b.pp_msg4b Msg4.write_msg4 Msg4b.read_msg4b
+        { Msg4.x = [ 123 ] } { Msg4b.x = Sum_type.A [ 123 ] };
+    end;
+
     "primitive type to non-constant variant" >:: begin fun () ->
       let simple_sum_default = { Simple_sum.v = Sum_type.D } in
       let tup = (simple_sum_default, simple_sum_default) in

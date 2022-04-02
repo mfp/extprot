@@ -1632,7 +1632,24 @@ struct
                           $mc$ -> $uid:String.capitalize c.const_type$.$uid:c.const_name$ ($reader_expr$ s)
                         | $bad_type_case$
                       >>
-                  | None -> bad_type_case
+                  | None ->
+                      match ty with
+                        | Htuple (kind, llty, opts) ->
+                            let do_read_htuple =
+                              let ev_regime = match ev_regime with
+                                | `Lazy_Immediate | `Eager -> `Eager
+                                | `Lazy -> `Lazy
+                              in
+                                read_htuple
+                                  msgname constr_name name ~fieldno ~ev_regime kind llty opts
+                            in
+                              <:match_case<
+                                  $patt_of_ll_type Codec.Htuple$ ->
+                                    $uid:String.capitalize c.const_type$.$uid:c.const_name$
+                                      ($do_read_htuple$)
+                                | $bad_type_case$
+                              >>
+                        | _ -> bad_type_case
                 end
               | (c, ty :: tys) :: _ -> begin match f__raw_rd_func ty with
                     Some (mc, reader_expr) -> begin match maybe_all (default_value `Eager) tys with
@@ -1645,7 +1662,28 @@ struct
                             | $bad_type_case$
                           >>
                     end
-                  | None -> bad_type_case
+                  | None ->
+                      match ty with
+                        | Htuple (kind, llty, opts) ->
+                            let do_read_htuple =
+                              let ev_regime = match ev_regime with
+                                | `Lazy_Immediate | `Eager -> `Eager
+                                | `Lazy -> `Lazy
+                              in
+                                read_htuple
+                                  msgname constr_name name ~fieldno ~ev_regime kind llty opts
+                            in
+                            begin match maybe_all (default_value `Eager) tys with
+                              | None -> bad_type_case
+                              | Some defs ->
+                                  <:match_case<
+                                      $patt_of_ll_type Codec.Htuple$ ->
+                                        $uid:String.capitalize c.const_type$.$uid:c.const_name$
+                                          ($do_read_htuple$, $Ast.exCom_of_list defs$)
+                                    | $bad_type_case$
+                                  >>
+                            end
+                        | _ -> bad_type_case
                 end
               | _ -> bad_type_case in
 

@@ -72,7 +72,8 @@ message msg3 = { v0 : int }
 message msg3a = { v0 : int; v1 : silly_tuple; v2 : [ int ] }
 
 message msg4 = { x : [ int ] }
-message msg4a = { x : tuple<[ int ], sum_type<int, int, int> > }
+message msg4a = { x : ([ int ] * sum_type<int, int, int>) }
+message msg4b = { x : sum_type<[int], int, int> }
 
 type record 'a 'b = { a : 'a; b : 'b }
 type irecord 'a = record<int, 'a>
