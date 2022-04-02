@@ -2415,6 +2415,8 @@ struct
             >>
     in
       <:expr<
+        let boht = $RD.reader_func `Offset$ s 0 in
+        let () = ignore boht in
         let t = $RD.reader_func `Read_prefix$ s in begin
           if Extprot.Codec.ll_type t = Extprot.Codec.Tuple then
             let len   = $RD.reader_func `Read_vint$ s in
@@ -2436,9 +2438,8 @@ struct
     let first_field_expr =
       match fields with
           [] -> failwith (sprintf "no fields in msg %s" msgname)
-        | (_field_name, _, ev_regime, field_type) :: _ ->
+        | (field_name, _, ev_regime, field_type) :: _ ->
             match compute_ev_regime_with_llty field_type ev_regime, RD.raw_rd_func field_type with
-              | _, None -> <:expr< raise_bad_wire_type () >>
               | `Eager, Some (mc, reader_expr) ->
                 <:expr<
                   match Extprot.Codec.ll_type t with [
@@ -2453,6 +2454,27 @@ struct
                     | _ -> raise_bad_wire_type ()
                   ]
                 >>
+              | ev_regime, None ->
+                let maybe_wrap expr =
+                  match ev_regime with
+                    | `Eager -> wrap_reader (type_opts field_type) expr
+                    | `Lazy -> expr
+                in
+                  maybe_wrap @@
+                  match field_type with
+                    | Htuple (kind, llty, opts) -> begin
+                        let do_read_htuple =
+                          read_htuple
+                            msgname constr_name field_name ~fieldno:0 ~ev_regime kind llty opts
+                        in
+                          <:expr<
+                            match Extprot.Codec.ll_type t with [
+                                Extprot.Codec.Htuple -> $do_read_htuple$
+                              | _ -> raise_bad_wire_type ()
+                            ]
+                          >>
+                      end
+                    | _ -> <:expr< raise_bad_wire_type () >>
     in
 
     let other_field_readers =
