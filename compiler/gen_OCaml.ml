@@ -1342,6 +1342,8 @@ struct
     else
       e
 
+  let escape_varname s = "var__" ^ s
+
   let rec read_constructor_elms msgname constr_name name f lltys_and_defs =
     (* TODO: handle missing elms *)
     let vars = List.rev @@ Array.to_list @@
@@ -2045,7 +2047,7 @@ struct
           read_field msgname constr_name name ~ev_regime ~fieldno llty
       in
         <:expr<
-           let $lid:name$ =
+           let $lid:escape_varname name$ =
              if nelms >= $int:string_of_int (fieldno + 1)$ then
                $read_expr$
              else
@@ -2056,8 +2058,8 @@ struct
     let field_assigns =
       List.map
         (fun (name, _, _ev_regime, _) -> match namespace with
-             None -> <:rec_binding< $lid:name$ = $lid:name$ >>
-           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ = $lid:name$ >>)
+             None -> <:rec_binding< $lid:name$ = $lid:escape_varname name$ >>
+           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ = $lid:escape_varname name$ >>)
         fields in
     (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
     let record =
@@ -2104,24 +2106,24 @@ struct
         match ev_regime with
           | `Eager when not @@ may_use_hint_path llty ->
               <:expr<
-                let $lid:name$ = $lid:funcname$ s nelms in
+                let $lid:escape_varname name$ = $lid:funcname$ s nelms in
                   $expr$
               >>
           | `Eager ->
               <:expr<
-                let $lid:name$ = $lid:funcname$ ?hint ~level ~path s nelms in
+                let $lid:escape_varname name$ = $lid:funcname$ ?hint ~level ~path s nelms in
                   $expr$
               >>
           | `Lazy ->
               let funcname = field_reader_funcname ~ev_regime:`Lazy ~msgname ~constr ~name () in
                 if may_use_hint_path llty then
                   <:expr<
-                    let $lid:name$ = ($lid:funcname$ ?hint ~level ~path s nelms) in
+                    let $lid:escape_varname name$ = ($lid:funcname$ ?hint ~level ~path s nelms) in
                       $expr$
                   >>
                 else
                   <:expr<
-                    let $lid:name$ = ($lid:funcname$ s nelms) in
+                    let $lid:escape_varname name$ = ($lid:funcname$ s nelms) in
                       $expr$
                   >>
     in
@@ -2129,8 +2131,8 @@ struct
     let field_assigns =
       List.map
         (fun (name, _, _ev_regime, _) -> match namespace with
-             None -> <:rec_binding< $lid:name$ = $lid:name$ >>
-           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ = $lid:name$ >>)
+             None -> <:rec_binding< $lid:name$ = $lid:escape_varname name$ >>
+           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ = $lid:escape_varname name$ >>)
         fields in
     (* might need to prefix it with the constructor:  A { x = 1; y = 0 } *)
     let record =
@@ -2196,7 +2198,7 @@ struct
              * we can statically determine not to have lazy components). *)
             let funcname = field_reader_funcname ~msgname:orig ~constr ~name () in
               <:expr<
-                let $lid:name$ =
+                let $lid:escape_varname name$ =
                   $uid:capitalize orig$.$lid:funcname$ s nelms
                 in
                   $expr$
@@ -2204,7 +2206,7 @@ struct
         | Some (`Orig (_, _, `Eager, _)) ->
             let funcname = field_reader_funcname ~msgname:orig ~constr ~name () in
               <:expr<
-                let $lid:name$ =
+                let $lid:escape_varname name$ =
                   let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                   let _    = path in
                     $uid:capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
@@ -2215,7 +2217,7 @@ struct
             let funcname = field_reader_funcname ~ev_regime:`Lazy ~msgname:orig ~constr ~name () in
               if may_use_hint_path llty then
                 <:expr<
-                  let $lid:name$ =
+                  let $lid:escape_varname name$ =
                     let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                     let _    = path in
                       $uid:capitalize orig$.$lid:funcname$ ?hint ~level ~path s nelms
@@ -2224,7 +2226,7 @@ struct
                 >>
               else
                 <:expr<
-                  let $lid:name$ = $uid:capitalize orig$.$lid:funcname$ s nelms
+                  let $lid:escape_varname name$ = $uid:capitalize orig$.$lid:funcname$ s nelms
                   in
                     $expr$
                 >>
@@ -2272,7 +2274,7 @@ struct
             in
               if not @@ may_use_hint_path llty then
                 <:expr<
-                   let $lid:name$ =
+                   let $lid:escape_varname name$ =
                      if nelms >= $int:string_of_int (fieldno + 1)$ then begin
                        $read_expr$
                      end else $default$
@@ -2280,7 +2282,7 @@ struct
                 >>
               else
                 <:expr<
-                   let $lid:name$ =
+                   let $lid:escape_varname name$ =
                      if nelms >= $int:string_of_int (fieldno + 1)$ then begin
                        let path = EXTPROT_FIELD____.Hint_path.append_field path $str:name$ $int:string_of_int fieldno$ in
                        let _    = path in
@@ -2293,8 +2295,8 @@ struct
     let field_assigns =
       List.map
         (fun (name, _, _ev_regime, _) -> match namespace with
-             None -> <:rec_binding< $lid:name$ = $lid:name$ >>
-           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ = $lid:name$ >>) @@
+             None -> <:rec_binding< $lid:name$ = $lid:escape_varname name$ >>
+           | Some ns -> <:rec_binding< $uid:capitalize ns$.$lid:name$ = $lid:escape_varname name$ >>) @@
       List.map subset_field @@
       List.filter_map (must_keep_field subset) fields in
 

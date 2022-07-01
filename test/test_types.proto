@@ -425,4 +425,10 @@ message autolazy2b [@autolazy] =
     A { v1 : int; v2 : lazy24; v3 [@eager] : lazy24; v4 [@lazy] : int }
   | B { v1 : float; v2 : lazy24; v3 [@eager] : lazy24; v4 [@lazy] : int }
 
+message nameclash = {
+  a : int;
+  s : int;
+  b : int;
+}
+
 (* vim:set ft=ocaml: *)
