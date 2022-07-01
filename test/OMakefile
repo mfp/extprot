@@ -1,4 +1,4 @@
-OCAMLPACKS [] += base64 oUnit
+OCAMLPACKS [] += oUnit
 
 OCAMLFLAGS += -w Aelz-32-35-41-44-48
 
