@@ -37,6 +37,12 @@ if $(or $(gt $(OCAML_MAJOR), 3), $(and $(equal $(OCAML_MAJOR), 3), $(ge $(OCAML_
 	OCAMLPACKS = dynlink $(OCAMLPACKS)
 	export
 
+# workaround for ocamldep-postproc bug in case-insensitive, case-preserving FS
+# cf. https://github.com/ocaml-omake/omake/pull/150
+Shell. +=
+	ocamldep-postproc(argv) =
+		OCamlScannerPostproc($(stdin))
+
 CamlSources(mods) =
 	foreach(mod => ..., $(mods))
 		$(addsuffixes .cmo .cmi .cmx .sig $(EXT_OBJ), $(mod)):
