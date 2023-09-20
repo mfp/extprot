@@ -21,3 +21,4 @@ OMakefile.omc
 /extprotc
 /test/run_tests
 /test/oUnit-anon.cache
+/_opam/
